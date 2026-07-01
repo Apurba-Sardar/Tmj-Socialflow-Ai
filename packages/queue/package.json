@@ -1,0 +1,20 @@
+{
+  "name": "@socialflow/queue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit false --outDir dist",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "bullmq": "^5.56.0",
+    "ioredis": "^5.6.1"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

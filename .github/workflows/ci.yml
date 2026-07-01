@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: socialflow
+          POSTGRES_PASSWORD: socialflow
+          POSTGRES_DB: socialflow_ai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U socialflow -d socialflow_ai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://socialflow:socialflow@localhost:5432/socialflow_ai?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_URL: redis://localhost:6379
+      API_PORT: 4000
+      API_HOST: 0.0.0.0
+      API_CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: info
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate -w @socialflow/database
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:integration
