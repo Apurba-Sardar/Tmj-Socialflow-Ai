@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { ACCESS_TOKEN_COOKIE } from '@/lib/auth-constants';
 
-const protectedPrefixes = ['/dashboard', '/media-library'];
+const protectedPrefixes = ['/dashboard', '/media-library', '/scheduler'];
 const authPages = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
 
 export function middleware(request: NextRequest) {
@@ -28,6 +28,7 @@ export const config = {
   matcher: [
     '/dashboard/:path*',
     '/media-library/:path*',
+    '/scheduler/:path*',
     '/login',
     '/register',
     '/forgot-password',

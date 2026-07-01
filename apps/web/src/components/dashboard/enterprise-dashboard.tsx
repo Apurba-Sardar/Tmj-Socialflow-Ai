@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   BarChart3,
+  CalendarDays,
   Bell,
   CheckCircle2,
   LayoutDashboard,
@@ -98,6 +99,7 @@ const notifications = [
 const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Media Library', href: '/media-library', icon: BarChart3 },
+  { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
   { label: 'Workflows', href: '/dashboard#workflows', icon: Workflow },
   { label: 'Governance', href: '/dashboard#governance', icon: ShieldCheck },
 ];

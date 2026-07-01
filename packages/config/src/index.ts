@@ -29,6 +29,13 @@ const environmentSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().min(1).default('SocialFlow AI <no-reply@socialflow.ai>'),
+  PINTEREST_CLIENT_ID: z.string().optional(),
+  PINTEREST_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_REDIRECT_URI: z
+    .string()
+    .url()
+    .default('http://localhost:4000/api/pinterest/oauth/callback'),
+  PINTEREST_TOKEN_ENCRYPTION_KEY: z.string().min(32),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

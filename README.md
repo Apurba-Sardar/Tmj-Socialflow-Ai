@@ -32,6 +32,8 @@ Production-grade monorepo foundation for SocialFlow AI.
 - The dashboard includes a responsive sidebar, header actions, dark mode, KPI cards, charts, activity feed, and notifications using shadcn/ui-style components.
 - Protected media library: `/media-library`.
 - The media library includes folders, collections, search, AI-assisted metadata search, bulk upload, drag and drop, preview, compression metadata, and tags.
+- Protected scheduler: `/scheduler`.
+- The scheduler includes day, week, and month views, drag-and-drop scheduling, recurring posts, bulk scheduling, time slots, and queue integration status.
 
 ## Workspace Layout
 

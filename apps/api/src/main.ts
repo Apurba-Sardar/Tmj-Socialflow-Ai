@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Archive,
   Bell,
+  CalendarDays,
   Check,
   Download,
   FileImage,
@@ -105,6 +106,7 @@ const seedAssets: MediaAsset[] = [
 const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Media Library', href: '/media-library', icon: ImageIcon },
+  { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
 ];
 
 export function MediaLibrary({ user }: { user: AuthenticatedUser }) {

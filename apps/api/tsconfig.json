@@ -9,5 +9,6 @@
     "emitDecoratorMetadata": true,
     "noEmit": false
   },
-  "include": ["src/**/*.ts", "vitest.integration.config.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.integration.test.ts"]
 }

@@ -13,6 +13,7 @@ describe('loadEnvironment', () => {
       JWT_REFRESH_SECRET: 'b'.repeat(32),
       JWT_EMAIL_VERIFICATION_SECRET: 'c'.repeat(32),
       JWT_PASSWORD_RESET_SECRET: 'd'.repeat(32),
+      PINTEREST_TOKEN_ENCRYPTION_KEY: 'e'.repeat(32),
     });
 
     expect(environment.API_PORT).toBe(4000);
