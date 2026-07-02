@@ -7,6 +7,7 @@ Production-grade monorepo foundation for SocialFlow AI.
 - Next.js 15 and React 19 frontend
 - NestJS backend
 - PostgreSQL with Prisma ORM
+- Supabase-compatible hosted Postgres backend
 - Redis and BullMQ
 - Tailwind CSS and shadcn/ui conventions
 - Docker Compose for local infrastructure
@@ -20,10 +21,42 @@ Production-grade monorepo foundation for SocialFlow AI.
 4. Generate Prisma client with `npm run prisma:generate -w @socialflow/database`.
 5. Run the apps with `npm run dev`.
 
+## Supabase Backend
+
+To use Supabase instead of local Postgres:
+
+1. Create a Supabase project.
+2. In `.env`, set `DATABASE_URL` to the Supabase Postgres pooler connection string.
+3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+4. Run `npm run prisma:migrate -w @socialflow/database` to apply the Prisma schema to Supabase.
+5. Start the API with `npm run dev -w @socialflow/api`.
+
+Supabase health check: `GET http://localhost:4000/api/supabase/health`.
+
 ## Health Checks
 
 - API: `GET http://localhost:4000/health`
 - Web shell: `http://localhost:3000`
+
+## WordPress Content Pipeline
+
+The API can sync a large WordPress archive into Supabase/Postgres and generate social draft variants from existing articles.
+
+- Connect WordPress: `POST /api/wordpress/connect`
+- Sync articles: `POST /api/wordpress/sync`
+- Browse local library: `GET /api/wordpress/library?page=1&perPage=25`
+- Read local article: `GET /api/wordpress/library/:id`
+- Generate drafts from one article: `POST /api/wordpress/library/:id/repurpose`
+- Bulk generate drafts: `POST /api/wordpress/repurpose/bulk`
+- List drafts: `GET /api/wordpress/drafts`
+- Approve draft: `PATCH /api/wordpress/drafts/:id/approve`
+- Schedule draft: `PATCH /api/wordpress/drafts/:id/schedule`
+
+Run Prisma migrations before using the pipeline against Supabase:
+
+```bash
+npm run prisma:migrate -w @socialflow/database
+```
 
 ## Authentication And Dashboard
 

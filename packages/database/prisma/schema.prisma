@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -161,4 +162,149 @@ model AuthToken {
 
   @@index([userId, type])
   @@index([expiresAt])
+}
+
+model WordPressConnection {
+  id                    String   @id @default(cuid())
+  siteUrl               String
+  username              String
+  applicationPasswordIv String
+  applicationPasswordTag String
+  applicationPasswordCiphertext String
+  isActive              Boolean  @default(true)
+  lastConnectedAt       DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  articles              WordPressArticle[]
+  syncRuns              WordPressSyncRun[]
+
+  @@unique([siteUrl, username])
+  @@index([isActive])
+}
+
+model WordPressRequestLog {
+  id         String   @id @default(cuid())
+  method     String
+  url        String
+  statusCode Int?
+  attempts   Int
+  durationMs Int
+  success    Boolean
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([success])
+  @@index([createdAt])
+}
+
+enum WordPressSyncStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum SocialPlatform {
+  PINTEREST
+  INSTAGRAM
+  LINKEDIN
+  X
+  FACEBOOK
+}
+
+enum SocialDraftStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  REJECTED
+}
+
+model WordPressArticle {
+  id              String              @id @default(cuid())
+  connectionId    String
+  wordpressId     Int
+  slug            String
+  status          String
+  title           String
+  excerpt         String
+  contentHtml     String?
+  contentText     String?
+  url             String
+  authorId        Int?
+  authorName      String?
+  authorSlug      String?
+  featuredImageId Int?
+  featuredImageUrl String?
+  featuredImageAlt String?
+  categoryNames   String[]
+  categorySlugs   String[]
+  publishedAt     DateTime?
+  modifiedAt      DateTime?
+  lastSyncedAt    DateTime            @default(now())
+  repurposedAt    DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  connection      WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  repurposeJobs   ContentRepurposeJob[]
+  socialDrafts    SocialDraft[]
+
+  @@unique([connectionId, wordpressId])
+  @@index([modifiedAt])
+  @@index([repurposedAt])
+  @@index([categorySlugs])
+}
+
+model WordPressSyncRun {
+  id            String              @id @default(cuid())
+  connectionId  String
+  status        WordPressSyncStatus @default(RUNNING)
+  startedAt     DateTime            @default(now())
+  completedAt   DateTime?
+  scannedPosts  Int                 @default(0)
+  upsertedPosts Int                 @default(0)
+  failedPosts   Int                 @default(0)
+  error         String?
+  connection    WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, startedAt])
+  @@index([status])
+}
+
+model ContentRepurposeJob {
+  id         String           @id @default(cuid())
+  articleId  String
+  status     String           @default("COMPLETED")
+  platforms  SocialPlatform[]
+  prompt     String?
+  error      String?
+  createdAt  DateTime         @default(now())
+  article    WordPressArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  drafts     SocialDraft[]
+
+  @@index([articleId])
+  @@index([createdAt])
+}
+
+model SocialDraft {
+  id               String             @id @default(cuid())
+  articleId        String
+  repurposeJobId   String?
+  platform         SocialPlatform
+  status           SocialDraftStatus  @default(DRAFT)
+  title            String
+  body             String
+  hashtags         String[]
+  callToAction     String?
+  mediaUrl         String?
+  sourceUrl        String
+  scheduledFor     DateTime?
+  approvedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  article          WordPressArticle   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  repurposeJob     ContentRepurposeJob? @relation(fields: [repurposeJobId], references: [id], onDelete: SetNull)
+
+  @@index([platform, status])
+  @@index([scheduledFor])
+  @@index([articleId])
 }

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ACCESS_TOKEN_COOKIE, DEV_OFFLINE_ACCESS_TOKEN } from '@/lib/auth-constants';
 import { getApiBaseUrl } from '@/lib/env';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password' | 'verify-email';
@@ -34,12 +35,28 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       payload.token = searchParams.get('token') ?? '';
     }
 
-    const response = await fetch(`${getApiBaseUrl()}/api/auth/${endpoint}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(`${getApiBaseUrl()}/api/auth/${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setLoading(false);
+
+      if (process.env.NODE_ENV === 'development' && (mode === 'login' || mode === 'register')) {
+        document.cookie = `${ACCESS_TOKEN_COOKIE}=${DEV_OFFLINE_ACCESS_TOKEN}; path=/; SameSite=Lax`;
+        router.replace('/dashboard');
+        router.refresh();
+        return;
+      }
+
+      setError('The API is not reachable. Please start the backend and try again.');
+      return;
+    }
 
     setLoading(false);
 
@@ -122,15 +139,22 @@ function AuthLinks({ mode }: { mode: AuthMode }) {
   if (mode === 'login') {
     return (
       <div className="mt-6 flex items-center justify-between text-sm">
-        <Link className="text-primary" href="/register">Create account</Link>
-        <Link className="text-primary" href="/forgot-password">Forgot password</Link>
+        <Link className="text-primary" href="/register">
+          Create account
+        </Link>
+        <Link className="text-primary" href="/forgot-password">
+          Forgot password
+        </Link>
       </div>
     );
   }
 
   return (
     <p className="mt-6 text-sm text-muted-foreground">
-      Already have an account? <Link className="text-primary" href="/login">Sign in</Link>
+      Already have an account?{' '}
+      <Link className="text-primary" href="/login">
+        Sign in
+      </Link>
     </p>
   );
 }

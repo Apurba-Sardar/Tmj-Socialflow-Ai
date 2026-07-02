@@ -23,6 +23,7 @@
     "@socialflow/config": "0.1.0",
     "@socialflow/database": "0.1.0",
     "@socialflow/logger": "0.1.0",
+    "@supabase/supabase-js": "^2.110.0",
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.56.0",
     "class-transformer": "^0.5.1",

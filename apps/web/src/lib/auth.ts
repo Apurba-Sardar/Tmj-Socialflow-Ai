@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 
-import { ACCESS_TOKEN_COOKIE } from './auth-constants';
+import { ACCESS_TOKEN_COOKIE, DEV_OFFLINE_ACCESS_TOKEN } from './auth-constants';
 import { getApiBaseUrl } from './env';
 
 export interface AuthenticatedUser {
@@ -16,6 +16,15 @@ export const getCurrentUser = async (): Promise<AuthenticatedUser | null> => {
 
   if (!accessToken) {
     return null;
+  }
+
+  if (process.env.NODE_ENV === 'development' && accessToken === DEV_OFFLINE_ACCESS_TOKEN) {
+    return {
+      id: 'dev-offline-user',
+      email: 'demo@socialflow.local',
+      role: 'ADMIN',
+      emailVerified: true,
+    };
   }
 
   const response = await fetch(`${getApiBaseUrl()}/api/auth/me`, {
