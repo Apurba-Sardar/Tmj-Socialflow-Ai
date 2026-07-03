@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Sheet } from '@/components/ui/sheet';
 import type { AuthenticatedUser } from '@/lib/auth';
+import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
 type MediaType = 'image' | 'video' | 'document';
@@ -49,81 +50,59 @@ interface MediaAsset {
   accent: string;
 }
 
-const folders = ['Campaigns', 'Brand Kit', 'UGC', 'Reports'];
-const collections = ['Launch Assets', 'Executive Review', 'Paid Social', 'Evergreen'];
-
-const seedAssets: MediaAsset[] = [
-  {
-    id: 'asset-launch-hero',
-    title: 'Launch hero visual',
-    type: 'image',
-    folder: 'Campaigns',
-    collection: 'Launch Assets',
-    tags: ['launch', 'hero', 'approved'],
-    sizeBytes: 4_800_000,
-    compressedBytes: 2_950_000,
-    createdAt: 'Today',
-    accent: 'from-sky-500 to-emerald-400',
-  },
-  {
-    id: 'asset-founder-interview',
-    title: 'Founder interview cut',
-    type: 'video',
-    folder: 'UGC',
-    collection: 'Paid Social',
-    tags: ['video', 'founder', 'testimonial'],
-    sizeBytes: 64_000_000,
-    compressedBytes: 41_600_000,
-    createdAt: 'Yesterday',
-    accent: 'from-violet-500 to-cyan-400',
-  },
-  {
-    id: 'asset-board-report',
-    title: 'Board report cover',
-    type: 'document',
-    folder: 'Reports',
-    collection: 'Executive Review',
-    tags: ['report', 'executive', 'q3'],
-    sizeBytes: 9_200_000,
-    compressedBytes: 6_100_000,
-    createdAt: 'Jun 28',
-    accent: 'from-rose-500 to-amber-400',
-  },
-  {
-    id: 'asset-brand-pattern',
-    title: 'Brand pattern system',
-    type: 'image',
-    folder: 'Brand Kit',
-    collection: 'Evergreen',
-    tags: ['brand', 'pattern', 'system'],
-    sizeBytes: 3_400_000,
-    compressedBytes: 2_200_000,
-    createdAt: 'Jun 25',
-    accent: 'from-teal-500 to-blue-500',
-  },
-];
-
 const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Media Library', href: '/media-library', icon: ImageIcon },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
 ];
 
+type MediaHref = Parameters<typeof Link>[0]['href'];
+
 export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
-  const [assets, setAssets] = useState<MediaAsset[]>(seedAssets);
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string>('All');
   const [selectedCollection, setSelectedCollection] = useState<string>('All');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
-  const [previewAssetId, setPreviewAssetId] = useState<string>(seedAssets[0]?.id ?? '');
+  const [previewAssetId, setPreviewAssetId] = useState<string>('');
   const [query, setQuery] = useState('');
   const [aiSearch, setAiSearch] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    async function loadAssets() {
+      const response = await fetch(`${getApiBaseUrl()}/api/media/assets`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        setAssets([]);
+        return;
+      }
+
+      const payload = (await response.json()) as { data: Omit<MediaAsset, 'accent'>[] };
+      const nextAssets = payload.data.map((asset) => ({
+        ...asset,
+        accent: accentForType(asset.type),
+        createdAt: formatDate(asset.createdAt),
+      }));
+      setAssets(nextAssets);
+      setPreviewAssetId((current) => current || (nextAssets[0]?.id ?? ''));
+    }
+
+    void loadAssets();
+  }, []);
+
   const availableTags = useMemo(
     () => Array.from(new Set(assets.flatMap((asset) => asset.tags))).sort(),
+    [assets],
+  );
+  const folders = useMemo(() => Array.from(new Set(assets.map((asset) => asset.folder))).sort(), [assets]);
+  const collections = useMemo(
+    () => Array.from(new Set(assets.map((asset) => asset.collection))).sort(),
     [assets],
   );
 
@@ -147,10 +126,7 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
   const selectedAssets = assets.filter((asset) => selectedAssetIds.includes(asset.id));
 
   function ingestFiles(fileList: FileList): void {
-    const uploadedAssets = Array.from(fileList).map((file, index) => createAssetFromFile(file, index));
-    setAssets((currentAssets) => [...uploadedAssets, ...currentAssets]);
-    setSelectedAssetIds(uploadedAssets.map((asset) => asset.id));
-    setPreviewAssetId(uploadedAssets[0]?.id ?? previewAssetId);
+    void fileList;
   }
 
   function toggleTag(tagValue: string): void {
@@ -233,6 +209,8 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
           <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[16rem_1fr_22rem] lg:px-8">
             <FilterPanel
               availableTags={availableTags}
+              collections={collections}
+              folders={folders}
               selectedCollection={selectedCollection}
               selectedFolder={selectedFolder}
               selectedTags={selectedTags}
@@ -344,11 +322,11 @@ function MediaSidebar({ user }: { user: AuthenticatedUser }) {
   return (
     <div className="flex h-full min-h-screen flex-col px-4 py-5">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Archive className="h-5 w-5" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <span className="text-xs font-bold tracking-wide">TMJ</span>
         </div>
         <div>
-          <p className="text-sm font-semibold">SocialFlow AI</p>
+          <p className="text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="text-xs text-muted-foreground">Asset Operations</p>
         </div>
       </div>
@@ -361,7 +339,7 @@ function MediaSidebar({ user }: { user: AuthenticatedUser }) {
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
-            href={item.href}
+            href={item.href as MediaHref}
             key={item.href}
           >
             <item.icon className="h-4 w-4" />
@@ -379,6 +357,8 @@ function MediaSidebar({ user }: { user: AuthenticatedUser }) {
 
 function FilterPanel({
   availableTags,
+  collections,
+  folders,
   selectedCollection,
   selectedFolder,
   selectedTags,
@@ -387,6 +367,8 @@ function FilterPanel({
   onTagToggle,
 }: {
   availableTags: string[];
+  collections: string[];
+  folders: string[];
   selectedCollection: string;
   selectedFolder: string;
   selectedTags: string[];
@@ -647,41 +629,6 @@ function AssetThumbnail({ asset, className }: { asset: MediaAsset; className?: s
   );
 }
 
-function createAssetFromFile(file: File, index: number): MediaAsset {
-  const isImage = file.type.startsWith('image/');
-  const isVideo = file.type.startsWith('video/');
-  const type: MediaType = isImage ? 'image' : isVideo ? 'video' : 'document';
-  const compressionFactor = type === 'image' ? 0.62 : type === 'video' ? 0.72 : 0.86;
-  const compressedBytes = Math.round(file.size * compressionFactor);
-
-  return {
-    id: `${String(Date.now())}-${String(index)}-${file.name}`,
-    title: file.name.replace(/\.[^.]+$/, ''),
-    type,
-    folder: 'Campaigns',
-    collection: 'Launch Assets',
-    tags: inferTags(file.name, type),
-    sizeBytes: file.size,
-    compressedBytes,
-    createdAt: 'Just now',
-    previewUrl: isImage ? URL.createObjectURL(file) : undefined,
-    accent: 'from-blue-500 to-teal-400',
-  };
-}
-
-function inferTags(fileName: string, type: MediaType): string[] {
-  const normalized = fileName.toLowerCase();
-  const tags = new Set<string>([type]);
-
-  if (normalized.includes('hero')) tags.add('hero');
-  if (normalized.includes('ad') || normalized.includes('paid')) tags.add('paid');
-  if (normalized.includes('brand')) tags.add('brand');
-  if (normalized.includes('report')) tags.add('report');
-  if (normalized.includes('launch')) tags.add('launch');
-
-  return Array.from(tags);
-}
-
 function scoreAsset(asset: MediaAsset, query: string, aiSearch: boolean): number {
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -725,6 +672,22 @@ function formatBytes(bytes: number): string {
   }
 
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+function accentForType(type: MediaType): string {
+  return {
+    image: 'from-sky-500 to-emerald-400',
+    video: 'from-violet-500 to-cyan-400',
+    document: 'from-rose-500 to-amber-400',
+  }[type];
 }
 
 function compressionRatio(asset: MediaAsset): string {

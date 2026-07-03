@@ -25,7 +25,7 @@ export interface WordPressCategory {
   name: string;
   slug: string;
   count: number;
-  parent: number;
+  parent?: number;
 }
 
 export interface WordPressFeaturedImage {
@@ -33,6 +33,10 @@ export interface WordPressFeaturedImage {
   sourceUrl: string;
   altText: string;
   mediaType: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface WordPressPost {
@@ -48,6 +52,8 @@ export interface WordPressPost {
   author?: WordPressAuthor;
   featuredImage?: WordPressFeaturedImage;
   categories: WordPressCategory[];
+  tags: WordPressCategory[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface PaginatedWordPressPosts {
@@ -91,6 +97,12 @@ export interface WordPressRawMedia {
   source_url: string;
   alt_text: string;
   media_type: string;
+  mime_type?: string;
+  media_details?: {
+    width?: number;
+    height?: number;
+    sizes?: Record<string, unknown>;
+  };
 }
 
 export interface WordPressRawPost {
@@ -101,8 +113,11 @@ export interface WordPressRawPost {
   date_gmt: string;
   modified_gmt: string;
   author: number;
-  featured_media: number;
-  categories: number[];
+  featured_media?: number;
+  categories?: number[];
+  tags?: number[];
+  meta?: Record<string, unknown>;
+  social_zap4?: Record<string, unknown>;
   title: {
     rendered: string;
   };
@@ -136,6 +151,9 @@ export interface WordPressArticleLibraryItem {
   featuredImageUrl?: string | null;
   categoryNames: string[];
   categorySlugs: string[];
+  tagNames: string[];
+  tagSlugs: string[];
+  campaignStatus: string;
   publishedAt?: Date | null;
   modifiedAt?: Date | null;
   repurposedAt?: Date | null;

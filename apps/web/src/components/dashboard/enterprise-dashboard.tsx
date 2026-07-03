@@ -15,6 +15,7 @@ import {
   Clock3,
   Contact,
   FileCheck2,
+  FileText,
   Image,
   LayoutDashboard,
   Library,
@@ -22,6 +23,7 @@ import {
   Moon,
   Plus,
   RadioTower,
+  RefreshCw,
   Search,
   Send,
   Settings,
@@ -44,6 +46,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Sheet } from '@/components/ui/sheet';
 import type { AuthenticatedUser } from '@/lib/auth';
+import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
 type ScheduleView = 'Today' | 'Week' | 'Month';
@@ -96,6 +99,7 @@ interface ApprovalItem {
 }
 
 interface ActivityItem {
+  id: string;
   title: string;
   detail: string;
   time: string;
@@ -108,260 +112,116 @@ interface Toast {
   tone: ToastTone;
 }
 
-const baseQueueItems: QueueItem[] = [
-  { label: 'Queued', value: 184, detail: 'Ready for dispatch', tone: 'bg-blue-500' },
-  { label: 'Processing', value: 27, detail: 'Media rendering', tone: 'bg-violet-500' },
-  { label: 'Needs approval', value: 31, detail: 'Brand or legal review', tone: 'bg-amber-400' },
-  { label: 'Retrying', value: 2, detail: 'API rate limits', tone: 'bg-rose-500' },
-];
+interface TopPost {
+  id: string;
+  title: string;
+  platform: string;
+  metric: string;
+  value: number;
+  capturedAt: string;
+}
 
-const basePlatformKpis: PlatformKpi[] = [
-  {
-    platform: 'Instagram',
-    icon: Video,
-    color: 'text-pink-500 dark:text-pink-400',
-    posts: 68,
-    engagement: '7.8%',
-    health: '99.9%',
-    delta: '+23%',
-  },
-  {
-    platform: 'LinkedIn',
-    icon: Contact,
-    color: 'text-sky-600 dark:text-sky-400',
-    posts: 44,
-    engagement: '5.1%',
-    health: '100%',
-    delta: '+12%',
-  },
-  {
-    platform: 'X',
-    icon: AtSign,
-    color: 'text-slate-700 dark:text-zinc-200',
-    posts: 39,
-    engagement: '3.4%',
-    health: '98.7%',
-    delta: '+8%',
-  },
-  {
-    platform: 'Pinterest',
-    icon: Image,
-    color: 'text-red-500 dark:text-red-400',
-    posts: 72,
-    engagement: '9.2%',
-    health: '96.8%',
-    delta: '-3%',
-  },
-];
+interface DashboardMetricPayload {
+  label: string;
+  value: number;
+  detail: string;
+  tone: Metric['tone'];
+}
 
-const baseSchedule: ScheduleItem[] = [
-  {
-    id: 'sch-1',
-    time: '08:00',
-    platform: 'Pinterest',
-    title: 'Summer launch moodboard',
-    state: 'Queued',
-    accent: 'bg-red-500',
-    view: 'Today',
-  },
-  {
-    id: 'sch-2',
-    time: '09:30',
-    platform: 'LinkedIn',
-    title: 'Founder thought leadership',
-    state: 'Approved',
-    accent: 'bg-sky-500',
-    view: 'Today',
-  },
-  {
-    id: 'sch-3',
-    time: '12:00',
-    platform: 'Instagram',
-    title: 'Reels cutdown batch',
-    state: 'Rendering',
-    accent: 'bg-pink-500',
-    view: 'Today',
-  },
-  {
-    id: 'sch-4',
-    time: '15:30',
-    platform: 'X',
-    title: 'Product changelog thread',
-    state: 'Draft lock',
-    accent: 'bg-slate-400',
-    view: 'Today',
-  },
-  {
-    id: 'sch-5',
-    time: '20:00',
-    platform: 'Instagram',
-    title: 'Community recap carousel',
-    state: 'Queued',
-    accent: 'bg-pink-500',
-    view: 'Today',
-  },
-  {
-    id: 'sch-6',
-    time: 'Tue',
-    platform: 'LinkedIn',
-    title: 'Enterprise automation report',
-    state: 'Approved',
-    accent: 'bg-sky-500',
-    view: 'Week',
-  },
-  {
-    id: 'sch-7',
-    time: 'Thu',
-    platform: 'Pinterest',
-    title: 'Creator workflow pins',
-    state: 'Queued',
-    accent: 'bg-red-500',
-    view: 'Week',
-  },
-  {
-    id: 'sch-8',
-    time: 'Fri',
-    platform: 'Instagram',
-    title: 'Launch week recap reel',
-    state: 'Rendering',
-    accent: 'bg-pink-500',
-    view: 'Week',
-  },
-  {
-    id: 'sch-9',
-    time: 'Jun 04',
-    platform: 'LinkedIn',
-    title: 'Monthly executive POV',
-    state: 'Draft lock',
-    accent: 'bg-sky-500',
-    view: 'Month',
-  },
-  {
-    id: 'sch-10',
-    time: 'Jun 14',
-    platform: 'Pinterest',
-    title: 'Evergreen content refresh',
-    state: 'Queued',
-    accent: 'bg-red-500',
-    view: 'Month',
-  },
-];
+interface DashboardOverview {
+  metrics: DashboardMetricPayload[];
+  queue: QueueItem[];
+  schedule: {
+    id: string;
+    time: string;
+    platform: string;
+    title: string;
+    state: string;
+  }[];
+  approvals: ApprovalItem[];
+  activity: {
+    id: string;
+    title: string;
+    detail: string;
+    time: string;
+    tone: 'success' | 'warning' | 'info';
+  }[];
+  notifications: {
+    id: string;
+    title: string;
+    body: string | null;
+    createdAt: string;
+  }[];
+  platformKpis: {
+    platform: string;
+    posts: number;
+    published: number;
+    health: number;
+  }[];
+  platformHealth: {
+    id: string;
+    platform: string;
+    posts: number;
+    health: number;
+    status: string;
+  }[];
+  topPosts: TopPost[];
+}
 
-const baseApprovals: ApprovalItem[] = [
-  {
-    id: 'ap-1',
-    title: 'Q3 campaign narrative',
-    owner: 'Maya',
-    risk: 'Legal copy',
-    age: '18m',
-    status: 'Pending',
-  },
-  {
-    id: 'ap-2',
-    title: 'Customer quote carousel',
-    owner: 'Nikhil',
-    risk: 'Brand tone',
-    age: '42m',
-    status: 'Pending',
-  },
-  {
-    id: 'ap-3',
-    title: 'Competitor response post',
-    owner: 'Ava',
-    risk: 'Executive review',
-    age: '1h',
-    status: 'Pending',
-  },
-  {
-    id: 'ap-4',
-    title: 'Healthcare case study',
-    owner: 'Ishaan',
-    risk: 'Compliance',
-    age: '2h',
-    status: 'Pending',
-  },
-];
+interface WordPressArticle {
+  id: string;
+  wordpressId: number;
+  title: string;
+  excerpt: string;
+  url: string;
+  authorName: string | null;
+  featuredImageUrl: string | null;
+  categoryNames: string[];
+  categorySlugs: string[];
+  publishedAt: string | null;
+  modifiedAt: string | null;
+  repurposedAt: string | null;
+}
 
-const baseActivity: ActivityItem[] = [
-  {
-    title: 'Pinterest pin published successfully',
-    detail: '10 ways to stay productive working from home',
-    time: '2m ago',
-    icon: CheckCircle2,
-    tone: 'text-emerald-500',
-  },
-  {
-    title: 'Instagram Reel failed to publish',
-    detail: 'Summer outfit ideas 2026',
-    time: '15m ago',
-    icon: AlertTriangle,
-    tone: 'text-amber-500',
-  },
-  {
-    title: 'LinkedIn post approved',
-    detail: 'AI workflow operating model',
-    time: '28m ago',
-    icon: FileCheck2,
-    tone: 'text-sky-500',
-  },
-  {
-    title: 'Queue optimizer shifted 11 posts',
-    detail: 'Peak engagement window detected',
-    time: '47m ago',
-    icon: Sparkles,
-    tone: 'text-violet-500',
-  },
-  {
-    title: 'Facebook copy localized',
-    detail: 'Weekend motivation for APAC audience',
-    time: '1h ago',
-    icon: Workflow,
-    tone: 'text-blue-500',
-  },
-  {
-    title: 'Compliance check completed',
-    detail: 'Healthcare case study passed automated screening',
-    time: '2h ago',
-    icon: CheckCircle2,
-    tone: 'text-emerald-500',
-  },
-];
+interface WordPressDraft {
+  id: string;
+  platform: string;
+  status: 'DRAFT' | 'APPROVED' | 'SCHEDULED' | 'PUBLISHED' | 'REJECTED';
+  title: string;
+  body: string;
+  sourceUrl: string;
+  scheduledFor: string | null;
+  article?: {
+    title: string;
+    wordpressId: number;
+  };
+}
 
-const topPosts = [
-  {
-    title: 'Beautiful places to visit this season',
-    platform: 'Pinterest',
-    views: '12.5K',
-    saves: '1.2K',
-    comments: 312,
-    score: 94,
-  },
-  {
-    title: 'Healthy breakfast ideas for busy teams',
-    platform: 'Instagram',
-    views: '9.8K',
-    saves: '1.1K',
-    comments: 215,
-    score: 89,
-  },
-  {
-    title: 'Daily motivation for creators',
-    platform: 'Facebook',
-    views: '8.7K',
-    saves: '870',
-    comments: 120,
-    score: 82,
-  },
-];
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    total: number;
+    totalPages: number;
+    page: number;
+    perPage: number;
+  };
+}
 
-const insights = [
-  'Best posting window today: Pinterest from 8:00 PM to 10:00 PM.',
-  'Instagram Reels engagement is 23% higher than static posts.',
-  'Five evergreen posts can be repurposed into LinkedIn carousels.',
-];
+const defaultPlatformKpi: PlatformKpi = {
+  platform: 'Instagram',
+  icon: Video,
+  color: 'text-pink-500 dark:text-pink-400',
+  posts: 0,
+  engagement: '0%',
+  health: '100%',
+  delta: '0%',
+};
+
+type DashboardHref = Parameters<typeof Link>[0]['href'];
 
 const navigation: { label: string; href: string; icon: LucideIcon; count?: string }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'WordPress Hub', href: '/wordpress-hub', icon: FileText },
   { label: 'Content', href: '/media-library', icon: Library },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
   { label: 'Queue', href: '/dashboard#queue', icon: Workflow, count: '24' },
@@ -382,7 +242,7 @@ const dateRanges = ['May 24 - May 30', 'May 31 - Jun 06', 'Jun 07 - Jun 13'];
 
 export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [scheduleView, setScheduleView] = useState<ScheduleView>('Today');
   const [dateRangeIndex, setDateRangeIndex] = useState(0);
@@ -390,20 +250,38 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQueueAll, setShowQueueAll] = useState(false);
   const [showActivityAll, setShowActivityAll] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState(basePlatformKpis[0]);
-  const [scheduleItems, setScheduleItems] = useState(baseSchedule);
-  const [queueItems, setQueueItems] = useState(baseQueueItems);
-  const [approvals, setApprovals] = useState(baseApprovals);
-  const [activity, setActivity] = useState(baseActivity);
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformKpi>(defaultPlatformKpi);
+  const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [topPosts, setTopPosts] = useState<TopPost[]>([]);
+  const [insights, setInsights] = useState<string[]>([]);
+  const [platformKpis, setPlatformKpis] = useState<PlatformKpi[]>([]);
+  const [platformHealth, setPlatformHealth] = useState<PlatformKpi[]>([]);
+  const [dashboardMetrics, setDashboardMetrics] = useState<Metric[]>([]);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [wordpressArticles, setWordpressArticles] = useState<WordPressArticle[]>([]);
+  const [wordpressDrafts, setWordpressDrafts] = useState<WordPressDraft[]>([]);
+  const [wordpressTotal, setWordpressTotal] = useState(0);
+  const [wordpressLoading, setWordpressLoading] = useState(true);
+  const [wordpressError, setWordpressError] = useState<string | null>(null);
+  const [wordpressBusyId, setWordpressBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('socialflow-theme');
-    setDarkMode(storedTheme ? storedTheme === 'dark' : true);
+    const browserThemeIsDark = document.documentElement.classList.contains('dark');
+    setDarkMode(storedTheme ? storedTheme === 'dark' : browserThemeIsDark);
   }, []);
 
   useEffect(() => {
+    if (darkMode === null) {
+      return;
+    }
+
     document.documentElement.classList.toggle('dark', darkMode);
+    document.documentElement.style.colorScheme = darkMode ? 'dark' : 'light';
     window.localStorage.setItem('socialflow-theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
@@ -420,6 +298,11 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
       window.clearTimeout(timeout);
     };
   }, [toast]);
+
+  useEffect(() => {
+    void refreshDashboardData();
+    void refreshWordPressData();
+  }, []);
 
   const pendingApprovals = approvals.filter((item) => item.status === 'Pending').length;
   const retryingCount = queueItems.find((item) => item.label === 'Retrying')?.value ?? 0;
@@ -442,9 +325,21 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
     item.title,
     item.platform,
   ]);
+  const filteredWordPressArticles = filterBySearch(wordpressArticles, searchQuery, (item) => [
+    item.title,
+    item.excerpt,
+    item.authorName ?? '',
+    ...item.categoryNames,
+  ]);
+  const filteredWordPressDrafts = filterBySearch(wordpressDrafts, searchQuery, (item) => [
+    item.title,
+    item.platform,
+    item.status,
+    item.article?.title ?? '',
+  ]);
   const displayedActivity = showActivityAll ? filteredActivity : filteredActivity.slice(0, 4);
   const displayedQueue = showQueueAll ? queueItems : queueItems.slice(0, 4);
-  const metrics = buildMetrics(queueItems, pendingApprovals);
+  const metrics = dashboardMetrics;
 
   const sidebar = useMemo(
     () => <DashboardSidebar user={user} pendingApprovals={pendingApprovals} />,
@@ -452,11 +347,212 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   );
 
   function pushActivity(title: string, detail: string, tone: string, icon: LucideIcon) {
-    setActivity((items) => [{ title, detail, time: 'Just now', icon, tone }, ...items]);
+    setActivity((items) => [
+      {
+        id: `activity-${Date.now().toString()}-${createClientId()}`,
+        title,
+        detail,
+        time: 'Just now',
+        icon,
+        tone,
+      },
+      ...items,
+    ]);
   }
 
   function notify(message: string, tone: ToastTone = 'success') {
     setToast({ message, tone });
+  }
+
+  async function refreshWordPressData() {
+    setWordpressLoading(true);
+    setWordpressError(null);
+
+    try {
+      const [libraryResponse, draftsResponse] = await Promise.all([
+        fetch(`${getApiBaseUrl()}/api/wordpress/library?perPage=6&page=1`, {
+          cache: 'no-store',
+          credentials: 'include',
+        }),
+        fetch(`${getApiBaseUrl()}/api/wordpress/drafts?perPage=6&page=1`, {
+          cache: 'no-store',
+          credentials: 'include',
+        }),
+      ]);
+
+      if (!libraryResponse.ok) {
+        throw new Error('WordPress library is not available yet.');
+      }
+
+      if (!draftsResponse.ok) {
+        throw new Error('WordPress drafts are not available yet.');
+      }
+
+      const library = (await libraryResponse.json()) as PaginatedResponse<WordPressArticle>;
+      const drafts = (await draftsResponse.json()) as PaginatedResponse<WordPressDraft>;
+      setWordpressArticles(library.data);
+      setWordpressDrafts(drafts.data);
+      setWordpressTotal(library.pagination.total);
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'Could not load WordPress data.');
+    } finally {
+      setWordpressLoading(false);
+    }
+  }
+
+  async function refreshDashboardData() {
+    setDashboardError(null);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/dashboard/overview`, {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Dashboard data is not available.');
+      }
+
+      const overview = (await response.json()) as DashboardOverview;
+      setDashboardMetrics(overview.metrics.map(metricFromPayload));
+      setQueueItems(overview.queue);
+      setScheduleItems(overview.schedule.map(scheduleFromPayload));
+      setApprovals(overview.approvals);
+      setActivity(overview.activity.map(activityFromPayload));
+      setInsights(overview.notifications.map((item) => item.body ?? item.title));
+      setPlatformKpis(overview.platformKpis.map(platformKpiFromPayload));
+      setPlatformHealth(overview.platformHealth.map(platformHealthFromPayload));
+      setTopPosts(overview.topPosts);
+      setSelectedPlatform((current) => {
+        const next = overview.platformKpis.map(platformKpiFromPayload)[0];
+        return current.posts === 0 && next ? next : current;
+      });
+    } catch (error) {
+      setDashboardError(error instanceof Error ? error.message : 'Could not load dashboard data.');
+    }
+  }
+
+  async function syncWordPress() {
+    setWordpressBusyId('sync');
+    setWordpressError(null);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/sync`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          perPage: 100,
+          maxPages: 100,
+          status: 'any',
+          postTypes: ['posts', 'articles', 'news', 'quotes', 'best-quotes'],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('WordPress sync failed.');
+      }
+
+      const result = (await response.json()) as { upsertedPosts: number; failedPosts: number };
+      await refreshWordPressData();
+      pushActivity(
+        'WordPress library synced',
+        `${String(result.upsertedPosts)} posts saved, ${String(result.failedPosts)} failed`,
+        'text-emerald-500',
+        CheckCircle2,
+      );
+      notify('WordPress posts synced into the content library.');
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'WordPress sync failed.');
+      notify('WordPress sync failed.', 'warning');
+    } finally {
+      setWordpressBusyId(null);
+    }
+  }
+
+  async function repurposeWordPressArticle(article: WordPressArticle) {
+    setWordpressBusyId(article.id);
+    setWordpressError(null);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/library/${article.id}/repurpose`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platforms: ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not generate social drafts.');
+      }
+
+      await refreshWordPressData();
+      pushActivity(
+        'WordPress article repurposed',
+        article.title,
+        'text-violet-500',
+        Sparkles,
+      );
+      notify('Social drafts generated from WordPress content.');
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'Could not repurpose article.');
+      notify('Could not generate drafts.', 'warning');
+    } finally {
+      setWordpressBusyId(null);
+    }
+  }
+
+  async function approveWordPressDraft(draft: WordPressDraft) {
+    setWordpressBusyId(draft.id);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not approve draft.');
+      }
+
+      await refreshWordPressData();
+      pushActivity('WordPress draft approved', draft.title, 'text-emerald-500', FileCheck2);
+      notify('WordPress draft approved.');
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'Could not approve draft.');
+      notify('Could not approve draft.', 'warning');
+    } finally {
+      setWordpressBusyId(null);
+    }
+  }
+
+  async function scheduleWordPressDraft(draft: WordPressDraft) {
+    setWordpressBusyId(draft.id);
+
+    try {
+      const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/schedule`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledFor }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not schedule draft.');
+      }
+
+      await refreshWordPressData();
+      pushActivity('WordPress draft scheduled', draft.title, 'text-blue-500', CalendarDays);
+      notify('WordPress draft scheduled for tomorrow.');
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'Could not schedule draft.');
+      notify('Could not schedule draft.', 'warning');
+    } finally {
+      setWordpressBusyId(null);
+    }
   }
 
   function handleCreate(payload: {
@@ -525,39 +621,23 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   }
 
   function retryFailedPosts() {
-    setQueueItems((items) =>
-      items.map((item) => {
-        if (item.label === 'Retrying') {
-          return { ...item, value: 0, detail: 'No active retries' };
-        }
-        if (item.label === 'Processing') {
-          return { ...item, value: item.value + 2 };
-        }
-        return item;
-      }),
-    );
-    pushActivity(
-      'Failed posts sent to retry',
-      'Two Pinterest jobs moved into processing',
-      'text-blue-500',
-      Workflow,
-    );
-    notify('Retry started for failed posts.', 'info');
+    void refreshDashboardData();
+    notify('Queue status refreshed from the backend.', 'info');
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-foreground transition-colors duration-300 dark:bg-[#05070d]">
+    <div className="sf-app-bg min-h-screen overflow-x-hidden text-foreground transition-colors duration-300">
       <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
         {sidebar}
       </Sheet>
       <div className="grid min-h-screen lg:grid-cols-[17rem_1fr]">
-        <aside className="hidden border-r border-border bg-card/95 lg:block dark:border-white/10 dark:bg-[#070a12]/95">
+        <aside className="hidden border-r border-border/70 bg-card/80 backdrop-blur-2xl lg:block dark:border-white/10">
           {sidebar}
         </aside>
-        <div className="min-w-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_30rem),radial-gradient(circle_at_top_right,rgba(20,184,166,0.10),transparent_28rem)]">
+        <div className="min-w-0">
           <DashboardHeader
-            darkMode={darkMode}
-            dateRange={dateRanges[dateRangeIndex] ?? dateRanges[0]}
+            darkMode={darkMode ?? true}
+            dateRange={dateRanges[dateRangeIndex] ?? 'May 24 - May 30'}
             notificationCount={pendingApprovals + retryingCount}
             searchQuery={searchQuery}
             showNotifications={showNotifications}
@@ -576,19 +656,29 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
             }}
             onSearchChange={setSearchQuery}
             onThemeToggle={() => {
-              setDarkMode((value) => !value);
-              notify(`Switched to ${darkMode ? 'light' : 'dark'} mode.`, 'info');
+              const currentDarkMode =
+                darkMode ?? document.documentElement.classList.contains('dark');
+              const nextDarkMode = !currentDarkMode;
+              setDarkMode(nextDarkMode);
+              notify(`Switched to ${nextDarkMode ? 'dark' : 'light'} mode.`, 'info');
             }}
           />
           <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-4 overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8">
             <Hero user={user} />
+            {dashboardError ? (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100">
+                {dashboardError}
+              </div>
+            ) : null}
             {searchQuery ? (
               <SearchSummary
                 count={
                   filteredSchedule.length +
                   filteredApprovals.length +
                   filteredActivity.length +
-                  filteredTopPosts.length
+                  filteredTopPosts.length +
+                  filteredWordPressArticles.length +
+                  filteredWordPressDrafts.length
                 }
                 onClear={() => {
                   setSearchQuery('');
@@ -601,9 +691,33 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                 <MetricCard key={metric.label} metric={metric} />
               ))}
             </section>
+            <WordPressLibraryPanel
+              articles={filteredWordPressArticles}
+              busyId={wordpressBusyId}
+              drafts={filteredWordPressDrafts}
+              error={wordpressError}
+              loading={wordpressLoading}
+              onApproveDraft={(draft) => {
+                void approveWordPressDraft(draft);
+              }}
+              onRefresh={() => {
+                void refreshWordPressData();
+              }}
+              onRepurpose={(article) => {
+                void repurposeWordPressArticle(article);
+              }}
+              onScheduleDraft={(draft) => {
+                void scheduleWordPressDraft(draft);
+              }}
+              onSync={() => {
+                void syncWordPress();
+              }}
+              total={wordpressTotal}
+            />
             <section className="grid gap-4 xl:grid-cols-[1.1fr_1.35fr_0.9fr]">
               <div className="grid gap-4">
                 <PlatformHealth
+                  items={platformHealth}
                   selectedPlatform={selectedPlatform.platform}
                   onSelect={(platform) => {
                     setSelectedPlatform(platform);
@@ -644,6 +758,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                   }}
                 />
                 <AiInsights
+                  insights={insights}
                   onApply={(insight) => {
                     pushActivity('AI recommendation applied', insight, 'text-violet-500', Sparkles);
                     notify('AI recommendation applied to the plan.');
@@ -667,7 +782,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               />
             </section>
             <PlatformKpis
-              items={basePlatformKpis}
+              items={platformKpis}
               selectedPlatform={selectedPlatform.platform}
               onSelect={(platform) => {
                 setSelectedPlatform(platform);
@@ -714,12 +829,12 @@ function DashboardSidebar({
   return (
     <div className="flex h-full min-h-screen flex-col px-3 py-4">
       <div className="flex items-center gap-3 rounded-md px-2 py-2">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-md bg-gradient-to-br from-sky-400 via-violet-500 to-emerald-400 text-white shadow-lg shadow-blue-950/30">
-          <Sparkles className="h-5 w-5" />
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 via-violet-500 to-emerald-400 text-white shadow-lg shadow-blue-950/30">
+          <span className="text-xs font-bold tracking-wide">TMJ</span>
           <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-card" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">SocialFlow AI</p>
+          <p className="truncate text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="truncate text-xs text-muted-foreground">Automation OS</p>
         </div>
       </div>
@@ -738,7 +853,7 @@ function DashboardSidebar({
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-blue-950/20'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.06]',
               )}
-              href={item.href}
+              href={item.href as DashboardHref}
               key={item.label}
             >
               <item.icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
@@ -977,10 +1092,226 @@ function MetricCard({ metric }: { metric: Metric }) {
   );
 }
 
+function WordPressLibraryPanel({
+  articles,
+  busyId,
+  drafts,
+  error,
+  loading,
+  onApproveDraft,
+  onRefresh,
+  onRepurpose,
+  onScheduleDraft,
+  onSync,
+  total,
+}: {
+  articles: WordPressArticle[];
+  busyId: string | null;
+  drafts: WordPressDraft[];
+  error: string | null;
+  loading: boolean;
+  onApproveDraft: (draft: WordPressDraft) => void;
+  onRefresh: () => void;
+  onRepurpose: (article: WordPressArticle) => void;
+  onScheduleDraft: (draft: WordPressDraft) => void;
+  onSync: () => void;
+  total: number;
+}) {
+  return (
+    <Card className="dark:border-white/10 dark:bg-white/[0.045]" id="wordpress">
+      <CardHeader className="p-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4 text-sky-500" />
+              WordPress Content Library
+            </CardTitle>
+            <CardDescription>
+              Synced posts from mind.family ready for AI repurposing and scheduling.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-200">
+              {loading ? 'Loading' : `${String(total)} posts`}
+            </Badge>
+            <Button
+              className="h-8 px-2"
+              disabled={loading || busyId !== null}
+              onClick={onRefresh}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} />
+              Refresh
+            </Button>
+            <Button
+              className="h-8 px-2"
+              disabled={busyId !== null}
+              onClick={onSync}
+              size="sm"
+            >
+              <Workflow className="h-4 w-4" />
+              Sync WordPress
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-4 pt-0 xl:grid-cols-[1.35fr_0.85fr]">
+        <div className="space-y-3">
+          {error ? (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-200">
+              {error}
+            </div>
+          ) : null}
+          {loading ? (
+            <EmptyState label="Loading WordPress posts from Supabase." />
+          ) : articles.length ? (
+            articles.map((article) => (
+              <div
+                className="grid gap-3 rounded-md border p-3 transition-all duration-300 hover:-translate-y-0.5 hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04] md:grid-cols-[4.5rem_1fr_auto]"
+                key={article.id}
+              >
+                <div className="overflow-hidden rounded-md bg-muted dark:bg-white/[0.04]">
+                  {article.featuredImageUrl ? (
+                    <img
+                      alt={article.title}
+                      className="h-20 w-full object-cover md:h-full"
+                      src={article.featuredImageUrl}
+                    />
+                  ) : (
+                    <div className="flex h-20 items-center justify-center md:h-full">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Badge variant={article.repurposedAt ? 'success' : 'outline'}>
+                      {article.repurposedAt ? 'Repurposed' : 'Ready'}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      WP #{String(article.wordpressId)}
+                    </span>
+                    {article.categoryNames.slice(0, 2).map((category) => (
+                      <Badge key={category} variant="outline">
+                        {category}
+                      </Badge>
+                    ))}
+                  </div>
+                  <a
+                    className="line-clamp-1 text-sm font-medium hover:text-primary"
+                    href={article.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {article.title}
+                  </a>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                    {article.excerpt}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {article.authorName ?? 'WordPress'} - Updated{' '}
+                    {formatDateLabel(article.modifiedAt ?? article.publishedAt)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 md:flex-col md:items-end">
+                  <Button
+                    className="h-8 px-2"
+                    disabled={busyId !== null}
+                    onClick={() => {
+                      onRepurpose(article);
+                    }}
+                    size="sm"
+                    variant={article.repurposedAt ? 'outline' : 'default'}
+                  >
+                    <Sparkles className={cn('h-4 w-4', busyId === article.id ? 'animate-pulse' : '')} />
+                    {busyId === article.id ? 'Generating' : 'Repurpose'}
+                  </Button>
+                  <Button asChild className="h-8 px-2" size="sm" variant="ghost">
+                    <a href={article.url} rel="noreferrer" target="_blank">
+                      <ArrowUpRight className="h-4 w-4" />
+                      Open
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <EmptyState label="No WordPress posts match your search." />
+          )}
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3 dark:border-white/10 dark:bg-black/20">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Generated Drafts</p>
+              <p className="text-xs text-muted-foreground">Approve or schedule campaign assets.</p>
+            </div>
+            <Badge variant="outline">{String(drafts.length)}</Badge>
+          </div>
+          <div className="space-y-2">
+            {drafts.length ? (
+              drafts.map((draft) => (
+                <div
+                  className="rounded-md border bg-card p-3 dark:border-white/10 dark:bg-white/[0.045]"
+                  key={draft.id}
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{platformLabel(draft.platform)}</Badge>
+                    <Badge
+                      variant={
+                        draft.status === 'APPROVED' || draft.status === 'SCHEDULED'
+                          ? 'success'
+                          : 'outline'
+                      }
+                    >
+                      {draft.status.toLowerCase()}
+                    </Badge>
+                  </div>
+                  <p className="line-clamp-1 text-sm font-medium">{draft.title}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{draft.body}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      className="h-8 px-2"
+                      disabled={busyId !== null || draft.status === 'APPROVED'}
+                      onClick={() => {
+                        onApproveDraft(draft);
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <FileCheck2 className="h-4 w-4" />
+                      Approve
+                    </Button>
+                    <Button
+                      className="h-8 px-2"
+                      disabled={busyId !== null || draft.status === 'SCHEDULED'}
+                      onClick={() => {
+                        onScheduleDraft(draft);
+                      }}
+                      size="sm"
+                    >
+                      <CalendarDays className="h-4 w-4" />
+                      Schedule
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <EmptyState label="Repurpose a WordPress post to create drafts." />
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PlatformHealth({
+  items,
   onSelect,
   selectedPlatform,
 }: {
+  items: PlatformKpi[];
   onSelect: (platform: PlatformKpi) => void;
   selectedPlatform: string;
 }) {
@@ -994,7 +1325,8 @@ function PlatformHealth({
         <CardDescription>API status, queue latency, and publish reliability.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
-        {basePlatformKpis.map((item) => (
+        {items.length ? (
+          items.map((item) => (
           <button
             className={cn(
               'grid w-full grid-cols-[1fr_auto] gap-3 rounded-md border p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]',
@@ -1020,7 +1352,10 @@ function PlatformHealth({
               <p className="text-xs text-muted-foreground">health</p>
             </div>
           </button>
-        ))}
+          ))
+        ) : (
+          <EmptyState label="No platform health records yet." />
+        )}
       </CardContent>
     </Card>
   );
@@ -1173,7 +1508,13 @@ function PublishingQueue({
   );
 }
 
-function AiInsights({ onApply }: { onApply: (insight: string) => void }) {
+function AiInsights({
+  insights,
+  onApply,
+}: {
+  insights: string[];
+  onApply: (insight: string) => void;
+}) {
   return (
     <Card className="dark:border-white/10 dark:bg-white/[0.045]" id="ai">
       <CardHeader className="p-4 pb-3">
@@ -1186,7 +1527,8 @@ function AiInsights({ onApply }: { onApply: (insight: string) => void }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
-        {insights.map((insight, index) => (
+        {insights.length ? (
+          insights.map((insight, index) => (
           <div
             className="rounded-md border p-3 text-sm transition-colors hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]"
             key={insight}
@@ -1211,7 +1553,10 @@ function AiInsights({ onApply }: { onApply: (insight: string) => void }) {
               Apply insight
             </Button>
           </div>
-        ))}
+          ))
+        ) : (
+          <EmptyState label="No AI insight notifications yet." />
+        )}
       </CardContent>
     </Card>
   );
@@ -1327,7 +1672,7 @@ function RecentActivity({
           items.map((item) => (
             <div
               className="rounded-md border p-3 transition-all duration-300 hover:-translate-y-0.5 hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]"
-              key={`${item.title}-${item.time}`}
+              key={item.id}
             >
               <div className="flex items-start gap-3">
                 <item.icon className={cn('mt-0.5 h-5 w-5', item.tone)} />
@@ -1355,7 +1700,7 @@ function TopPosts({
   posts,
 }: {
   onOpenReport: (message: string, tone?: ToastTone) => void;
-  posts: typeof topPosts;
+  posts: TopPost[];
 }) {
   return (
     <Card className="dark:border-white/10 dark:bg-white/[0.045]">
@@ -1368,7 +1713,7 @@ function TopPosts({
           posts.map((post) => (
             <button
               className="grid w-full grid-cols-[3rem_1fr_auto] items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]"
-              key={post.title}
+              key={post.id}
               onClick={() => {
                 onOpenReport(`${post.title} report opened.`, 'info');
               }}
@@ -1380,13 +1725,12 @@ function TopPosts({
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{post.title}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {post.platform} - {post.views} views - {post.saves} saves - {post.comments}{' '}
-                  comments
+                  {post.platform} - {post.metric}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold">{post.score}</p>
-                <p className="text-xs text-muted-foreground">score</p>
+                <p className="text-sm font-semibold">{formatCompactNumber(post.value)}</p>
+                <p className="text-xs text-muted-foreground">value</p>
               </div>
             </button>
           ))
@@ -1505,7 +1849,7 @@ function CreateModal({
           <div>
             <h2 className="text-lg font-semibold">Create New</h2>
             <p className="text-sm text-muted-foreground">
-              Add a demo item to the publishing workflow.
+              Add an item to the publishing workflow.
             </p>
           </div>
           <Button aria-label="Close create modal" onClick={onClose} size="sm" variant="ghost">
@@ -1555,9 +1899,6 @@ function CreateModal({
                 value={time}
               />
             </div>
-          </div>
-          <div className="rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground dark:border-white/10">
-            This demo creates local UI state only. It shows the workflow without requiring Postgres.
           </div>
           <div className="flex justify-end gap-2">
             <Button onClick={onClose} variant="outline">
@@ -1653,47 +1994,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function buildMetrics(queueItems: QueueItem[], pendingApprovals: number): Metric[] {
-  const queued = queueItems.find((item) => item.label === 'Queued')?.value ?? 0;
-  const processing = queueItems.find((item) => item.label === 'Processing')?.value ?? 0;
-  const retrying = queueItems.find((item) => item.label === 'Retrying')?.value ?? 0;
-
-  return [
-    {
-      label: 'Publishing queue',
-      value: String(queued + processing),
-      detail: `${String(queued)} posts scheduled today`,
-      trend: '+18.2%',
-      tone: 'blue',
-      icon: Send,
-    },
-    {
-      label: 'Approval backlog',
-      value: String(pendingApprovals),
-      detail: '9 marked priority',
-      trend: '-12 min SLA',
-      tone: 'amber',
-      icon: FileCheck2,
-    },
-    {
-      label: 'Posts published',
-      value: '173',
-      detail: 'Across 7 platforms',
-      trend: '+12.7%',
-      tone: 'green',
-      icon: CheckCircle2,
-    },
-    {
-      label: 'Failed publishes',
-      value: String(retrying),
-      detail: retrying ? 'Pinterest token refresh' : 'No active failures',
-      trend: retrying ? 'Needs review' : 'Resolved',
-      tone: retrying ? 'rose' : 'green',
-      icon: retrying ? AlertTriangle : CheckCircle2,
-    },
-  ];
-}
-
 function toneClass(tone: Metric['tone']): string {
   return {
     blue: 'bg-blue-500/15 text-blue-600 dark:text-blue-300',
@@ -1701,6 +2001,103 @@ function toneClass(tone: Metric['tone']): string {
     amber: 'bg-amber-500/15 text-amber-700 dark:text-amber-200',
     rose: 'bg-rose-500/15 text-rose-600 dark:text-rose-300',
   }[tone];
+}
+
+function metricFromPayload(metric: DashboardMetricPayload): Metric {
+  return {
+    label: metric.label,
+    value: String(metric.value),
+    detail: metric.detail,
+    trend: 'Live',
+    tone: metric.tone,
+    icon: iconForMetric(metric.label, metric.tone),
+  };
+}
+
+function scheduleFromPayload(item: DashboardOverview['schedule'][number]): ScheduleItem {
+  return {
+    id: item.id,
+    time: formatScheduleTime(item.time),
+    platform: item.platform,
+    title: item.title,
+    state: item.state,
+    accent: accentForPlatform(item.platform),
+    view: viewForDate(item.time),
+  };
+}
+
+function activityFromPayload(item: DashboardOverview['activity'][number]): ActivityItem {
+  return {
+    id: item.id,
+    title: item.title,
+    detail: item.detail,
+    time: formatDateTimeLabel(item.time),
+    icon: item.tone === 'warning' ? AlertTriangle : CheckCircle2,
+    tone: item.tone === 'warning' ? 'text-amber-500' : 'text-emerald-500',
+  };
+}
+
+function platformKpiFromPayload(item: DashboardOverview['platformKpis'][number]): PlatformKpi {
+  return {
+    platform: item.platform,
+    icon: iconForPlatform(item.platform),
+    color: colorForPlatform(item.platform),
+    posts: item.posts,
+    engagement: `${String(item.published)} published`,
+    health: `${String(item.health)}%`,
+    delta: 'Live',
+  };
+}
+
+function platformHealthFromPayload(item: DashboardOverview['platformHealth'][number]): PlatformKpi {
+  return {
+    platform: item.platform,
+    icon: RadioTower,
+    color: item.status === 'ACTIVE' ? 'text-emerald-500' : 'text-amber-500',
+    posts: item.posts,
+    engagement: item.status,
+    health: `${String(item.health)}%`,
+    delta: 'Live',
+  };
+}
+
+function iconForMetric(label: string, tone: Metric['tone']): LucideIcon {
+  if (label.toLowerCase().includes('failed') || tone === 'rose') {
+    return AlertTriangle;
+  }
+  if (label.toLowerCase().includes('pending')) {
+    return FileCheck2;
+  }
+  if (label.toLowerCase().includes('published')) {
+    return CheckCircle2;
+  }
+  return Send;
+}
+
+function iconForPlatform(platform: string): LucideIcon {
+  return (
+    {
+      Instagram: Video,
+      Linkedin: Contact,
+      LinkedIn: Contact,
+      Pinterest: Image,
+      X: AtSign,
+      Facebook: ThumbsUp,
+    }[platform] ?? RadioTower
+  );
+}
+
+function colorForPlatform(platform: string): string {
+  return (
+    {
+      Instagram: 'text-pink-500 dark:text-pink-400',
+      Linkedin: 'text-sky-600 dark:text-sky-400',
+      LinkedIn: 'text-sky-600 dark:text-sky-400',
+      Pinterest: 'text-red-500 dark:text-red-400',
+      X: 'text-slate-700 dark:text-zinc-200',
+      Facebook: 'text-blue-600 dark:text-blue-300',
+    }[platform] ?? 'text-emerald-500'
+  );
 }
 
 function filterBySearch<T>(items: T[], query: string, getValues: (item: T) => string[]): T[] {
@@ -1741,6 +2138,72 @@ function displayNameForUser(user: AuthenticatedUser): string {
   return user.email.split('@')[0]?.replaceAll('.', ' ') ?? 'there';
 }
 
+function formatDateLabel(value: string | null): string {
+  if (!value) {
+    return 'recently';
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+function formatDateTimeLabel(value: string | null): string {
+  if (!value) {
+    return 'recently';
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatScheduleTime(value: string): string {
+  return new Intl.DateTimeFormat('en', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('en', { notation: 'compact' }).format(value);
+}
+
+function createClientId(): string {
+  if (typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Math.random().toString(36).slice(2)}-${performance.now().toString(36).replace('.', '')}`;
+}
+
+function viewForDate(value: string): ScheduleView {
+  const date = new Date(value);
+  const now = new Date();
+
+  if (date.toDateString() === now.toDateString()) {
+    return 'Today';
+  }
+
+  const weekFromNow = new Date(now);
+  weekFromNow.setDate(now.getDate() + 7);
+
+  return date <= weekFromNow ? 'Week' : 'Month';
+}
+
+function platformLabel(platform: string): string {
+  return platform
+    .toLowerCase()
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
 function initialsForEmail(email: string): string {
   return (
     email
@@ -1749,6 +2212,6 @@ function initialsForEmail(email: string): string {
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
-      .join('') ?? 'SF'
+      .join('') ?? 'TMJ'
   );
 }

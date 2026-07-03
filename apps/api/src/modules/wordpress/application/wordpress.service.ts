@@ -25,15 +25,21 @@ import type {
 import { WordPressRepository } from '../infrastructure/wordpress.repository.js';
 import { WordPressRestClient } from '../infrastructure/wordpress-rest.client.js';
 import { SocialContentGeneratorService } from './social-content-generator.service.js';
+import type { AuthenticatedUser } from '../../auth/types.js';
 import type {
   BulkRepurposeDto,
+  BulkWordPressActionDto,
   ConnectWordPressDto,
   DraftsQueryDto,
+  GenerateCampaignDto,
   RepurposeArticleDto,
   ScheduleDraftDto,
   SyncWordPressDto,
+  WordPressHubPostsQueryDto,
   WordPressLibraryQueryDto,
 } from './wordpress.dto.js';
+
+const DEFAULT_WORDPRESS_POST_TYPES = ['posts'];
 
 @Injectable()
 export class WordPressService {
@@ -45,18 +51,21 @@ export class WordPressService {
     private readonly generator: SocialContentGeneratorService,
   ) {}
 
-  async connect(dto: ConnectWordPressDto) {
+  async connect(dto: ConnectWordPressDto, user?: AuthenticatedUser) {
     const config: WordPressConnectionConfig = {
       siteUrl: this.normalizeSiteUrl(dto.siteUrl),
       username: dto.username.trim(),
       applicationPassword: dto.applicationPassword.trim(),
     };
+    const organizationId = user ? await this.repository.resolveOrganizationId(user.id) : null;
 
     await this.withLogging('GET', `${config.siteUrl}/wp-json/wp/v2/users/me`, () =>
       this.client.validateConnection(config),
     );
 
-    const connection = await this.repository.saveConnection(config);
+    const connection = organizationId
+      ? await this.repository.saveConnection(config, organizationId)
+      : await this.repository.saveConnection(config);
     return {
       id: connection.id,
       siteUrl: connection.siteUrl,
@@ -65,12 +74,19 @@ export class WordPressService {
     };
   }
 
-  async getPosts(params: { page: number; perPage: number }): Promise<PaginatedWordPressPosts> {
-    const connection = await this.requireConnection();
+  async getPosts(params: {
+    page: number;
+    perPage: number;
+    connectionId?: string;
+    status?: string;
+    user?: AuthenticatedUser;
+  }): Promise<PaginatedWordPressPosts> {
+    const connection = await this.requireConnection(params);
+    const postType = params.status === 'any' ? 'posts' : undefined;
     const postsResponse = await this.withLogging(
       'GET',
       `${connection.siteUrl}/wp-json/wp/v2/posts`,
-      () => this.client.fetchPosts(connection, params),
+      () => this.client.fetchPosts(connection, { ...params, postType }),
     );
     const posts = await Promise.all(
       postsResponse.data.map((post) => this.mapPost(connection, post)),
@@ -87,12 +103,15 @@ export class WordPressService {
     };
   }
 
-  async getPost(id: number): Promise<WordPressPost> {
+  async getPost(
+    id: number,
+    params: { connectionId?: string; user?: AuthenticatedUser },
+  ): Promise<WordPressPost> {
     if (!Number.isInteger(id) || id < 1) {
       throw new BadRequestException('WordPress post id must be a positive integer.');
     }
 
-    const connection = await this.requireConnection();
+    const connection = await this.requireConnection(params);
 
     try {
       const response = await this.withLogging(
@@ -110,59 +129,80 @@ export class WordPressService {
     }
   }
 
-  async getCategories(): Promise<WordPressCategory[]> {
-    const connection = await this.requireConnection();
-    const response = await this.withLogging(
-      'GET',
-      `${connection.siteUrl}/wp-json/wp/v2/categories`,
-      () => this.client.fetchCategories(connection),
-    );
-
-    return response.data.map(mapCategory);
+  async listCategories(user: AuthenticatedUser, connectionId?: string) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    return this.repository.listCategories(connectionId, organizationId);
   }
 
-  async sync(dto: SyncWordPressDto): Promise<WordPressSyncResult> {
-    const connection = await this.requireConnection();
+  async listTags(user: AuthenticatedUser, connectionId?: string) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    return this.repository.listTags(connectionId, organizationId);
+  }
+
+  async listAuthors(user: AuthenticatedUser, connectionId?: string) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    return this.repository.listAuthors(connectionId, organizationId);
+  }
+
+  async listMedia(user: AuthenticatedUser, connectionId?: string) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    return this.repository.listMedia(connectionId, organizationId);
+  }
+
+  async listConnections(user: AuthenticatedUser) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    return this.repository.listConnections(organizationId);
+  }
+
+  async sync(dto: SyncWordPressDto, user: AuthenticatedUser): Promise<WordPressSyncResult> {
+    const connection = await this.requireConnection({ connectionId: dto.connectionId, user });
     const perPage = dto.perPage ?? 100;
     const maxPages = dto.maxPages ?? 100;
+    const status = dto.status?.trim() || undefined;
+    const postTypes = this.syncPostTypes(dto.postTypes);
     const syncRun = await this.repository.createSyncRun(connection.id);
     let scannedPosts = 0;
     let upsertedPosts = 0;
     let failedPosts = 0;
-    let totalPages = 1;
+    let totalPages = 0;
 
     try {
-      for (let page = 1; page <= Math.min(totalPages, maxPages); page += 1) {
-        const response = await this.withLogging(
-          'GET',
-          `${connection.siteUrl}/wp-json/wp/v2/posts`,
-          () => this.client.fetchPosts(connection, { page, perPage }),
-        );
-        totalPages = this.readPaginationHeader(response.headers, 'x-wp-totalpages') || totalPages;
+      for (const postType of postTypes) {
+        let postTypeTotalPages = 1;
 
-        const posts = await Promise.all(
-          response.data.map((post) => this.mapPost(connection, post, true)),
-        );
-        scannedPosts += posts.length;
+        for (let page = 1; page <= Math.min(postTypeTotalPages, maxPages); page += 1) {
+          const response = await this.withLogging(
+            'GET',
+            `${connection.siteUrl}/wp-json/wp/v2/${postType}`,
+            () => this.client.fetchPosts(connection, { page, perPage, status, postType }),
+          );
+          postTypeTotalPages =
+            this.readPaginationHeader(response.headers, 'x-wp-totalpages') || postTypeTotalPages;
+          totalPages += page === 1 ? postTypeTotalPages : 0;
 
-        for (const post of posts) {
-          try {
-            await this.repository.upsertArticle(connection.id, post);
-            upsertedPosts += 1;
-          } catch (error) {
-            failedPosts += 1;
-            this.logger.warn(
-              {
-                error: error instanceof Error ? error.message : 'Unknown article upsert error.',
-                postId: post.id,
-              },
-              'WordPress article upsert failed',
-            );
+          scannedPosts += response.data.length;
+
+          for (const rawPost of response.data) {
+            try {
+              const post = await this.mapPost(connection, rawPost, true, postType);
+              await this.repository.upsertArticle(connection.id, post);
+              upsertedPosts += 1;
+            } catch (error) {
+              failedPosts += 1;
+              this.logger.warn(
+                {
+                  error: error instanceof Error ? error.message : 'Unknown article upsert error.',
+                  postId: rawPost.id,
+                  postType,
+                },
+                'WordPress article sync failed',
+              );
+            }
           }
-        }
 
-        if (!response.data.length) {
-          break;
+          if (!response.data.length) {
+            break;
+          }
         }
       }
 
@@ -178,7 +218,7 @@ export class WordPressService {
         scannedPosts,
         upsertedPosts,
         failedPosts,
-        totalPages,
+        totalPages: Math.max(totalPages, 1),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown sync failure.';
@@ -190,7 +230,7 @@ export class WordPressService {
         scannedPosts,
         upsertedPosts,
         failedPosts,
-        totalPages,
+        totalPages: Math.max(totalPages, 1),
       };
     }
   }
@@ -216,6 +256,32 @@ export class WordPressService {
     return article;
   }
 
+  async listHubPosts(query: WordPressHubPostsQueryDto) {
+    return this.repository.listHubArticles({
+      page: query.page ?? 1,
+      perPage: query.perPage ?? 25,
+      search: query.search,
+      category: query.category,
+      status: query.status,
+      repurposed: query.repurposed === undefined ? undefined : query.repurposed === 'true',
+      connectionId: query.connectionId,
+      tag: query.tag,
+      campaignStatus: query.campaignStatus,
+      sortBy: query.sortBy,
+      sortDir: query.sortDir,
+    });
+  }
+
+  async getHubPost(id: string) {
+    const article = await this.repository.findHubArticle(id);
+
+    if (!article) {
+      throw new NotFoundException('WordPress hub article was not found.');
+    }
+
+    return article;
+  }
+
   async repurposeArticle(id: string, dto: RepurposeArticleDto) {
     const article = await this.repository.findArticle(id);
 
@@ -225,15 +291,75 @@ export class WordPressService {
 
     const platforms = this.platforms(dto.platforms);
     const job = await this.repository.createRepurposeJob(article.id, platforms, dto.prompt);
-    const drafts = await this.repository.createDrafts(
-      this.generator.generate(article, platforms, job.id),
-    );
+    const generatedDrafts = await this.generator.generate(article, platforms, job.id);
+    const drafts = await this.repository.createDrafts(generatedDrafts);
     await this.repository.markArticleRepurposed(article.id);
 
     return {
       job,
       drafts,
     };
+  }
+
+  async generateCampaign(id: string, dto: GenerateCampaignDto) {
+    const article = await this.repository.findArticle(id);
+
+    if (!article) {
+      throw new NotFoundException('WordPress hub article was not found.');
+    }
+
+    const platforms = this.platforms(dto.platforms);
+    const job = await this.repository.createRepurposeJob(article.id, platforms, dto.prompt);
+    const generatedDrafts = await this.generator.generate(article, platforms, job.id);
+    const drafts = await this.repository.createDrafts(generatedDrafts);
+    const campaign = await this.repository.createCampaign({
+      articleId: article.id,
+      campaignName: dto.campaignName?.trim() ?? `Campaign: ${article.title}`,
+      prompt: dto.prompt,
+      promptVersion: dto.promptVersion?.trim() ?? 'wordpress-hub-v1',
+      aiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+      repurposeJobId: job.id,
+      drafts,
+    });
+    await this.repository.markArticleRepurposed(article.id);
+
+    return {
+      campaign,
+      drafts,
+    };
+  }
+
+  async bulkHubAction(dto: BulkWordPressActionDto) {
+    if (!dto.articleIds.length) {
+      throw new BadRequestException('Select at least one WordPress article.');
+    }
+
+    switch (dto.action) {
+      case 'archive': {
+        const result = await this.repository.archiveArticles(dto.articleIds);
+        return {
+          action: dto.action,
+          processed: result.count,
+        };
+      }
+
+      case 'generate': {
+        const results = [];
+
+        for (const articleId of dto.articleIds) {
+          results.push(await this.generateCampaign(articleId, {}));
+        }
+
+        return {
+          action: dto.action,
+          processed: results.length,
+          results,
+        };
+      }
+
+      default:
+        throw new BadRequestException('Unsupported WordPress hub bulk action.');
+    }
   }
 
   async bulkRepurpose(dto: BulkRepurposeDto) {
@@ -277,21 +403,27 @@ export class WordPressService {
     connection: WordPressConnectionConfig,
     post: WordPressRawPost,
     includeContent = false,
+    postType = 'posts',
   ): Promise<WordPressPost> {
     const embeddedAuthor = post._embedded?.author?.[0];
     const embeddedMedia = post._embedded?.['wp:featuredmedia']?.[0];
-    const embeddedCategories = post._embedded?.['wp:term']?.flat() ?? [];
+    const embeddedTerms = post._embedded?.['wp:term'] ?? [];
+    const embeddedCategories = embeddedTerms[0] ?? [];
+    const embeddedTags = embeddedTerms[1] ?? [];
 
-    const [author, featuredImage, categories] = await Promise.all([
+    const [author, featuredImage, categories, tags] = await Promise.all([
       embeddedAuthor
         ? Promise.resolve(mapAuthor(embeddedAuthor))
         : this.fetchAuthorIfPresent(connection, post.author),
       embeddedMedia
         ? Promise.resolve(mapFeaturedImage(embeddedMedia))
-        : this.fetchFeaturedImageIfPresent(connection, post.featured_media),
+        : this.fetchFeaturedImageIfPresent(connection, post.featured_media ?? 0),
       embeddedCategories.length
         ? Promise.resolve(embeddedCategories.map(mapCategory))
-        : this.fetchCategoriesIfPresent(connection, post.categories),
+        : this.fetchCategoriesIfPresent(connection, post.categories ?? []),
+      embeddedTags.length
+        ? Promise.resolve(embeddedTags.map(mapCategory))
+        : this.fetchTagsIfPresent(connection, post.tags ?? []),
     ]);
 
     return {
@@ -307,7 +439,21 @@ export class WordPressService {
       author,
       featuredImage,
       categories,
+      tags,
+      metadata: {
+        ...(post.social_zap4 ?? post.meta ?? {}),
+        sourceType: postType,
+      },
     };
+  }
+
+  private syncPostTypes(postTypes?: string[]): string[] {
+    const normalized = postTypes
+      ?.map((postType) => postType.trim())
+      .filter(Boolean)
+      .filter((postType, index, all) => all.indexOf(postType) === index);
+
+    return normalized?.length ? normalized : DEFAULT_WORDPRESS_POST_TYPES;
   }
 
   private async fetchAuthorIfPresent(
@@ -318,12 +464,20 @@ export class WordPressService {
       return undefined;
     }
 
-    const response = await this.withLogging(
-      'GET',
-      `${connection.siteUrl}/wp-json/wp/v2/users/${String(id)}`,
-      () => this.client.fetchAuthor(connection, id),
-    );
-    return mapAuthor(response.data);
+    try {
+      const response = await this.withLogging(
+        'GET',
+        `${connection.siteUrl}/wp-json/wp/v2/users/${String(id)}`,
+        () => this.client.fetchAuthor(connection, id),
+      );
+      return mapAuthor(response.data);
+    } catch (error) {
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : 'Unknown author fetch error.', authorId: id },
+        'WordPress author fetch failed',
+      );
+      return undefined;
+    }
   }
 
   private async fetchFeaturedImageIfPresent(
@@ -334,12 +488,20 @@ export class WordPressService {
       return undefined;
     }
 
-    const response = await this.withLogging(
-      'GET',
-      `${connection.siteUrl}/wp-json/wp/v2/media/${String(id)}`,
-      () => this.client.fetchFeaturedImage(connection, id),
-    );
-    return mapFeaturedImage(response.data);
+    try {
+      const response = await this.withLogging(
+        'GET',
+        `${connection.siteUrl}/wp-json/wp/v2/media/${String(id)}`,
+        () => this.client.fetchFeaturedImage(connection, id),
+      );
+      return mapFeaturedImage(response.data);
+    } catch (error) {
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : 'Unknown media fetch error.', mediaId: id },
+        'WordPress featured image fetch failed',
+      );
+      return undefined;
+    }
   }
 
   private async fetchCategoriesIfPresent(
@@ -350,16 +512,57 @@ export class WordPressService {
       return [];
     }
 
-    const response = await this.withLogging(
-      'GET',
-      `${connection.siteUrl}/wp-json/wp/v2/categories`,
-      () => this.client.fetchCategories(connection, ids),
-    );
-    return response.data.map(mapCategory);
+    try {
+      const response = await this.withLogging(
+        'GET',
+        `${connection.siteUrl}/wp-json/wp/v2/categories`,
+        () => this.client.fetchCategories(connection, ids),
+      );
+      return response.data.map(mapCategory);
+    } catch (error) {
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : 'Unknown category fetch error.', ids },
+        'WordPress category fetch failed',
+      );
+      return [];
+    }
   }
 
-  private async requireConnection(): Promise<WordPressConnectionRecord> {
-    const connection = await this.repository.findActiveConnection();
+  private async fetchTagsIfPresent(
+    connection: WordPressConnectionConfig,
+    ids: number[],
+  ): Promise<WordPressCategory[]> {
+    if (!ids.length) {
+      return [];
+    }
+
+    try {
+      const response = await this.withLogging(
+        'GET',
+        `${connection.siteUrl}/wp-json/wp/v2/tags`,
+        () => this.client.fetchTags(connection, ids),
+      );
+      return response.data.map(mapCategory);
+    } catch (error) {
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : 'Unknown tag fetch error.', ids },
+        'WordPress tag fetch failed',
+      );
+      return [];
+    }
+  }
+
+  private async requireConnection(params: {
+    connectionId?: string;
+    user?: AuthenticatedUser;
+  }): Promise<WordPressConnectionRecord> {
+    const organizationId = params.user
+      ? await this.repository.resolveOrganizationId(params.user.id)
+      : null;
+    const connection = await this.repository.findActiveConnection({
+      connectionId: params.connectionId,
+      organizationId,
+    });
 
     if (!connection) {
       throw new BadRequestException('Connect a WordPress site before fetching posts.');
@@ -449,6 +652,10 @@ function mapFeaturedImage(media: WordPressRawMedia): WordPressFeaturedImage {
     sourceUrl: media.source_url,
     altText: media.alt_text,
     mediaType: media.media_type,
+    mimeType: media.mime_type,
+    width: media.media_details?.width,
+    height: media.media_details?.height,
+    metadata: media.media_details ? { mediaDetails: media.media_details } : undefined,
   };
 }
 

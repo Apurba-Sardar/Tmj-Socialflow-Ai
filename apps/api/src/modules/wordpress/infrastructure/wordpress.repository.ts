@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
+  Role,
   SocialDraftStatus,
   SocialPlatform,
+  WordPressCampaignStatus,
+  WordPressPublishStatus,
   WordPressSyncStatus,
   type Prisma,
 } from '@prisma/client';
@@ -25,6 +28,14 @@ export interface LibraryQuery {
   repurposed?: boolean;
 }
 
+export interface HubPostsQuery extends LibraryQuery {
+  connectionId?: string;
+  tag?: string;
+  campaignStatus?: WordPressCampaignStatus;
+  sortBy?: 'title' | 'modifiedAt' | 'publishedAt' | 'campaignStatus';
+  sortDir?: 'asc' | 'desc';
+}
+
 export interface DraftQuery {
   page: number;
   perPage: number;
@@ -44,6 +55,23 @@ export interface SocialDraftInput {
   sourceUrl: string;
 }
 
+export interface CampaignGenerationInput {
+  articleId: string;
+  campaignName: string;
+  prompt?: string;
+  promptVersion: string;
+  aiModel: string;
+  repurposeJobId: string;
+  drafts: {
+    id?: string;
+    platform: SocialPlatform;
+    title: string;
+    body: string;
+    hashtags: string[];
+    mediaUrl?: string | null;
+  }[];
+}
+
 @Injectable()
 export class WordPressRepository {
   constructor(
@@ -51,7 +79,10 @@ export class WordPressRepository {
     private readonly secrets: WordPressSecretService,
   ) {}
 
-  async saveConnection(config: WordPressConnectionConfig): Promise<WordPressConnectionRecord> {
+  async saveConnection(
+    config: WordPressConnectionConfig,
+    organizationId?: string | null,
+  ): Promise<WordPressConnectionRecord> {
     const encrypted = this.secrets.encrypt(config.applicationPassword);
     const connection = await this.prisma.wordPressConnection.upsert({
       where: {
@@ -61,6 +92,7 @@ export class WordPressRepository {
         },
       },
       create: {
+        organizationId,
         siteUrl: config.siteUrl,
         username: config.username,
         applicationPasswordIv: encrypted.iv,
@@ -69,6 +101,7 @@ export class WordPressRepository {
         lastConnectedAt: new Date(),
       },
       update: {
+        organizationId,
         applicationPasswordIv: encrypted.iv,
         applicationPasswordTag: encrypted.tag,
         applicationPasswordCiphertext: encrypted.ciphertext,
@@ -85,9 +118,16 @@ export class WordPressRepository {
     };
   }
 
-  async findActiveConnection(): Promise<WordPressConnectionRecord | null> {
+  async findActiveConnection(input: {
+    connectionId?: string;
+    organizationId?: string | null;
+  } = {}): Promise<WordPressConnectionRecord | null> {
     const connection = await this.prisma.wordPressConnection.findFirst({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(input.connectionId ? { id: input.connectionId } : {}),
+        ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+      },
       orderBy: { lastConnectedAt: 'desc' },
     });
 
@@ -105,6 +145,89 @@ export class WordPressRepository {
         ciphertext: connection.applicationPasswordCiphertext,
       }),
     };
+  }
+
+  async listConnections(organizationId?: string | null) {
+    return this.prisma.wordPressConnection.findMany({
+      where: {
+        ...(organizationId ? { organizationId } : {}),
+      },
+      select: {
+        id: true,
+        siteUrl: true,
+        username: true,
+        isActive: true,
+        lastConnectedAt: true,
+        createdAt: true,
+        _count: {
+          select: {
+            articles: true,
+            syncRuns: true,
+          },
+        },
+      },
+      orderBy: [{ isActive: 'desc' }, { lastConnectedAt: 'desc' }],
+    });
+  }
+
+  async resolveOrganizationId(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { defaultOrganizationId: true },
+    });
+
+    if (user?.defaultOrganizationId) {
+      return user.defaultOrganizationId;
+    }
+
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: { userId },
+      select: { organizationId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return membership?.organizationId ?? null;
+  }
+
+  async listCategories(connectionId?: string, organizationId?: string | null) {
+    return this.prisma.wordPressCategory.findMany({
+      where: {
+        ...(connectionId ? { connectionId } : {}),
+        ...(organizationId ? { connection: { organizationId } } : {}),
+      },
+      orderBy: [{ count: 'desc' }, { name: 'asc' }],
+    });
+  }
+
+  async listTags(connectionId?: string, organizationId?: string | null) {
+    return this.prisma.wordPressTag.findMany({
+      where: {
+        ...(connectionId ? { connectionId } : {}),
+        ...(organizationId ? { connection: { organizationId } } : {}),
+      },
+      orderBy: [{ count: 'desc' }, { name: 'asc' }],
+    });
+  }
+
+  async listAuthors(connectionId?: string, organizationId?: string | null) {
+    return this.prisma.wordPressAuthor.findMany({
+      where: {
+        ...(connectionId ? { connectionId } : {}),
+        ...(organizationId ? { connection: { organizationId } } : {}),
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async listMedia(connectionId?: string, organizationId?: string | null) {
+    return this.prisma.wordPressMedia.findMany({
+      where: {
+        ...(connectionId ? { connectionId } : {}),
+        ...(organizationId ? { connection: { organizationId } } : {}),
+      },
+      orderBy: { lastSyncedAt: 'desc' },
+      take: 100,
+    });
   }
 
   async logRequest(input: WordPressRequestLogInput): Promise<void> {
@@ -155,19 +278,129 @@ export class WordPressRepository {
   }
 
   async upsertArticle(connectionId: string, post: WordPressPost) {
-    return this.prisma.wordPressArticle.upsert({
-      where: {
-        connectionId_wordpressId: {
-          connectionId,
-          wordpressId: post.id,
+    const db = this.prisma;
+
+      if (post.author) {
+        await db.wordPressAuthor.upsert({
+          where: {
+            connectionId_wordpressId: {
+              connectionId,
+              wordpressId: post.author.id,
+            },
+          },
+          create: {
+            connectionId,
+            wordpressId: post.author.id,
+            name: post.author.name,
+            slug: post.author.slug,
+            url: post.author.url,
+            avatarUrl: post.author.avatarUrl,
+          },
+          update: {
+            name: post.author.name,
+            slug: post.author.slug,
+            url: post.author.url,
+            avatarUrl: post.author.avatarUrl,
+            lastSyncedAt: new Date(),
+          },
+        });
+      }
+
+      if (post.featuredImage) {
+        await db.wordPressMedia.upsert({
+          where: {
+            connectionId_wordpressId: {
+              connectionId,
+              wordpressId: post.featuredImage.id,
+            },
+          },
+          create: {
+            connectionId,
+            wordpressId: post.featuredImage.id,
+            sourceUrl: post.featuredImage.sourceUrl,
+            altText: post.featuredImage.altText,
+            mediaType: post.featuredImage.mediaType,
+            mimeType: post.featuredImage.mimeType,
+            width: post.featuredImage.width,
+            height: post.featuredImage.height,
+            metadata: post.featuredImage.metadata as Prisma.InputJsonValue | undefined,
+          },
+          update: {
+            sourceUrl: post.featuredImage.sourceUrl,
+            altText: post.featuredImage.altText,
+            mediaType: post.featuredImage.mediaType,
+            mimeType: post.featuredImage.mimeType,
+            width: post.featuredImage.width,
+            height: post.featuredImage.height,
+            metadata: post.featuredImage.metadata as Prisma.InputJsonValue | undefined,
+            lastSyncedAt: new Date(),
+          },
+        });
+      }
+
+      for (const category of post.categories) {
+        await db.wordPressCategory.upsert({
+          where: {
+            connectionId_wordpressId: {
+              connectionId,
+              wordpressId: category.id,
+            },
+          },
+          create: {
+            connectionId,
+            wordpressId: category.id,
+            name: category.name,
+            slug: category.slug,
+            count: category.count,
+            parentId: category.parent,
+          },
+          update: {
+            name: category.name,
+            slug: category.slug,
+            count: category.count,
+            parentId: category.parent,
+            lastSyncedAt: new Date(),
+          },
+        });
+      }
+
+      for (const tag of post.tags) {
+        await db.wordPressTag.upsert({
+          where: {
+            connectionId_wordpressId: {
+              connectionId,
+              wordpressId: tag.id,
+            },
+          },
+          create: {
+            connectionId,
+            wordpressId: tag.id,
+            name: tag.name,
+            slug: tag.slug,
+            count: tag.count,
+          },
+          update: {
+            name: tag.name,
+            slug: tag.slug,
+            count: tag.count,
+            lastSyncedAt: new Date(),
+          },
+        });
+      }
+
+      return db.wordPressArticle.upsert({
+        where: {
+          connectionId_wordpressId: {
+            connectionId,
+            wordpressId: post.id,
+          },
         },
-      },
-      create: this.articleData(connectionId, post),
-      update: {
-        ...this.articleData(connectionId, post),
-        lastSyncedAt: new Date(),
-      },
-    });
+        create: this.articleData(connectionId, post),
+        update: {
+          ...this.articleData(connectionId, post),
+          lastSyncedAt: new Date(),
+        },
+      });
   }
 
   async listArticles(query: LibraryQuery) {
@@ -193,8 +426,106 @@ export class WordPressRepository {
     };
   }
 
+  async listHubArticles(query: HubPostsQuery) {
+    const where = this.articleWhere(query);
+    const orderBy = this.hubOrderBy(query);
+    const [items, total] = await Promise.all([
+      this.prisma.wordPressArticle.findMany({
+        where,
+        include: {
+          connection: {
+            select: {
+              id: true,
+              siteUrl: true,
+              username: true,
+            },
+          },
+          campaigns: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              updatedAt: true,
+              _count: {
+                select: {
+                  generations: true,
+                  publishingHistory: true,
+                },
+              },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+          },
+          _count: {
+            select: {
+              campaigns: true,
+              socialDrafts: true,
+            },
+          },
+        },
+        orderBy,
+        skip: (query.page - 1) * query.perPage,
+        take: query.perPage,
+      }),
+      this.prisma.wordPressArticle.count({ where }),
+    ]);
+
+    return {
+      data: items.map((article) => ({
+        ...mapArticle(article),
+        connection: article.connection,
+        campaignStatus: article.campaigns[0]?.status ?? WordPressCampaignStatus.NOT_GENERATED,
+        latestCampaign: article.campaigns[0] ?? null,
+        campaignCount: article._count.campaigns,
+        draftCount: article._count.socialDrafts,
+      })),
+      pagination: {
+        page: query.page,
+        perPage: query.perPage,
+        total,
+        totalPages: Math.ceil(total / query.perPage),
+      },
+    };
+  }
+
   async findArticle(id: string) {
     return this.prisma.wordPressArticle.findUnique({ where: { id } });
+  }
+
+  async findHubArticle(id: string) {
+    return this.prisma.wordPressArticle.findUnique({
+      where: { id },
+      include: {
+        connection: {
+          select: {
+            id: true,
+            siteUrl: true,
+            username: true,
+            lastConnectedAt: true,
+          },
+        },
+        campaigns: {
+          include: {
+            generations: {
+              orderBy: [{ version: 'desc' }, { generatedAt: 'desc' }],
+            },
+            publishingHistory: {
+              orderBy: { createdAt: 'desc' },
+            },
+            regenerationHistory: {
+              orderBy: [{ version: 'desc' }, { generatedAt: 'desc' }],
+            },
+            analytics: {
+              orderBy: { capturedAt: 'desc' },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+        },
+        socialDrafts: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
   }
 
   async listArticlesForRepurpose(limit: number) {
@@ -225,6 +556,79 @@ export class WordPressRepository {
         repurposeJobId: drafts[0]?.repurposeJobId,
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createCampaign(input: CampaignGenerationInput) {
+    const version = await this.nextCampaignVersion(input.articleId);
+    return this.prisma.$transaction(async (tx) => {
+      const campaign = await tx.wordPressCampaign.create({
+        data: {
+          articleId: input.articleId,
+          name: input.campaignName,
+          status: WordPressCampaignStatus.DRAFT,
+          promptVersion: input.promptVersion,
+          aiModel: input.aiModel,
+          createdByRole: Role.ADMIN,
+        },
+      });
+
+      await tx.wordPressCampaignGeneration.createMany({
+        data: input.drafts.map((draft) => ({
+          campaignId: campaign.id,
+          articleId: input.articleId,
+          repurposeJobId: input.repurposeJobId,
+          socialDraftId: draft.id,
+          platform: draft.platform,
+          caption: draft.body,
+          hashtags: draft.hashtags,
+          imageUrl: draft.mediaUrl,
+          prompt: input.prompt,
+          promptVersion: input.promptVersion,
+          aiModel: input.aiModel,
+          version,
+        })),
+      });
+
+      await tx.wordPressPublishingHistory.createMany({
+        data: input.drafts.map((draft) => ({
+          campaignId: campaign.id,
+          articleId: input.articleId,
+          platform: draft.platform,
+          platformAccount: titleCasePlatform(draft.platform),
+          status: WordPressPublishStatus.DRAFT,
+          postUrl: null,
+          errorLog: null,
+        })),
+      });
+
+      await tx.wordPressRegenerationHistory.create({
+        data: {
+          campaignId: campaign.id,
+          articleId: input.articleId,
+          version,
+          prompt: input.prompt,
+          promptVersion: input.promptVersion,
+          aiModel: input.aiModel,
+          reason: version === 1 ? 'Initial AI campaign generation' : 'Regenerated campaign',
+          snapshot: input.drafts.map((draft) => ({
+            platform: draft.platform,
+            title: draft.title,
+            caption: draft.body,
+            hashtags: draft.hashtags,
+            imageUrl: draft.mediaUrl,
+          })),
+        },
+      });
+
+      return tx.wordPressCampaign.findUniqueOrThrow({
+        where: { id: campaign.id },
+        include: {
+          generations: true,
+          publishingHistory: true,
+          regenerationHistory: true,
+        },
+      });
     });
   }
 
@@ -292,6 +696,16 @@ export class WordPressRepository {
     });
   }
 
+  async archiveArticles(articleIds: string[]) {
+    return this.prisma.wordPressCampaign.updateMany({
+      where: { articleId: { in: articleIds } },
+      data: {
+        status: WordPressCampaignStatus.ARCHIVED,
+        archivedAt: new Date(),
+      },
+    });
+  }
+
   private articleData(connectionId: string, post: WordPressPost) {
     return {
       connectionId,
@@ -311,13 +725,21 @@ export class WordPressRepository {
       featuredImageAlt: post.featuredImage?.altText,
       categoryNames: post.categories.map((category) => category.name),
       categorySlugs: post.categories.map((category) => category.slug),
+      tagNames: post.tags.map((tag) => tag.name),
+      tagSlugs: post.tags.map((tag) => tag.slug),
+      metadata: post.metadata as Prisma.InputJsonValue | undefined,
       publishedAt: parseOptionalDate(post.publishedAt),
       modifiedAt: parseOptionalDate(post.modifiedAt),
     };
   }
 
   private articleWhere(query: LibraryQuery): Prisma.WordPressArticleWhereInput {
+    const hubQuery = query as HubPostsQuery;
+
     return {
+      ...(hubQuery.connectionId
+        ? { connectionId: hubQuery.connectionId }
+        : {}),
       ...(query.search
         ? {
             OR: [
@@ -328,13 +750,43 @@ export class WordPressRepository {
           }
         : {}),
       ...(query.category ? { categorySlugs: { has: query.category } } : {}),
+      ...(hubQuery.tag ? { tagSlugs: { has: hubQuery.tag } } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(hubQuery.campaignStatus
+        ? hubQuery.campaignStatus === WordPressCampaignStatus.NOT_GENERATED
+          ? { campaigns: { none: {} } }
+          : { campaigns: { some: { status: hubQuery.campaignStatus } } }
+        : {}),
       ...(query.repurposed === undefined
         ? {}
         : query.repurposed
           ? { repurposedAt: { not: null } }
           : { repurposedAt: null }),
     };
+  }
+
+  private hubOrderBy(query: HubPostsQuery): Prisma.WordPressArticleOrderByWithRelationInput[] {
+    const sortDir = query.sortDir ?? 'desc';
+
+    if (query.sortBy === 'title') {
+      return [{ title: sortDir }];
+    }
+
+    if (query.sortBy === 'publishedAt') {
+      return [{ publishedAt: sortDir }, { modifiedAt: 'desc' }];
+    }
+
+    return [{ modifiedAt: sortDir }, { lastSyncedAt: 'desc' }];
+  }
+
+  private async nextCampaignVersion(articleId: string): Promise<number> {
+    const latest = await this.prisma.wordPressRegenerationHistory.findFirst({
+      where: { articleId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+
+    return (latest?.version ?? 0) + 1;
   }
 }
 
@@ -348,6 +800,8 @@ function mapArticle(article: {
   featuredImageUrl: string | null;
   categoryNames: string[];
   categorySlugs: string[];
+  tagNames: string[];
+  tagSlugs: string[];
   publishedAt: Date | null;
   modifiedAt: Date | null;
   repurposedAt: Date | null;
@@ -362,10 +816,21 @@ function mapArticle(article: {
     featuredImageUrl: article.featuredImageUrl,
     categoryNames: article.categoryNames,
     categorySlugs: article.categorySlugs,
+    tagNames: article.tagNames,
+    tagSlugs: article.tagSlugs,
+    campaignStatus: 'NOT_GENERATED',
     publishedAt: article.publishedAt,
     modifiedAt: article.modifiedAt,
     repurposedAt: article.repurposedAt,
   };
+}
+
+function titleCasePlatform(platform: SocialPlatform): string {
+  return platform
+    .toLowerCase()
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
 }
 
 function parseOptionalDate(value: string): Date | undefined {

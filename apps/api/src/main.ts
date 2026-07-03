@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { loadEnvironment } from '@socialflow/config';
 
@@ -12,10 +13,25 @@ const bootstrap = async (): Promise<void> => {
   const env = loadEnvironment();
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   app.use(cookieParser());
+  const allowedOrigins = env.API_CORS_ORIGIN.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: env.API_CORS_ORIGIN,
+    origin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
     credentials: true,
   });
   app.useGlobalPipes(
@@ -26,6 +42,15 @@ const bootstrap = async (): Promise<void> => {
     }),
   );
   app.setGlobalPrefix('api');
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('TMJ SocialFlow AI API')
+    .setDescription('Enterprise social media automation API')
+    .setVersion('1.0.0')
+    .addBearerAuth()
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument);
 
   await app.listen(env.API_PORT, env.API_HOST);
 };

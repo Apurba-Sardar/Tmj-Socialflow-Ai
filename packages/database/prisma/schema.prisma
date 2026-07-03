@@ -6,11 +6,19 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
   USER
   ADMIN
+  SUPER_ADMIN
+  MANAGER
+  CONTENT_WRITER
+  DESIGNER
+  REVIEWER
+  PUBLISHER
+  VIEWER
 }
 
 enum AuthTokenType {
@@ -33,21 +41,188 @@ enum PinterestLogLevel {
 
 model User {
   id              String         @id @default(cuid())
+  defaultOrganizationId String?
   email           String         @unique
   passwordHash    String
   displayName     String?
-  role            Role           @default(USER)
+  role            Role           @default(VIEWER)
   emailVerifiedAt DateTime?
   disabledAt      DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+  defaultOrganization Organization? @relation("DefaultOrganization", fields: [defaultOrganizationId], references: [id], onDelete: SetNull)
+  organizationMemberships OrganizationMember[]
   refreshTokens   RefreshToken[]
   authTokens      AuthToken[]
+  sessions        UserSession[]
+  settings        UserSetting[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  mediaAssets     MediaAsset[]
+  publishJobs     PublishJob[]
+  queueJobs       QueueJob[]
   pinterestAccounts PinterestAccount[]
   pinterestOAuthStates PinterestOAuthState[]
   pinterestPublishJobs PinterestPublishJob[]
 
   @@index([role])
+  @@index([defaultOrganizationId])
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  ownerUserId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  defaultUsers User[] @relation("DefaultOrganization")
+  members     OrganizationMember[]
+  roles       RoleDefinition[]
+  settings    OrganizationSetting[]
+  notifications Notification[]
+  auditLogs   AuditLog[]
+  wordpressConnections WordPressConnection[]
+  mediaFolders MediaFolder[]
+  mediaAssets  MediaAsset[]
+  publishJobs  PublishJob[]
+  analytics    AnalyticsMetric[]
+  queueJobs    QueueJob[]
+
+  @@index([ownerUserId])
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           RoleDefinition? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model RoleDefinition {
+  id             String   @id @default(cuid())
+  organizationId String?
+  key            Role
+  name           String
+  description    String?
+  system         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships    OrganizationMember[]
+  permissions    RolePermission[]
+
+  @@unique([organizationId, key])
+  @@index([key])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         RoleDefinition @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserSession {
+  id             String    @id @default(cuid())
+  userId         String
+  refreshTokenId String?
+  ipAddress      String?
+  userAgent      String?
+  browser        String?
+  rememberMe     Boolean   @default(false)
+  lastSeenAt     DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenId])
+  @@index([expiresAt])
+}
+
+model UserSetting {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+model OrganizationSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String
+  value          Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  type           String
+  title          String
+  body           String?
+  data           Json?
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  ipAddress      String?
+  userAgent      String?
+  browser        String?
+  action         String
+  entityType     String?
+  entityId       String?
+  result         String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([action])
 }
 
 model PinterestAccount {
@@ -166,6 +341,7 @@ model AuthToken {
 
 model WordPressConnection {
   id                    String   @id @default(cuid())
+  organizationId        String?
   siteUrl               String
   username              String
   applicationPasswordIv String
@@ -175,11 +351,90 @@ model WordPressConnection {
   lastConnectedAt       DateTime?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   articles              WordPressArticle[]
   syncRuns              WordPressSyncRun[]
+  authors               WordPressAuthor[]
+  categories            WordPressCategory[]
+  tags                  WordPressTag[]
+  media                 WordPressMedia[]
 
   @@unique([siteUrl, username])
   @@index([isActive])
+  @@index([organizationId])
+}
+
+model WordPressAuthor {
+  id           String   @id @default(cuid())
+  connectionId String
+  wordpressId  Int
+  name         String
+  slug         String
+  url          String?
+  avatarUrl    String?
+  metadata     Json?
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  connection   WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, wordpressId])
+  @@index([connectionId, slug])
+}
+
+model WordPressCategory {
+  id           String   @id @default(cuid())
+  connectionId String
+  wordpressId  Int
+  name         String
+  slug         String
+  count        Int      @default(0)
+  parentId     Int?
+  metadata     Json?
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  connection   WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, wordpressId])
+  @@index([connectionId, slug])
+}
+
+model WordPressTag {
+  id           String   @id @default(cuid())
+  connectionId String
+  wordpressId  Int
+  name         String
+  slug         String
+  count        Int      @default(0)
+  metadata     Json?
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  connection   WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, wordpressId])
+  @@index([connectionId, slug])
+}
+
+model WordPressMedia {
+  id           String   @id @default(cuid())
+  connectionId String
+  wordpressId  Int
+  sourceUrl    String
+  altText      String?
+  mediaType    String
+  mimeType     String?
+  width        Int?
+  height       Int?
+  metadata     Json?
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  connection   WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, wordpressId])
+  @@index([connectionId, mediaType])
 }
 
 model WordPressRequestLog {
@@ -219,6 +474,57 @@ enum SocialDraftStatus {
   REJECTED
 }
 
+enum WordPressCampaignStatus {
+  NOT_GENERATED
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+enum WordPressPublishStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+enum PublishJobStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PROCESSING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum PublishLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+enum MediaAssetType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  OTHER
+}
+
+enum QueueJobStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  CANCELLED
+}
+
 model WordPressArticle {
   id              String              @id @default(cuid())
   connectionId    String
@@ -238,6 +544,9 @@ model WordPressArticle {
   featuredImageAlt String?
   categoryNames   String[]
   categorySlugs   String[]
+  tagNames         String[]             @default([])
+  tagSlugs         String[]             @default([])
+  metadata         Json?
   publishedAt     DateTime?
   modifiedAt      DateTime?
   lastSyncedAt    DateTime            @default(now())
@@ -247,11 +556,17 @@ model WordPressArticle {
   connection      WordPressConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   repurposeJobs   ContentRepurposeJob[]
   socialDrafts    SocialDraft[]
+  campaigns        WordPressCampaign[]
+  campaignGenerations WordPressCampaignGeneration[]
+  publishingHistory WordPressPublishingHistory[]
+  regenerationHistory WordPressRegenerationHistory[]
+  campaignAnalytics WordPressCampaignAnalytics[]
 
   @@unique([connectionId, wordpressId])
   @@index([modifiedAt])
   @@index([repurposedAt])
   @@index([categorySlugs])
+  @@index([tagSlugs])
 }
 
 model WordPressSyncRun {
@@ -280,6 +595,7 @@ model ContentRepurposeJob {
   createdAt  DateTime         @default(now())
   article    WordPressArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
   drafts     SocialDraft[]
+  campaignGenerations WordPressCampaignGeneration[]
 
   @@index([articleId])
   @@index([createdAt])
@@ -303,8 +619,240 @@ model SocialDraft {
   updatedAt        DateTime           @updatedAt
   article          WordPressArticle   @relation(fields: [articleId], references: [id], onDelete: Cascade)
   repurposeJob     ContentRepurposeJob? @relation(fields: [repurposeJobId], references: [id], onDelete: SetNull)
+  campaignGeneration WordPressCampaignGeneration?
 
   @@index([platform, status])
   @@index([scheduledFor])
   @@index([articleId])
+}
+
+model WordPressCampaign {
+  id            String                  @id @default(cuid())
+  articleId     String
+  name          String
+  status        WordPressCampaignStatus @default(DRAFT)
+  promptVersion String
+  aiModel       String
+  createdByRole Role                    @default(ADMIN)
+  archivedAt    DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  article       WordPressArticle        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  generations   WordPressCampaignGeneration[]
+  publishingHistory WordPressPublishingHistory[]
+  regenerationHistory WordPressRegenerationHistory[]
+  analytics     WordPressCampaignAnalytics[]
+
+  @@index([articleId, status])
+  @@index([createdAt])
+}
+
+model WordPressCampaignGeneration {
+  id             String                 @id @default(cuid())
+  campaignId     String
+  articleId      String
+  repurposeJobId String?
+  socialDraftId  String?                @unique
+  platform       SocialPlatform
+  caption        String
+  hashtags       String[]
+  imageUrl       String?
+  prompt         String?
+  promptVersion  String
+  aiModel        String
+  version        Int
+  generatedAt    DateTime               @default(now())
+  campaign       WordPressCampaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  article        WordPressArticle       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  repurposeJob   ContentRepurposeJob?   @relation(fields: [repurposeJobId], references: [id], onDelete: SetNull)
+  socialDraft    SocialDraft?           @relation(fields: [socialDraftId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, platform])
+  @@index([articleId, generatedAt])
+}
+
+model WordPressPublishingHistory {
+  id              String                 @id @default(cuid())
+  campaignId      String
+  articleId       String
+  platform        SocialPlatform
+  platformAccount String
+  status          WordPressPublishStatus
+  scheduledFor    DateTime?
+  publishedAt     DateTime?
+  postUrl         String?
+  errorLog        String?
+  metadata        Json?
+  createdAt       DateTime               @default(now())
+  campaign        WordPressCampaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  article         WordPressArticle       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, platform])
+  @@index([articleId, createdAt])
+  @@index([status])
+}
+
+model WordPressRegenerationHistory {
+  id            String            @id @default(cuid())
+  campaignId    String
+  articleId     String
+  version       Int
+  prompt        String?
+  promptVersion String
+  aiModel       String
+  reason        String?
+  generatedAt   DateTime          @default(now())
+  snapshot      Json
+  campaign      WordPressCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  article       WordPressArticle  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, version])
+  @@index([articleId, generatedAt])
+}
+
+model WordPressCampaignAnalytics {
+  id          String            @id @default(cuid())
+  campaignId  String
+  articleId   String
+  platform    SocialPlatform?
+  impressions Int               @default(0)
+  clicks      Int               @default(0)
+  saves       Int               @default(0)
+  comments    Int               @default(0)
+  shares      Int               @default(0)
+  capturedAt  DateTime          @default(now())
+  campaign    WordPressCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  article     WordPressArticle  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, capturedAt])
+  @@index([articleId])
+}
+
+model MediaFolder {
+  id             String   @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  slug           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         MediaFolder? @relation("MediaFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children       MediaFolder[] @relation("MediaFolderChildren")
+  assets         MediaAsset[]
+
+  @@unique([organizationId, parentId, slug])
+  @@index([organizationId])
+}
+
+model MediaAsset {
+  id             String         @id @default(cuid())
+  organizationId String
+  folderId       String?
+  uploadedById   String?
+  type           MediaAssetType
+  name           String
+  url            String
+  mimeType       String?
+  sizeBytes      Int?
+  width          Int?
+  height         Int?
+  altText        String?
+  checksum       String?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  folder         MediaFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  uploadedBy     User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  publishJobs    PublishJob[]
+
+  @@index([organizationId, createdAt])
+  @@index([folderId])
+  @@index([uploadedById])
+}
+
+model PublishJob {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String?
+  mediaAssetId   String?
+  campaignId     String?
+  platform       SocialPlatform
+  platformAccount String?
+  title          String
+  caption        String?
+  hashtags       String[]         @default([])
+  status         PublishJobStatus @default(DRAFT)
+  scheduledFor   DateTime?
+  publishedAt    DateTime?
+  postUrl        String?
+  attempts       Int              @default(0)
+  lastError      String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  mediaAsset     MediaAsset?      @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  logs           PublishLog[]
+
+  @@index([organizationId, status])
+  @@index([platform, status])
+  @@index([scheduledFor])
+}
+
+model PublishLog {
+  id        String          @id @default(cuid())
+  jobId     String
+  level     PublishLogLevel
+  message   String
+  metadata  Json?
+  createdAt DateTime        @default(now())
+  job       PublishJob      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([level])
+}
+
+model AnalyticsMetric {
+  id             String   @id @default(cuid())
+  organizationId String
+  entityType     String
+  entityId       String?
+  platform       SocialPlatform?
+  metric         String
+  value          Float
+  capturedAt     DateTime @default(now())
+  metadata       Json?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, capturedAt])
+  @@index([entityType, entityId])
+  @@index([metric])
+}
+
+model QueueJob {
+  id             String         @id @default(cuid())
+  organizationId String?
+  userId         String?
+  queueName      String
+  jobName        String
+  bullJobId      String?
+  status         QueueJobStatus @default(WAITING)
+  attempts       Int            @default(0)
+  scheduledFor   DateTime?
+  processedAt    DateTime?
+  finishedAt     DateTime?
+  failedReason   String?
+  payload        Json?
+  result         Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([queueName, status])
+  @@index([organizationId, createdAt])
+  @@index([userId])
 }

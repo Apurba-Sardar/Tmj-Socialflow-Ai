@@ -11,7 +11,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SocialPlatform } from '@prisma/client';
+import { SocialPlatform, WordPressCampaignStatus } from '@prisma/client';
 
 export class ConnectWordPressDto {
   @IsUrl({ require_tld: false })
@@ -28,6 +28,14 @@ export class ConnectWordPressDto {
 
 export class WordPressPostsQueryDto {
   @IsOptional()
+  @IsString()
+  connectionId?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -42,6 +50,19 @@ export class WordPressPostsQueryDto {
 }
 
 export class SyncWordPressDto {
+  @IsOptional()
+  @IsString()
+  connectionId?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  postTypes?: string[];
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -64,10 +85,6 @@ export class WordPressLibraryQueryDto extends WordPressPostsQueryDto {
   @IsOptional()
   @IsString()
   category?: string;
-
-  @IsOptional()
-  @IsString()
-  status?: string;
 
   @IsOptional()
   @IsString()
@@ -99,12 +116,46 @@ export class DraftsQueryDto extends WordPressPostsQueryDto {
   @IsEnum(SocialPlatform)
   platform?: SocialPlatform;
 
-  @IsOptional()
-  @IsString()
-  status?: string;
 }
 
 export class ScheduleDraftDto {
   @IsDateString()
   scheduledFor!: string;
+}
+
+export class WordPressHubPostsQueryDto extends WordPressLibraryQueryDto {
+  @IsOptional()
+  @IsString()
+  tag?: string;
+
+  @IsOptional()
+  @IsEnum(WordPressCampaignStatus)
+  campaignStatus?: WordPressCampaignStatus;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: 'title' | 'modifiedAt' | 'publishedAt' | 'campaignStatus';
+
+  @IsOptional()
+  @IsString()
+  sortDir?: 'asc' | 'desc';
+}
+
+export class GenerateCampaignDto extends RepurposeArticleDto {
+  @IsOptional()
+  @IsString()
+  campaignName?: string;
+
+  @IsOptional()
+  @IsString()
+  promptVersion?: string;
+}
+
+export class BulkWordPressActionDto {
+  @IsArray()
+  @IsString({ each: true })
+  articleIds!: string[];
+
+  @IsString()
+  action!: 'archive' | 'generate';
 }

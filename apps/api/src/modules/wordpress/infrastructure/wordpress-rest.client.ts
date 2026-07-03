@@ -17,12 +17,23 @@ export class WordPressRestClient {
 
   async fetchPosts(
     connection: WordPressConnectionConfig,
-    params: { page: number; perPage: number },
+    params: { page: number; perPage: number; status?: string; postType?: string },
   ): Promise<WordPressHttpResponse<WordPressRawPost[]>> {
-    return this.request<WordPressRawPost[]>(connection, 'GET', '/wp-json/wp/v2/posts', {
+    const restBase = params.postType?.trim() || 'posts';
+    const query = {
       page: String(params.page),
       per_page: String(params.perPage),
       _embed: '1',
+      ...(params.status ? { status: params.status, context: 'edit' } : {}),
+    };
+
+    if (restBase === 'posts') {
+      return this.request<WordPressRawPost[]>(connection, 'GET', '/wp-json/wp/v2/posts', query);
+    }
+
+    return this.request<WordPressRawPost[]>(connection, 'GET', '/', {
+      rest_route: `/wp/v2/${restBase}`,
+      ...query,
     });
   }
 
@@ -40,6 +51,16 @@ export class WordPressRestClient {
     ids?: number[],
   ): Promise<WordPressHttpResponse<WordPressRawCategory[]>> {
     return this.request<WordPressRawCategory[]>(connection, 'GET', '/wp-json/wp/v2/categories', {
+      per_page: '100',
+      ...(ids?.length ? { include: ids.join(',') } : {}),
+    });
+  }
+
+  async fetchTags(
+    connection: WordPressConnectionConfig,
+    ids?: number[],
+  ): Promise<WordPressHttpResponse<WordPressRawCategory[]>> {
+    return this.request<WordPressRawCategory[]>(connection, 'GET', '/wp-json/wp/v2/tags', {
       per_page: '100',
       ...(ids?.length ? { include: ids.join(',') } : {}),
     });
@@ -84,6 +105,7 @@ export class WordPressRestClient {
       try {
         const response = await fetch(url, {
           method,
+          signal: AbortSignal.timeout(20_000),
           headers: {
             Accept: 'application/json',
             Authorization: this.authorizationHeader(connection),

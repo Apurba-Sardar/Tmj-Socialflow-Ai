@@ -2,9 +2,9 @@ import { JwtService } from '@nestjs/jwt';
 import { Role, type RefreshToken, type User } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthRepository } from './auth.repository.js';
 import { AuthService } from './auth.service.js';
-import { AuthEmailService } from './email.service.js';
+import type { AuthRepository } from './auth.repository.js';
+import type { AuthEmailService } from './email.service.js';
 
 const now = new Date('2026-06-30T12:00:00.000Z');
 
@@ -96,6 +96,8 @@ function createRepositoryMock(overrides: Partial<Record<keyof AuthRepository, un
     revokeRefreshToken: vi.fn(),
     revokeRefreshTokenFamily: vi.fn(),
     revokeUserRefreshTokens: vi.fn(),
+    createUserSession: vi.fn().mockResolvedValue({}),
+    revokeSessionByRefreshToken: vi.fn(),
     createAuthToken: vi.fn().mockResolvedValue({}),
     findAuthToken: vi.fn(),
     markAuthTokenUsed: vi.fn(),

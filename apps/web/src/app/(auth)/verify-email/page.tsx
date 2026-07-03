@@ -1,5 +1,11 @@
+import { Suspense } from 'react';
+
 import { AuthForm } from '@/components/auth/auth-form';
 
 export default function VerifyEmailPage() {
-  return <AuthForm mode="verify-email" />;
+  return (
+    <Suspense fallback={null}>
+      <AuthForm mode="verify-email" />
+    </Suspense>
+  );
 }

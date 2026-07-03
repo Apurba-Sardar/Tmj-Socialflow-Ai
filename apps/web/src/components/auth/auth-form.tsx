@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ACCESS_TOKEN_COOKIE, DEV_OFFLINE_ACCESS_TOKEN } from '@/lib/auth-constants';
 import { getApiBaseUrl } from '@/lib/env';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password' | 'verify-email';
@@ -46,14 +45,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       });
     } catch {
       setLoading(false);
-
-      if (process.env.NODE_ENV === 'development' && (mode === 'login' || mode === 'register')) {
-        document.cookie = `${ACCESS_TOKEN_COOKIE}=${DEV_OFFLINE_ACCESS_TOKEN}; path=/; SameSite=Lax`;
-        router.replace('/dashboard');
-        router.refresh();
-        return;
-      }
-
       setError('The API is not reachable. Please start the backend and try again.');
       return;
     }
@@ -61,7 +52,8 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     setLoading(false);
 
     if (!response.ok) {
-      setError('The request could not be completed. Please check your details and try again.');
+      const message = await getErrorMessage(response);
+      setError(message);
       return;
     }
 
@@ -75,9 +67,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>{titleForMode(mode)}</CardTitle>
+    <Card className="w-full max-w-md border-white/10 bg-background/80 shadow-2xl shadow-black/10 dark:bg-[#09090b]/78">
+      <CardHeader className="pb-5">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl sf-gradient-icon">
+          <span className="text-xs font-semibold tracking-wide">TMJ</span>
+        </div>
+        <CardTitle className="text-3xl">{titleForMode(mode)}</CardTitle>
         <CardDescription>{descriptionForMode(mode)}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -99,10 +94,20 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               name="password"
               type="password"
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              minLength={mode === 'login' ? undefined : 12}
+              hint={mode === 'login' ? undefined : 'Use at least 12 characters.'}
             />
           ) : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {success ? <p className="text-sm text-muted-foreground">{success}</p> : null}
+          {error ? (
+            <p className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-200">
+              {error}
+            </p>
+          ) : null}
+          {success ? (
+            <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-200">
+              {success}
+            </p>
+          ) : null}
           <Button className="w-full" type="submit" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {buttonForMode(mode)}
@@ -120,19 +125,49 @@ function Field({
   type = 'text',
   autoComplete,
   required = true,
+  minLength,
+  hint,
 }: {
   label: string;
   name: string;
   type?: string;
   autoComplete?: string;
   required?: boolean;
+  minLength?: number;
+  hint?: string;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} type={type} autoComplete={autoComplete} required={required} />
+      <Input
+        id={name}
+        name={name}
+        type={type}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        required={required}
+      />
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
+}
+
+async function getErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { message?: string | string[]; error?: string };
+
+    if (Array.isArray(payload.message)) {
+      return payload.message.join(' ');
+    }
+
+    if (payload.message) {
+      return payload.message;
+    }
+  } catch {
+    // Fall through to the generic message below.
+  }
+
+  return 'The request could not be completed. Please check your details and try again.';
 }
 
 function AuthLinks({ mode }: { mode: AuthMode }) {
@@ -175,7 +210,7 @@ function titleForMode(mode: AuthMode): string {
 
 function descriptionForMode(mode: AuthMode): string {
   return {
-    login: 'Access your SocialFlow AI workspace.',
+    login: 'Access your TMJ SocialFlow AI workspace.',
     register: 'Start with a secure account.',
     'forgot-password': 'Receive a password reset link.',
     'reset-password': 'Choose a new secure password.',

@@ -2,8 +2,14 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { ACCESS_TOKEN_COOKIE } from '@/lib/auth-constants';
 
-const protectedPrefixes = ['/dashboard', '/media-library', '/scheduler'];
-const authPages = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+const protectedPrefixes = [
+  '/dashboard',
+  '/media-library',
+  '/scheduler',
+  '/wordpress-hub',
+  '/campaigns',
+  '/ai-pipeline',
+];
 
 export function middleware(request: NextRequest) {
   const hasAccessToken = Boolean(request.cookies.get(ACCESS_TOKEN_COOKIE)?.value);
@@ -15,12 +21,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (authPages.includes(pathname) && hasAccessToken) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
-  }
-
   return NextResponse.next();
 }
 
@@ -29,10 +29,8 @@ export const config = {
     '/dashboard/:path*',
     '/media-library/:path*',
     '/scheduler/:path*',
-    '/login',
-    '/register',
-    '/forgot-password',
-    '/reset-password',
-    '/verify-email',
+    '/wordpress-hub/:path*',
+    '/campaigns/:path*',
+    '/ai-pipeline/:path*',
   ],
 };

@@ -23,4 +23,5 @@ import { RolesGuard } from './roles.guard.js';
   ],
   exports: [AuthService, JwtAuthGuard, RolesGuard],
 })
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class AuthModule {}

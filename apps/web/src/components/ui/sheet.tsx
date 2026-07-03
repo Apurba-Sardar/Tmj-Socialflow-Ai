@@ -23,7 +23,7 @@ export function Sheet({
     <div className="fixed inset-0 z-50 lg:hidden">
       <button
         aria-label="Close navigation"
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-background/75 backdrop-blur-md"
         onClick={() => {
           onOpenChange(false);
         }}
@@ -31,7 +31,7 @@ export function Sheet({
       />
       <aside
         className={cn(
-          'absolute inset-y-0 left-0 w-[18rem] border-r bg-card shadow-xl',
+          'sf-card absolute inset-y-3 left-3 w-[18rem] rounded-2xl border bg-card shadow-2xl',
           'text-card-foreground',
         )}
       >

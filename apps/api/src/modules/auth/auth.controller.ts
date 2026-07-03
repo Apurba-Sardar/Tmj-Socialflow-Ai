@@ -23,16 +23,24 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
-    const session = await this.authService.register(dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.authService.register(dto, this.sessionMetadata(request));
     this.setAuthCookies(response, session);
     return { user: session.user };
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
-    const session = await this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.authService.login(dto, this.sessionMetadata(request));
     this.setAuthCookies(response, session);
     return { user: session.user };
   }
@@ -40,8 +48,8 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const token = request.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined;
-    const session = await this.authService.refresh(token ?? '');
+    const token = request.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
+    const session = await this.authService.refresh(token ?? '', this.sessionMetadata(request));
     this.setAuthCookies(response, session);
     return { user: session.user };
   }
@@ -49,7 +57,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const token = request.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined;
+    const token = request.cookies[REFRESH_TOKEN_COOKIE] as string | undefined;
     await this.authService.logout(token);
     this.clearAuthCookies(response);
   }
@@ -92,7 +100,7 @@ export class AuthController {
       httpOnly: true,
       secure: this.env.AUTH_COOKIE_SECURE,
       sameSite: 'lax',
-      domain: this.env.AUTH_COOKIE_DOMAIN || undefined,
+      domain: this.env.AUTH_COOKIE_DOMAIN ?? undefined,
       expires: session.accessTokenExpiresAt,
       path: '/',
     });
@@ -100,7 +108,7 @@ export class AuthController {
       httpOnly: true,
       secure: this.env.AUTH_COOKIE_SECURE,
       sameSite: 'lax',
-      domain: this.env.AUTH_COOKIE_DOMAIN || undefined,
+      domain: this.env.AUTH_COOKIE_DOMAIN ?? undefined,
       expires: session.refreshTokenExpiresAt,
       path: '/api/auth',
     });
@@ -109,5 +117,18 @@ export class AuthController {
   private clearAuthCookies(response: Response): void {
     response.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
     response.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/auth' });
+  }
+
+  private sessionMetadata(request: Request) {
+    const forwardedFor = request.headers['x-forwarded-for'];
+    const ipAddress =
+      typeof forwardedFor === 'string' ? forwardedFor.split(',')[0]?.trim() : request.ip;
+    const userAgent = request.headers['user-agent'];
+
+    return {
+      ipAddress,
+      userAgent,
+      browser: userAgent,
+    };
   }
 }

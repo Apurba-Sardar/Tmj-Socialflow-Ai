@@ -1,42 +1,81 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedUser } from '../auth/types.js';
 import {
   BulkRepurposeDto,
+  BulkWordPressActionDto,
   ConnectWordPressDto,
   DraftsQueryDto,
+  GenerateCampaignDto,
   RepurposeArticleDto,
   ScheduleDraftDto,
   SyncWordPressDto,
+  WordPressHubPostsQueryDto,
   WordPressLibraryQueryDto,
   WordPressPostsQueryDto,
 } from './application/wordpress.dto.js';
 import { WordPressService } from './application/wordpress.service.js';
 
 @Controller('wordpress')
+@UseGuards(JwtAuthGuard)
 export class WordPressController {
   constructor(private readonly wordpressService: WordPressService) {}
 
   @Post('connect')
-  connect(@Body() dto: ConnectWordPressDto) {
-    return this.wordpressService.connect(dto);
+  connect(@Body() dto: ConnectWordPressDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.connect(dto, user);
+  }
+
+  @Get('connections')
+  connections(@CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.listConnections(user);
   }
 
   @Get('posts')
-  getPosts(@Query() query: WordPressPostsQueryDto) {
+  getPosts(@Query() query: WordPressPostsQueryDto, @CurrentUser() user: AuthenticatedUser) {
     return this.wordpressService.getPosts({
       page: query.page ?? 1,
       perPage: query.perPage ?? 10,
+      connectionId: query.connectionId,
+      status: query.status,
+      user,
     });
   }
 
   @Get('post/:id')
-  getPost(@Param('id', ParseIntPipe) id: number) {
-    return this.wordpressService.getPost(id);
+  getPost(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: WordPressPostsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.wordpressService.getPost(id, { connectionId: query.connectionId, user });
+  }
+
+  @Get('categories')
+  categories(@CurrentUser() user: AuthenticatedUser, @Query('connectionId') connectionId?: string) {
+    return this.wordpressService.listCategories(user, connectionId);
+  }
+
+  @Get('tags')
+  tags(@CurrentUser() user: AuthenticatedUser, @Query('connectionId') connectionId?: string) {
+    return this.wordpressService.listTags(user, connectionId);
+  }
+
+  @Get('authors')
+  authors(@CurrentUser() user: AuthenticatedUser, @Query('connectionId') connectionId?: string) {
+    return this.wordpressService.listAuthors(user, connectionId);
+  }
+
+  @Get('media')
+  media(@CurrentUser() user: AuthenticatedUser, @Query('connectionId') connectionId?: string) {
+    return this.wordpressService.listMedia(user, connectionId);
   }
 
   @Post('sync')
-  sync(@Body() dto: SyncWordPressDto) {
-    return this.wordpressService.sync(dto);
+  sync(@Body() dto: SyncWordPressDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.sync(dto, user);
   }
 
   @Get('library')
@@ -47,6 +86,26 @@ export class WordPressController {
   @Get('library/:id')
   libraryArticle(@Param('id') id: string) {
     return this.wordpressService.getLibraryArticle(id);
+  }
+
+  @Get('hub/posts')
+  hubPosts(@Query() query: WordPressHubPostsQueryDto) {
+    return this.wordpressService.listHubPosts(query);
+  }
+
+  @Get('hub/posts/:id')
+  hubPost(@Param('id') id: string) {
+    return this.wordpressService.getHubPost(id);
+  }
+
+  @Post('hub/posts/:id/generate-campaign')
+  generateCampaign(@Param('id') id: string, @Body() dto: GenerateCampaignDto) {
+    return this.wordpressService.generateCampaign(id, dto);
+  }
+
+  @Post('hub/bulk')
+  bulkHubAction(@Body() dto: BulkWordPressActionDto) {
+    return this.wordpressService.bulkHubAction(dto);
   }
 
   @Post('library/:id/repurpose')

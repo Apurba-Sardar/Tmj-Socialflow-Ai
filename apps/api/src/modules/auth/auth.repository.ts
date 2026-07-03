@@ -62,6 +62,17 @@ export class AuthRepository {
     });
   }
 
+  createUserSession(data: Prisma.UserSessionCreateInput) {
+    return this.prisma.userSession.create({ data });
+  }
+
+  revokeSessionByRefreshToken(refreshTokenId: string) {
+    return this.prisma.userSession.updateMany({
+      where: { refreshTokenId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   createAuthToken(userId: string, type: AuthTokenType, tokenHash: string, expiresAt: Date) {
     return this.prisma.authToken.create({
       data: {

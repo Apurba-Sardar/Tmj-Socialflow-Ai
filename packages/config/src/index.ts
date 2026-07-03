@@ -1,5 +1,21 @@
 import { z } from 'zod';
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  if (['true', '1', 'yes', 'on'].includes(value.toLowerCase())) {
+    return true;
+  }
+
+  if (['false', '0', 'no', 'off', ''].includes(value.toLowerCase())) {
+    return false;
+  }
+
+  return value;
+}, z.boolean());
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().url(),
@@ -13,6 +29,8 @@ const environmentSchema = z.object({
   SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
   SUPABASE_SECRET_KEY: z.string().optional(),
   SUPABASE_JWKS_URL: z.string().url().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().min(1).default('gpt-4o-mini'),
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_HOST: z.string().min(1).default('0.0.0.0'),
   API_CORS_ORIGIN: z.string().min(1).default('http://localhost:3000'),
@@ -28,13 +46,13 @@ const environmentSchema = z.object({
   PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().positive().default(3_600),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   AUTH_COOKIE_DOMAIN: z.string().optional(),
-  AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
+  AUTH_COOKIE_SECURE: booleanFromEnv.default(false),
   APP_BASE_URL: z.string().url().default('http://localhost:3000'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  SMTP_FROM: z.string().min(1).default('SocialFlow AI <no-reply@socialflow.ai>'),
+  SMTP_FROM: z.string().min(1).default('TMJ SocialFlow AI <no-reply@socialflow.ai>'),
   PINTEREST_CLIENT_ID: z.string().optional(),
   PINTEREST_CLIENT_SECRET: z.string().optional(),
   PINTEREST_REDIRECT_URI: z

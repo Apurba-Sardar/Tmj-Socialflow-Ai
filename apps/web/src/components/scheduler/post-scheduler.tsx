@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Bell,
-  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -28,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Sheet } from '@/components/ui/sheet';
 import type { AuthenticatedUser } from '@/lib/auth';
+import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
 type CalendarView = 'day' | 'week' | 'month';
@@ -59,62 +59,50 @@ const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
 ];
 
+type SchedulerHref = Parameters<typeof Link>[0]['href'];
+
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const timeSlots = Array.from({ length: 14 }, (_value, index) => index + 7);
 
-const initialDrafts: DraftPost[] = [
-  { id: 'draft-launch', title: 'Launch announcement', channel: 'LinkedIn', recurrence: 'none' },
-  { id: 'draft-case-study', title: 'Customer proof snippet', channel: 'X', recurrence: 'weekly' },
-  { id: 'draft-behind-scenes', title: 'Behind the scenes reel', channel: 'Instagram', recurrence: 'daily' },
-];
-
-const initialPosts: ScheduledPost[] = [
-  {
-    id: 'post-executive-update',
-    title: 'Executive update',
-    channel: 'LinkedIn',
-    date: '2026-07-01',
-    hour: 9,
-    durationHours: 1,
-    status: 'scheduled',
-    recurrence: 'weekly',
-    tags: ['leadership', 'approved'],
-  },
-  {
-    id: 'post-product-thread',
-    title: 'Product workflow thread',
-    channel: 'X',
-    date: '2026-07-02',
-    hour: 13,
-    durationHours: 1,
-    status: 'queued',
-    recurrence: 'none',
-    tags: ['product', 'queue'],
-  },
-  {
-    id: 'post-video-cut',
-    title: 'Founder video cut',
-    channel: 'Instagram',
-    date: '2026-07-04',
-    hour: 17,
-    durationHours: 2,
-    status: 'processing',
-    recurrence: 'daily',
-    tags: ['video', 'paid'],
-  },
-];
-
 export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const [view, setView] = useState<CalendarView>('week');
-  const [posts, setPosts] = useState<ScheduledPost[]>(initialPosts);
-  const [drafts] = useState<DraftPost[]>(initialDrafts);
-  const [selectedDate, setSelectedDate] = useState('2026-07-01');
+  const [posts, setPosts] = useState<ScheduledPost[]>([]);
+  const [drafts] = useState<DraftPost[]>([]);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [bulkCount, setBulkCount] = useState(5);
   const [bulkRecurrence, setBulkRecurrence] = useState<Recurrence>('weekly');
   const [navigationOpen, setNavigationOpen] = useState(false);
 
   const visibleDates = useMemo(() => datesForView(selectedDate, view), [selectedDate, view]);
   const queuedPosts = posts.filter((post) => post.status === 'queued' || post.status === 'processing');
+
+  useEffect(() => {
+    async function loadPosts() {
+      const response = await fetch(`${getApiBaseUrl()}/api/scheduler/posts`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        setPosts([]);
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        data: {
+          id: string;
+          title: string;
+          channel: string;
+          scheduledFor: string | null;
+          status: string;
+          tags: string[];
+        }[];
+      };
+      setPosts(payload.data.filter((post) => post.scheduledFor).map(postFromApi));
+    }
+
+    void loadPosts();
+  }, []);
 
   function scheduleDraft(draftId: string, date: string, hour: number): void {
     const draft = drafts.find((item) => item.id === draftId);
@@ -162,25 +150,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   }
 
   function bulkSchedule(): void {
-    const startHour = 8;
-    const scheduledPosts = Array.from({ length: bulkCount }, (_value, index) => {
-      const date = addDays(selectedDate, index);
-      return {
-        id: `bulk-${date}-${String(index)}`,
-        title: `Bulk campaign post ${String(index + 1)}`,
-        channel: index % 2 === 0 ? 'LinkedIn' : 'Instagram',
-        date,
-        hour: startHour + (index % 8),
-        durationHours: 1,
-        status: 'queued' as const,
-        recurrence: bulkRecurrence,
-        tags: ['bulk', 'queue'],
-      };
-    });
-
-    setPosts((currentPosts) =>
-      scheduledPosts.reduce((nextPosts, post) => upsertPost(nextPosts, post), currentPosts),
-    );
+    void bulkCount;
+    void bulkRecurrence;
   }
 
   return (
@@ -264,11 +235,11 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
   return (
     <div className="flex h-full min-h-screen flex-col px-4 py-5">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <CalendarClock className="h-5 w-5" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <span className="text-xs font-bold tracking-wide">TMJ</span>
         </div>
         <div>
-          <p className="text-sm font-semibold">SocialFlow AI</p>
+          <p className="text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="text-xs text-muted-foreground">Publishing Control</p>
         </div>
       </div>
@@ -281,7 +252,7 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
-            href={item.href}
+            href={item.href as SchedulerHref}
             key={item.href}
           >
             <item.icon className="h-4 w-4" />
@@ -770,6 +741,44 @@ function queueVariant(status: QueueStatus): 'default' | 'secondary' | 'outline' 
   }
 
   return 'outline';
+}
+
+function postFromApi(post: {
+  id: string;
+  title: string;
+  channel: string;
+  scheduledFor: string | null;
+  status: string;
+  tags: string[];
+}): ScheduledPost {
+  const scheduledFor = post.scheduledFor ? new Date(post.scheduledFor) : new Date();
+  return {
+    id: post.id,
+    title: post.title,
+    channel: post.channel,
+    date: toDateInputValue(scheduledFor),
+    hour: scheduledFor.getHours(),
+    durationHours: 1,
+    status: queueStatusFromApi(post.status),
+    recurrence: 'none',
+    tags: post.tags,
+  };
+}
+
+function queueStatusFromApi(status: string): QueueStatus {
+  if (status === 'PROCESSING') {
+    return 'processing';
+  }
+
+  if (status === 'SCHEDULED' || status === 'APPROVED') {
+    return 'scheduled';
+  }
+
+  if (status === 'DRAFT') {
+    return 'draft';
+  }
+
+  return 'queued';
 }
 
 function upsertPost(posts: ScheduledPost[], nextPost: ScheduledPost): ScheduledPost[] {

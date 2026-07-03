@@ -2,7 +2,7 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
 
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import type { Role, User } from '@prisma/client';
+import type { User } from '@prisma/client';
 import { AuthTokenType } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 
@@ -27,6 +27,13 @@ interface AuthSession {
   refreshTokenExpiresAt: Date;
 }
 
+export interface SessionMetadata {
+  ipAddress?: string;
+  userAgent?: string;
+  browser?: string;
+  rememberMe?: boolean;
+}
+
 @Injectable()
 export class AuthService {
   private readonly env = loadEnvironment();
@@ -37,7 +44,7 @@ export class AuthService {
     private readonly emailService: AuthEmailService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<AuthSession> {
+  async register(dto: RegisterDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
     const email = dto.email.trim().toLowerCase();
     const existingUser = await this.authRepository.findUserByEmail(email);
 
@@ -49,7 +56,7 @@ export class AuthService {
     const user = await this.authRepository.createUser({
       email,
       passwordHash,
-      displayName: dto.displayName?.trim() || null,
+      displayName: dto.displayName?.trim() ?? null,
     });
 
     const verificationToken = await this.createSingleUseToken(
@@ -59,10 +66,10 @@ export class AuthService {
     );
     await this.emailService.sendEmailVerification(user.email, verificationToken);
 
-    return this.createSession(user);
+    return this.createSession(user, undefined, metadata);
   }
 
-  async login(dto: LoginDto): Promise<AuthSession> {
+  async login(dto: LoginDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
     const user = await this.authRepository.findUserByEmail(dto.email.trim().toLowerCase());
 
     if (!user || user.disabledAt) {
@@ -75,10 +82,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
-    return this.createSession(user);
+    return this.createSession(user, undefined, { ...metadata, rememberMe: dto.rememberMe ?? false });
   }
 
-  async refresh(rawRefreshToken: string): Promise<AuthSession> {
+  async refresh(rawRefreshToken: string, metadata: SessionMetadata = {}): Promise<AuthSession> {
     const tokenHash = this.hashToken(rawRefreshToken);
     const persistedToken = await this.authRepository.findRefreshToken(tokenHash);
 
@@ -102,11 +109,12 @@ export class AuthService {
       throw new UnauthorizedException('User is not active.');
     }
 
-    const session = await this.createSession(user, persistedToken.familyId);
+    const session = await this.createSession(user, persistedToken.familyId, metadata);
     await this.authRepository.revokeRefreshToken(
       persistedToken.id,
       this.hashToken(session.refreshToken),
     );
+    await this.authRepository.revokeSessionByRefreshToken(persistedToken.id);
 
     return session;
   }
@@ -120,6 +128,7 @@ export class AuthService {
 
     if (persistedToken && !persistedToken.revokedAt) {
       await this.authRepository.revokeRefreshToken(persistedToken.id);
+      await this.authRepository.revokeSessionByRefreshToken(persistedToken.id);
     }
   }
 
@@ -163,16 +172,30 @@ export class AuthService {
     return this.toAuthenticatedUser(user);
   }
 
-  private async createSession(user: User, existingFamilyId?: string): Promise<AuthSession> {
+  private async createSession(
+    user: User,
+    existingFamilyId?: string,
+    metadata: SessionMetadata = {},
+  ): Promise<AuthSession> {
     const refreshToken = this.createOpaqueToken();
     const refreshTokenExpiresAt = this.secondsFromNow(this.env.JWT_REFRESH_TTL_SECONDS);
     const accessTokenExpiresAt = this.secondsFromNow(this.env.JWT_ACCESS_TTL_SECONDS);
     const familyId = existingFamilyId ?? randomUUID();
 
-    await this.authRepository.createRefreshToken({
+    const persistedRefreshToken = await this.authRepository.createRefreshToken({
       user: { connect: { id: user.id } },
       tokenHash: this.hashToken(refreshToken),
       familyId,
+      expiresAt: refreshTokenExpiresAt,
+    });
+
+    await this.authRepository.createUserSession({
+      user: { connect: { id: user.id } },
+      refreshTokenId: persistedRefreshToken.id,
+      ipAddress: metadata.ipAddress,
+      userAgent: metadata.userAgent,
+      browser: metadata.browser,
+      rememberMe: metadata.rememberMe ?? false,
       expiresAt: refreshTokenExpiresAt,
     });
 
@@ -218,7 +241,7 @@ export class AuthService {
     const persistedToken = await this.authRepository.findAuthToken(this.hashToken(token));
 
     if (
-      !persistedToken ||
+      !persistedToken?.type ||
       persistedToken.type !== type ||
       persistedToken.usedAt ||
       persistedToken.expiresAt <= new Date()
@@ -234,7 +257,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
-      role: user.role as Role,
+      role: user.role,
       emailVerified: Boolean(user.emailVerifiedAt),
     };
   }

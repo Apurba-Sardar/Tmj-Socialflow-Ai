@@ -32,7 +32,7 @@ export class AuthEmailService {
     const url = `${this.env.APP_BASE_URL}/verify-email?token=${encodeURIComponent(token)}`;
     await this.send({
       to: email,
-      subject: 'Verify your SocialFlow AI email',
+      subject: 'Verify your TMJ SocialFlow AI email',
       text: `Verify your email by opening this link: ${url}`,
       html: `<p>Verify your email by opening this secure link:</p><p><a href="${url}">Verify email</a></p>`,
     });
@@ -42,7 +42,7 @@ export class AuthEmailService {
     const url = `${this.env.APP_BASE_URL}/reset-password?token=${encodeURIComponent(token)}`;
     await this.send({
       to: email,
-      subject: 'Reset your SocialFlow AI password',
+      subject: 'Reset your TMJ SocialFlow AI password',
       text: `Reset your password by opening this link: ${url}`,
       html: `<p>Reset your password by opening this secure link:</p><p><a href="${url}">Reset password</a></p>`,
     });
