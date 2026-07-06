@@ -220,11 +220,11 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const scheduledCount = posts.filter((post) => post.status === 'SCHEDULED').length;
   const needsReviewCount = posts.filter((post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED').length;
   const publishedCount = posts.filter((post) => post.status === 'PUBLISHED').length;
-  const unscheduledDrafts = useMemo(() => {
+  const visibleDrafts = useMemo(() => {
     const cleanSearch = draftSearch.trim().toLowerCase();
 
     return drafts.filter((draft) => {
-      const available = !draft.scheduledFor && (draft.status === 'DRAFT' || draft.status === 'APPROVED');
+      const available = draft.status !== 'PUBLISHED' && draft.status !== 'REJECTED';
       const platformMatch = draftFilter === 'ALL' || draft.platform === draftFilter;
       const searchMatch =
         !cleanSearch ||
@@ -235,6 +235,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       return available && platformMatch && searchMatch;
     });
   }, [draftFilter, draftSearch, drafts]);
+  const unscheduledDraftCount = drafts.filter((draft) => !draft.scheduledFor && draft.status !== 'PUBLISHED' && draft.status !== 'REJECTED').length;
   const scheduledDraftCount = drafts.filter((draft) => draft.scheduledFor).length;
   const dailySlotsUsed = selectedDayPosts.length;
 
@@ -406,7 +407,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
             </div>
           </header>
 
-          <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-5 px-4 py-5 sm:px-6 xl:px-8">
+          <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-4 px-4 py-4 sm:px-6 xl:px-8">
             {toast ? (
               <div
                 className={cn(
@@ -420,41 +421,31 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
               </div>
             ) : null}
 
-            <section className="grid gap-4 xl:grid-cols-[1fr_22rem]">
-              <div className="space-y-4">
-                <PlannerHero
-                  draftCount={unscheduledDrafts.length}
-                  scheduledDraftCount={scheduledDraftCount}
-                  needsReviewCount={needsReviewCount}
-                  publishedCount={publishedCount}
-                  scheduledCount={scheduledCount}
-                  selectedDate={selectedDate}
-                  setSelectedDate={setSelectedDate}
-                  view={view}
-                />
-                <PlannerFilters
-                  onRefresh={() => {
-                    void loadCalendarData();
-                  }}
-                  search={search}
-                  selectedPlatform={selectedPlatform}
-                  setSearch={setSearch}
-                  setSelectedPlatform={setSelectedPlatform}
-                />
-              </div>
-              <CreatePostPanel
-                creating={creating}
-                form={form}
-                setForm={setForm}
-                onCreate={() => {
-                  void createScheduledPost();
+            <section className="space-y-3">
+              <PlannerHero
+                draftCount={unscheduledDraftCount}
+                scheduledDraftCount={scheduledDraftCount}
+                needsReviewCount={needsReviewCount}
+                publishedCount={publishedCount}
+                scheduledCount={scheduledCount}
+                selectedDate={selectedDate}
+                setSelectedDate={setSelectedDate}
+                view={view}
+              />
+              <PlannerFilters
+                onRefresh={() => {
+                  void loadCalendarData();
                 }}
+                search={search}
+                selectedPlatform={selectedPlatform}
+                setSearch={setSearch}
+                setSelectedPlatform={setSelectedPlatform}
               />
             </section>
 
-            <section className="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+            <section className="grid items-start gap-4 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
               <DraftInbox
-                drafts={unscheduledDrafts}
+                drafts={visibleDrafts}
                 draftFilter={draftFilter}
                 draftSearch={draftSearch}
                 loading={loadingDrafts}
@@ -501,6 +492,14 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
               </div>
 
               <aside className="grid gap-5">
+                <CreatePostPanel
+                  creating={creating}
+                  form={form}
+                  setForm={setForm}
+                  onCreate={() => {
+                    void createScheduledPost();
+                  }}
+                />
                 <DayWorkload date={selectedDate} posts={selectedDayPosts} draftCount={dailySlotsUsed} />
                 <DayAgenda date={selectedDate} posts={selectedDayPosts} />
                 <ChannelHealth posts={posts} />
