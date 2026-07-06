@@ -66,6 +66,11 @@ body {
     "cv11";
 }
 
+body.sf-dragging-draft,
+body.sf-dragging-draft * {
+  cursor: grabbing !important;
+}
+
 ::selection {
   background: hsl(var(--primary) / 0.28);
   color: hsl(var(--foreground));

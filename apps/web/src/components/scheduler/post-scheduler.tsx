@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -187,6 +187,32 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
     void loadCalendarData();
   }, []);
 
+  const resetDraftDrag = useCallback(() => {
+    setDraggedDraftId(null);
+    document.body.classList.remove('sf-dragging-draft');
+  }, []);
+
+  useEffect(() => {
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        resetDraftDrag();
+      }
+    }
+
+    window.addEventListener('dragend', resetDraftDrag);
+    window.addEventListener('drop', resetDraftDrag);
+    window.addEventListener('blur', resetDraftDrag);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('dragend', resetDraftDrag);
+      window.removeEventListener('drop', resetDraftDrag);
+      window.removeEventListener('blur', resetDraftDrag);
+      window.removeEventListener('keyup', handleKeyUp);
+      document.body.classList.remove('sf-dragging-draft');
+    };
+  }, [resetDraftDrag]);
+
   useEffect(() => {
     setForm((current) => ({ ...current, date: selectedDate }));
   }, [selectedDate]);
@@ -342,7 +368,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       notify(error instanceof Error ? error.message : 'Draft scheduling failed.', 'warning');
     } finally {
       setSchedulingDraftId(null);
-      setDraggedDraftId(null);
+      resetDraftDrag();
     }
   }
 
@@ -452,10 +478,11 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 schedulingDraftId={schedulingDraftId}
                 setDraftFilter={setDraftFilter}
                 setDraftSearch={setDraftSearch}
-                onDragEnd={() => {
-                  setDraggedDraftId(null);
+                onDragEnd={resetDraftDrag}
+                onDragStart={(draftId) => {
+                  document.body.classList.add('sf-dragging-draft');
+                  setDraggedDraftId(draftId);
                 }}
-                onDragStart={setDraggedDraftId}
                 onRefresh={() => {
                   void loadDrafts();
                 }}
@@ -971,7 +998,7 @@ function GeneratedDraftCard({
 
   return (
     <article
-      className="cursor-grab rounded-xl border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/50 active:cursor-grabbing dark:border-white/10 dark:bg-white/[0.04]"
+      className="select-none rounded-xl border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/50 dark:border-white/10 dark:bg-white/[0.04] [&[draggable='true']]:cursor-grab [&[draggable='true']]:active:cursor-grabbing"
       draggable
       onDragEnd={onDragEnd}
       onDragStart={(event) => {
@@ -1010,6 +1037,12 @@ function GeneratedDraftCard({
             key={hour}
             onClick={() => {
               onSchedule(hour);
+            }}
+            onMouseDown={(event) => {
+              event.stopPropagation();
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
             }}
             size="sm"
             variant="outline"
