@@ -158,7 +158,7 @@ export class WordPressService {
     const connection = await this.requireConnection({ connectionId: dto.connectionId, user });
     const perPage = dto.perPage ?? 100;
     const maxPages = dto.maxPages ?? 100;
-    const status = dto.status?.trim() || undefined;
+    const status = dto.status?.trim() ?? undefined;
     const postTypes = this.syncPostTypes(dto.postTypes);
     const syncRun = await this.repository.createSyncRun(connection.id);
     let scannedPosts = 0;
@@ -282,7 +282,7 @@ export class WordPressService {
     return article;
   }
 
-  async repurposeArticle(id: string, dto: RepurposeArticleDto) {
+  async repurposeArticle(id: string, dto: RepurposeArticleDto, user?: { id: string }) {
     const article = await this.repository.findArticle(id);
 
     if (!article) {
@@ -291,7 +291,7 @@ export class WordPressService {
 
     const platforms = this.platforms(dto.platforms);
     const job = await this.repository.createRepurposeJob(article.id, platforms, dto.prompt);
-    const generatedDrafts = await this.generator.generate(article, platforms, job.id);
+    const generatedDrafts = await this.generator.generate(article, platforms, job.id, user?.id);
     const drafts = await this.repository.createDrafts(generatedDrafts);
     await this.repository.markArticleRepurposed(article.id);
 
@@ -301,7 +301,7 @@ export class WordPressService {
     };
   }
 
-  async generateCampaign(id: string, dto: GenerateCampaignDto) {
+  async generateCampaign(id: string, dto: GenerateCampaignDto, user?: { id: string }) {
     const article = await this.repository.findArticle(id);
 
     if (!article) {
@@ -310,16 +310,25 @@ export class WordPressService {
 
     const platforms = this.platforms(dto.platforms);
     const job = await this.repository.createRepurposeJob(article.id, platforms, dto.prompt);
-    const generatedDrafts = await this.generator.generate(article, platforms, job.id);
+    const generatedDrafts = await this.generator.generate(article, platforms, job.id, user?.id);
     const drafts = await this.repository.createDrafts(generatedDrafts);
+    const generatedByPlatform = new Map(generatedDrafts.map((draft) => [draft.platform, draft]));
+    const draftsWithPromptMetadata = drafts.map((draft) => {
+      const generated = generatedByPlatform.get(draft.platform);
+      return {
+        ...draft,
+        prompt: generated?.prompt,
+        promptVersion: generated?.promptVersion,
+      };
+    });
     const campaign = await this.repository.createCampaign({
       articleId: article.id,
       campaignName: dto.campaignName?.trim() ?? `Campaign: ${article.title}`,
       prompt: dto.prompt,
-      promptVersion: dto.promptVersion?.trim() ?? 'wordpress-hub-v1',
+      promptVersion: dto.promptVersion?.trim() ?? generatedDrafts[0]?.promptVersion ?? 'wordpress-hub-v1',
       aiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       repurposeJobId: job.id,
-      drafts,
+      drafts: draftsWithPromptMetadata,
     });
     await this.repository.markArticleRepurposed(article.id);
 
@@ -329,7 +338,7 @@ export class WordPressService {
     };
   }
 
-  async bulkHubAction(dto: BulkWordPressActionDto) {
+  async bulkHubAction(dto: BulkWordPressActionDto, user?: { id: string }) {
     if (!dto.articleIds.length) {
       throw new BadRequestException('Select at least one WordPress article.');
     }
@@ -347,7 +356,7 @@ export class WordPressService {
         const results = [];
 
         for (const articleId of dto.articleIds) {
-          results.push(await this.generateCampaign(articleId, {}));
+          results.push(await this.generateCampaign(articleId, {}, user));
         }
 
         return {

@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { SocialPlatform } from '@prisma/client';
 import OpenAI from 'openai';
 import sharp from 'sharp';
 import { createLogger } from '@socialflow/logger';
 
+import { PromptTemplatesService } from '../../prompt-templates/prompt-templates.service.js';
 import type { SocialDraftInput } from '../infrastructure/wordpress.repository.js';
 
 interface ArticleForGeneration {
@@ -31,7 +33,7 @@ export class SocialContentGeneratorService {
   private readonly model: string;
   private readonly imageModel: string;
 
-  constructor() {
+  constructor(private readonly promptTemplatesService: PromptTemplatesService) {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -42,6 +44,7 @@ export class SocialContentGeneratorService {
     article: ArticleForGeneration,
     platforms: SocialPlatform[],
     repurposeJobId: string,
+    userId?: string,
   ): Promise<SocialDraftInput[]> {
     const fallbackDrafts = this.generateFallback(article, platforms, repurposeJobId);
 
@@ -77,7 +80,7 @@ export class SocialContentGeneratorService {
       );
     }
 
-    return Promise.all(draftsForVisuals.map((draft) => this.withCreativeImage(article, draft)));
+    return Promise.all(draftsForVisuals.map((draft) => this.withCreativeImage(article, draft, userId)));
   }
 
   private generateFallback(
@@ -191,11 +194,22 @@ export class SocialContentGeneratorService {
   private async withCreativeImage(
     article: ArticleForGeneration,
     draft: SocialDraftInput,
+    userId?: string,
   ): Promise<SocialDraftInput> {
+    const renderedPrompt = await this.promptTemplatesService.renderImagePrompt(
+      {
+        platform: draft.platform,
+        article,
+        captionTitle: draft.title,
+        captionBody: draft.body,
+      },
+      userId,
+    );
+
     try {
       const image = await this.client?.images.generate({
         model: this.imageModel,
-        prompt: this.imagePromptFor(article, draft),
+        prompt: renderedPrompt.prompt,
         n: 1,
         size: this.openAiImageSize(draft.platform),
         quality: 'medium',
@@ -211,6 +225,8 @@ export class SocialContentGeneratorService {
       return {
         ...draft,
         mediaUrl: await this.composePostImage(b64Json, article, draft),
+        prompt: renderedPrompt.prompt,
+        promptVersion: renderedPrompt.promptVersion,
       };
     } catch (error) {
       this.logger.warn(
@@ -225,6 +241,8 @@ export class SocialContentGeneratorService {
       return {
         ...draft,
         mediaUrl: this.visualFor(article, draft.platform, draft.hashtags),
+        prompt: renderedPrompt.prompt,
+        promptVersion: renderedPrompt.promptVersion,
       };
     }
   }

@@ -10,7 +10,9 @@ import { DashboardModule } from './dashboard/dashboard.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MediaModule } from './media/media.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { PromptTemplatesModule } from './prompt-templates/prompt-templates.module.js';
 import { SchedulerModule } from './scheduler/scheduler.module.js';
+import { SocialChannelsModule } from './social-channels/social-channels.module.js';
 import { SupabaseModule } from './supabase/supabase.module.js';
 import { WordPressModule } from './wordpress/wordpress.module.js';
 
@@ -30,7 +32,9 @@ import { WordPressModule } from './wordpress/wordpress.module.js';
     CampaignsModule,
     DashboardModule,
     MediaModule,
+    PromptTemplatesModule,
     SchedulerModule,
+    SocialChannelsModule,
     WordPressModule,
     SupabaseModule,
   ],

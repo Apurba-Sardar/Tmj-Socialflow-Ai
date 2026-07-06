@@ -53,11 +53,15 @@ export class AuthService {
     }
 
     const passwordHash = await hash(dto.password, this.env.BCRYPT_SALT_ROUNDS);
-    const user = await this.authRepository.createUser({
-      email,
-      passwordHash,
-      displayName: dto.displayName?.trim() ?? null,
-    });
+    const displayName = dto.displayName?.trim() ?? null;
+    const user = await this.authRepository.createUserWithDefaultOrganization(
+      {
+        email,
+        passwordHash,
+        displayName,
+      },
+      this.defaultOrganizationFor(email, displayName),
+    );
 
     const verificationToken = await this.createSingleUseToken(
       user.id,
@@ -272,5 +276,21 @@ export class AuthService {
 
   private secondsFromNow(seconds: number): Date {
     return new Date(Date.now() + seconds * 1000);
+  }
+
+  private defaultOrganizationFor(email: string, displayName: string | null) {
+    const localPart = email.split('@')[0] ?? 'workspace';
+    const cleanName = displayName?.trim() ?? `${localPart} Workspace`;
+    const cleanedSlug = cleanName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+    const slugBase = cleanedSlug.length ? cleanedSlug : 'workspace';
+
+    return {
+      name: cleanName,
+      slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
+    };
   }
 }

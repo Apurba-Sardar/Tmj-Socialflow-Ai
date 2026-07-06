@@ -52,6 +52,8 @@ export interface SocialDraftInput {
   hashtags: string[];
   callToAction?: string;
   mediaUrl?: string;
+  prompt?: string;
+  promptVersion?: string;
   sourceUrl: string;
 }
 
@@ -69,6 +71,8 @@ export interface CampaignGenerationInput {
     body: string;
     hashtags: string[];
     mediaUrl?: string | null;
+    prompt?: string | null;
+    promptVersion?: string | null;
   }[];
 }
 
@@ -583,8 +587,8 @@ export class WordPressRepository {
           caption: draft.body,
           hashtags: draft.hashtags,
           imageUrl: draft.mediaUrl,
-          prompt: input.prompt,
-          promptVersion: input.promptVersion,
+          prompt: draft.prompt ?? input.prompt,
+          promptVersion: draft.promptVersion ?? input.promptVersion,
           aiModel: input.aiModel,
           version,
         })),
@@ -617,6 +621,8 @@ export class WordPressRepository {
             caption: draft.body,
             hashtags: draft.hashtags,
             imageUrl: draft.mediaUrl,
+            prompt: draft.prompt ?? input.prompt,
+            promptVersion: draft.promptVersion ?? input.promptVersion,
           })),
         },
       });

@@ -1,21 +1,32 @@
 'use client';
 
-import { useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Bell,
+  AlertTriangle,
+  AtSign,
+  BarChart3,
+  Camera,
+  CalendarClock,
   CalendarDays,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CopyPlus,
-  GripVertical,
+  Clock3,
+  FileText,
   ImageIcon,
   LayoutDashboard,
+  Library,
+  Loader2,
   Menu,
-  Repeat,
+  MessageSquareText,
+  Moon,
+  Plus,
+  RadioTower,
+  RefreshCw,
+  Search,
   Send,
+  Sun,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -24,148 +35,235 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Sheet } from '@/components/ui/sheet';
 import type { AuthenticatedUser } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
-type CalendarView = 'day' | 'week' | 'month';
-type QueueStatus = 'draft' | 'queued' | 'processing' | 'scheduled';
-type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
+type CalendarView = 'week' | 'month' | 'list';
+type Platform = 'PINTEREST' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'X';
+type PublishStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'SCHEDULED'
+  | 'PROCESSING'
+  | 'PUBLISHED'
+  | 'FAILED'
+  | 'CANCELLED';
 
 interface ScheduledPost {
   id: string;
   title: string;
+  caption: string | null;
+  platform: Platform;
   channel: string;
-  date: string;
-  hour: number;
-  durationHours: number;
-  status: QueueStatus;
-  recurrence: Recurrence;
+  platformAccount: string | null;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  status: PublishStatus;
   tags: string[];
+  createdAt: string;
 }
 
-interface DraftPost {
+interface ApiPost {
   id: string;
   title: string;
+  caption: string | null;
+  platform: Platform;
   channel: string;
-  recurrence: Recurrence;
+  platformAccount: string | null;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  status: PublishStatus;
+  tags: string[];
+  createdAt: string;
+}
+
+interface DraftForm {
+  title: string;
+  caption: string;
+  platform: Platform;
+  date: string;
+  time: string;
+}
+
+interface Toast {
+  message: string;
+  tone: 'success' | 'warning';
+}
+
+interface PlatformOption {
+  platform: Platform;
+  label: string;
+  icon: LucideIcon;
+  tone: string;
 }
 
 const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Media Library', href: '/media-library', icon: ImageIcon },
+  { label: 'WordPress Hub', href: '/wordpress-hub', icon: FileText },
+  { label: 'Media Library', href: '/media-library', icon: Library },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
+  { label: 'Channels', href: '/admin/channels', icon: RadioTower },
 ];
 
-type SchedulerHref = Parameters<typeof Link>[0]['href'];
+const fallbackPlatform: PlatformOption = { platform: 'FACEBOOK', label: 'Facebook', icon: MessageSquareText, tone: 'text-blue-500' };
+const platformOptions: PlatformOption[] = [
+  fallbackPlatform,
+  { platform: 'INSTAGRAM', label: 'Instagram', icon: Camera, tone: 'text-pink-500' },
+  { platform: 'PINTEREST', label: 'Pinterest', icon: ImageIcon, tone: 'text-red-500' },
+  { platform: 'LINKEDIN', label: 'LinkedIn', icon: BarChart3, tone: 'text-sky-500' },
+  { platform: 'X', label: 'X', icon: AtSign, tone: 'text-zinc-700 dark:text-zinc-200' },
+];
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const timeSlots = Array.from({ length: 14 }, (_value, index) => index + 7);
+const timeSlots = Array.from({ length: 15 }, (_value, index) => index + 7);
+const schedulerHref = (href: string) => href as Parameters<typeof Link>[0]['href'];
 
 export function PostScheduler({ user }: { user: AuthenticatedUser }) {
+  const apiBaseUrl = getApiBaseUrl();
   const [view, setView] = useState<CalendarView>('week');
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
-  const [drafts] = useState<DraftPost[]>([]);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [bulkCount, setBulkCount] = useState(5);
-  const [bulkRecurrence, setBulkRecurrence] = useState<Recurrence>('weekly');
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'ALL'>('ALL');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
-
-  const visibleDates = useMemo(() => datesForView(selectedDate, view), [selectedDate, view]);
-  const queuedPosts = posts.filter((post) => post.status === 'queued' || post.status === 'processing');
+  const [darkMode, setDarkMode] = useState<boolean | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [form, setForm] = useState<DraftForm>({
+    title: '',
+    caption: '',
+    platform: 'FACEBOOK',
+    date: selectedDate,
+    time: '09:00',
+  });
 
   useEffect(() => {
-    async function loadPosts() {
-      const response = await fetch(`${getApiBaseUrl()}/api/scheduler/posts`, {
+    setDarkMode(document.documentElement.classList.contains('dark'));
+    void loadPosts();
+  }, []);
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, date: selectedDate }));
+  }, [selectedDate]);
+
+  const visibleDates = useMemo(() => {
+    if (view === 'month') {
+      return monthDates(selectedDate);
+    }
+
+    return weekDates(selectedDate);
+  }, [selectedDate, view]);
+
+  const filteredPosts = useMemo(() => {
+    const cleanSearch = search.trim().toLowerCase();
+
+    return posts.filter((post) => {
+      const platformMatch = selectedPlatform === 'ALL' || post.platform === selectedPlatform;
+      const searchMatch =
+        !cleanSearch ||
+        post.title.toLowerCase().includes(cleanSearch) ||
+        post.channel.toLowerCase().includes(cleanSearch) ||
+        (post.caption?.toLowerCase().includes(cleanSearch) ?? false);
+      return platformMatch && searchMatch;
+    });
+  }, [posts, search, selectedPlatform]);
+
+  const selectedDayPosts = filteredPosts
+    .filter((post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === selectedDate)
+    .sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
+
+  const scheduledCount = posts.filter((post) => post.status === 'SCHEDULED').length;
+  const needsReviewCount = posts.filter((post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED').length;
+  const publishedCount = posts.filter((post) => post.status === 'PUBLISHED').length;
+
+  async function loadPosts() {
+    setLoading(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/posts`, {
         credentials: 'include',
         cache: 'no-store',
       });
 
       if (!response.ok) {
-        setPosts([]);
-        return;
+        throw new Error('Calendar posts could not be loaded.');
       }
 
-      const payload = (await response.json()) as {
-        data: {
-          id: string;
-          title: string;
-          channel: string;
-          scheduledFor: string | null;
-          status: string;
-          tags: string[];
-        }[];
-      };
-      setPosts(payload.data.filter((post) => post.scheduledFor).map(postFromApi));
+      const payload = (await response.json()) as { data: ApiPost[] };
+      setPosts(payload.data.map(postFromApi));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Scheduler failed to load.', 'warning');
+    } finally {
+      setLoading(false);
     }
+  }
 
-    void loadPosts();
-  }, []);
-
-  function scheduleDraft(draftId: string, date: string, hour: number): void {
-    const draft = drafts.find((item) => item.id === draftId);
-
-    if (!draft) {
+  async function createScheduledPost() {
+    if (!form.title.trim()) {
+      notify('Add a post title before scheduling.', 'warning');
       return;
     }
 
-    const scheduledPost: ScheduledPost = {
-      id: `${draft.id}-${date}-${String(hour)}`,
-      title: draft.title,
-      channel: draft.channel,
-      date,
-      hour,
-      durationHours: 1,
-      status: 'queued',
-      recurrence: draft.recurrence,
-      tags: ['bulk-ready'],
-    };
+    setCreating(true);
+    try {
+      const scheduledFor = new Date(`${form.date}T${form.time}:00`);
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/posts`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          caption: form.caption.trim() || undefined,
+          platform: form.platform,
+          scheduledFor: scheduledFor.toISOString(),
+        }),
+      });
 
-    setPosts((currentPosts) => upsertPost(currentPosts, scheduledPost));
-  }
+      if (!response.ok) {
+        throw new Error('Post could not be scheduled.');
+      }
 
-  function movePost(postId: string, date: string, hour: number): void {
-    setPosts((currentPosts) =>
-      currentPosts.map((post) =>
-        post.id === postId ? { ...post, date, hour, status: 'queued' } : post,
-      ),
-    );
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>, date: string, hour: number): void {
-    event.preventDefault();
-    const draftId = event.dataTransfer.getData('application/socialflow-draft');
-    const postId = event.dataTransfer.getData('application/socialflow-post');
-
-    if (draftId) {
-      scheduleDraft(draftId, date, hour);
-      return;
-    }
-
-    if (postId) {
-      movePost(postId, date, hour);
+      notify('Post scheduled.', 'success');
+      setForm((current) => ({ ...current, title: '', caption: '' }));
+      await loadPosts();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Post scheduling failed.', 'warning');
+    } finally {
+      setCreating(false);
     }
   }
 
-  function bulkSchedule(): void {
-    void bulkCount;
-    void bulkRecurrence;
+  function notify(message: string, tone: Toast['tone']) {
+    setToast({ message, tone });
+    window.setTimeout(() => {
+      setToast(null);
+    }, 3200);
+  }
+
+  function toggleTheme() {
+    const current = darkMode ?? document.documentElement.classList.contains('dark');
+    const next = !current;
+    document.documentElement.classList.toggle('dark', next);
+    window.localStorage.setItem('socialflow-theme', next ? 'dark' : 'light');
+    setDarkMode(next);
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="sf-app-bg min-h-screen text-foreground">
       <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
         <SchedulerSidebar user={user} />
       </Sheet>
-      <div className="grid min-h-screen lg:grid-cols-[18rem_1fr]">
-        <aside className="hidden border-r bg-card text-card-foreground lg:block">
+      <div className="grid min-h-screen lg:grid-cols-[17rem_1fr]">
+        <aside className="hidden border-r border-border/70 bg-card/90 backdrop-blur-xl dark:border-white/10 lg:block">
           <SchedulerSidebar user={user} />
         </aside>
+
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-            <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-30 border-b border-border/70 bg-background/82 backdrop-blur-2xl dark:border-white/10">
+            <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 xl:px-8">
               <Button
                 aria-label="Open navigation"
                 className="lg:hidden"
@@ -178,50 +276,91 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="min-w-0 flex-1">
-                <h1 className="text-lg font-semibold tracking-normal">Scheduler</h1>
-                <p className="hidden text-sm text-muted-foreground sm:block">
-                  Plan posts, manage recurrence, and stage queue jobs.
+                <h1 className="truncate text-lg font-semibold tracking-normal">Content Calendar</h1>
+                <p className="hidden text-sm text-muted-foreground md:block">
+                  Schedule, review, and monitor publishing across every channel.
                 </p>
               </div>
               <ViewSwitcher view={view} onViewChange={setView} />
-              <Button aria-label="Notifications" className="relative" size="sm" variant="outline">
-                <Bell className="h-4 w-4" />
-                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-destructive" />
+              <Button aria-label="Toggle theme" onClick={toggleTheme} size="sm" variant="outline">
+                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <LogoutButton />
             </div>
           </header>
 
-          <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 xl:grid-cols-[1fr_21rem] xl:px-8">
-            <section className="min-w-0 space-y-6">
-              <CalendarToolbar
-                selectedDate={selectedDate}
-                view={view}
-                onDateChange={setSelectedDate}
-              />
-              {view === 'month' ? (
-                <MonthView posts={posts} selectedDate={selectedDate} onDateSelect={setSelectedDate} />
-              ) : (
-                <TimeGrid
-                  dates={visibleDates}
-                  posts={posts}
-                  onDropPost={handleDrop}
+          <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-5 px-4 py-5 sm:px-6 xl:px-8">
+            {toast ? (
+              <div
+                className={cn(
+                  'rounded-lg border px-4 py-3 text-sm shadow-sm',
+                  toast.tone === 'success'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                )}
+              >
+                {toast.message}
+              </div>
+            ) : null}
+
+            <section className="grid gap-4 xl:grid-cols-[1fr_22rem]">
+              <div className="space-y-4">
+                <PlannerHero
+                  needsReviewCount={needsReviewCount}
+                  publishedCount={publishedCount}
+                  scheduledCount={scheduledCount}
+                  selectedDate={selectedDate}
+                  setSelectedDate={setSelectedDate}
                   view={view}
                 />
-              )}
-            </section>
-            <aside className="space-y-6">
-              <QueuePanel queuedPosts={queuedPosts} />
-              <DraftPanel drafts={drafts} />
-              <BulkSchedulePanel
-                bulkCount={bulkCount}
-                bulkRecurrence={bulkRecurrence}
-                onBulkCountChange={setBulkCount}
-                onBulkRecurrenceChange={setBulkRecurrence}
-                onBulkSchedule={bulkSchedule}
+                <PlannerFilters
+                  onRefresh={() => {
+                    void loadPosts();
+                  }}
+                  search={search}
+                  selectedPlatform={selectedPlatform}
+                  setSearch={setSearch}
+                  setSelectedPlatform={setSelectedPlatform}
+                />
+              </div>
+              <CreatePostPanel
+                creating={creating}
+                form={form}
+                setForm={setForm}
+                onCreate={() => {
+                  void createScheduledPost();
+                }}
               />
-              <RecurringPanel posts={posts} />
-            </aside>
+            </section>
+
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="min-w-0">
+                {view === 'month' ? (
+                  <MonthPlanner
+                    posts={filteredPosts}
+                    selectedDate={selectedDate}
+                    visibleDates={visibleDates}
+                    onSelectDate={setSelectedDate}
+                  />
+                ) : view === 'list' ? (
+                  <ListPlanner posts={filteredPosts} />
+                ) : (
+                  <WeekPlanner
+                    loading={loading}
+                    posts={filteredPosts}
+                    selectedDate={selectedDate}
+                    visibleDates={visibleDates}
+                    onSelectDate={setSelectedDate}
+                  />
+                )}
+              </div>
+
+              <aside className="grid gap-5">
+                <DayAgenda date={selectedDate} posts={selectedDayPosts} />
+                <ChannelHealth posts={posts} />
+                <ReviewQueue posts={posts} />
+              </aside>
+            </section>
           </main>
         </div>
       </div>
@@ -235,12 +374,12 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
   return (
     <div className="flex h-full min-h-screen flex-col px-4 py-5">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
           <span className="text-xs font-bold tracking-wide">TMJ</span>
         </div>
-        <div>
-          <p className="text-sm font-semibold">TMJ SocialFlow AI</p>
-          <p className="text-xs text-muted-foreground">Publishing Control</p>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">TMJ SocialFlow AI</p>
+          <p className="text-xs text-muted-foreground">Publishing planner</p>
         </div>
       </div>
       <nav className="mt-8 space-y-1">
@@ -249,10 +388,10 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
             className={cn(
               'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
               pathname === item.href
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.05]',
             )}
-            href={item.href as SchedulerHref}
+            href={schedulerHref(item.href)}
             key={item.href}
           >
             <item.icon className="h-4 w-4" />
@@ -260,11 +399,182 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
           </Link>
         ))}
       </nav>
-      <div className="mt-auto rounded-md border p-3">
-        <p className="text-xs text-muted-foreground">Scheduler owner</p>
-        <p className="mt-1 break-words text-sm font-medium">{user.email}</p>
+      <div className="mt-auto rounded-lg border border-border bg-background/70 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+        <p className="text-xs text-muted-foreground">Signed in as</p>
+        <p className="mt-1 break-words font-medium">{user.email}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{user.role}</p>
       </div>
     </div>
+  );
+}
+
+function PlannerHero({
+  selectedDate,
+  view,
+  scheduledCount,
+  needsReviewCount,
+  publishedCount,
+  setSelectedDate,
+}: {
+  selectedDate: string;
+  view: CalendarView;
+  scheduledCount: number;
+  needsReviewCount: number;
+  publishedCount: number;
+  setSelectedDate: (date: string) => void;
+}) {
+  const step = view === 'month' ? 30 : 7;
+
+  return (
+    <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
+      <CardContent className="grid gap-4 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="min-w-0">
+          <Badge className="mb-3 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" variant="outline">
+            <CalendarClock className="mr-1 h-3.5 w-3.5" />
+            Meta-style publishing planner
+          </Badge>
+          <h2 className="text-2xl font-semibold tracking-normal">{formatDateLabel(selectedDate, view)}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review scheduled content, select a day, and plan posts without leaving the calendar.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <SummaryPill label="Scheduled" value={scheduledCount} />
+          <SummaryPill label="Review" value={needsReviewCount} tone="warning" />
+          <SummaryPill label="Published" value={publishedCount} tone="success" />
+          <Button
+            aria-label="Previous period"
+            onClick={() => {
+              setSelectedDate(addDays(selectedDate, -step));
+            }}
+            size="sm"
+            variant="outline"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Input
+            aria-label="Selected date"
+            className="h-9 w-40"
+            onChange={(event) => {
+              setSelectedDate(event.target.value);
+            }}
+            type="date"
+            value={selectedDate}
+          />
+          <Button
+            aria-label="Next period"
+            onClick={() => {
+              setSelectedDate(addDays(selectedDate, step));
+            }}
+            size="sm"
+            variant="outline"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SummaryPill({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' }) {
+  return (
+    <div className="min-w-24 rounded-lg border border-border bg-background/70 px-3 py-2 text-center dark:border-white/10 dark:bg-white/[0.03]">
+      <div
+        className={cn(
+          'text-lg font-semibold',
+          tone === 'success' ? 'text-emerald-600 dark:text-emerald-300' : '',
+          tone === 'warning' ? 'text-amber-600 dark:text-amber-300' : '',
+        )}
+      >
+        {value}
+      </div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function PlannerFilters({
+  selectedPlatform,
+  setSelectedPlatform,
+  search,
+  setSearch,
+  onRefresh,
+}: {
+  selectedPlatform: Platform | 'ALL';
+  setSelectedPlatform: (platform: Platform | 'ALL') => void;
+  search: string;
+  setSearch: (value: string) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            onChange={(event) => {
+              setSearch(event.target.value);
+            }}
+            placeholder="Search scheduled posts, captions, channels"
+            value={search}
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+          <FilterChip
+            active={selectedPlatform === 'ALL'}
+            label="All"
+            onClick={() => {
+              setSelectedPlatform('ALL');
+            }}
+          />
+          {platformOptions.map((item) => (
+            <FilterChip
+              active={selectedPlatform === item.platform}
+              icon={<item.icon className={cn('h-4 w-4', item.tone)} />}
+              key={item.platform}
+              label={item.label}
+              onClick={() => {
+                setSelectedPlatform(item.platform);
+              }}
+            />
+          ))}
+          <Button onClick={onRefresh} size="sm" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FilterChip({
+  active,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={cn(
+        'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition',
+        active
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-border bg-background/70 text-muted-foreground hover:border-primary/40 hover:text-foreground dark:border-white/10 dark:bg-white/[0.03]',
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -276,12 +586,12 @@ function ViewSwitcher({
   onViewChange: (view: CalendarView) => void;
 }) {
   return (
-    <div className="hidden rounded-md border p-1 sm:flex">
-      {(['day', 'week', 'month'] as const).map((item) => (
+    <div className="hidden rounded-lg border border-border bg-background/70 p-1 dark:border-white/10 dark:bg-white/[0.03] sm:flex">
+      {(['week', 'month', 'list'] as const).map((item) => (
         <button
           className={cn(
-            'rounded px-3 py-1.5 text-sm font-medium capitalize',
-            view === item ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+            'h-8 rounded-md px-3 text-sm font-medium capitalize transition',
+            view === item ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
           )}
           key={item}
           onClick={() => {
@@ -296,161 +606,177 @@ function ViewSwitcher({
   );
 }
 
-function CalendarToolbar({
-  selectedDate,
-  view,
-  onDateChange,
+function CreatePostPanel({
+  form,
+  setForm,
+  creating,
+  onCreate,
 }: {
-  selectedDate: string;
-  view: CalendarView;
-  onDateChange: (date: string) => void;
+  form: DraftForm;
+  setForm: (updater: (value: DraftForm) => DraftForm) => void;
+  creating: boolean;
+  onCreate: () => void;
 }) {
-  const step = view === 'day' ? 1 : view === 'week' ? 7 : 30;
-
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Calendar window</p>
-          <h2 className="text-xl font-semibold tracking-normal">{formatDateLabel(selectedDate, view)}</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            aria-label="Previous window"
-            onClick={() => {
-              onDateChange(addDays(selectedDate, -step));
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Input
-            aria-label="Selected calendar date"
-            className="w-40"
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Plus className="h-4 w-4" />
+          Schedule post
+        </CardTitle>
+        <CardDescription>Create a queue-ready post for a selected channel.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <Field label="Channel">
+          <select
+            className="sf-focus-ring h-10 rounded-lg border border-input bg-background/80 px-3 text-sm dark:bg-white/[0.035]"
             onChange={(event) => {
-              onDateChange(event.target.value);
+              setForm((value) => ({ ...value, platform: event.target.value as Platform }));
             }}
-            type="date"
-            value={selectedDate}
-          />
-          <Button
-            aria-label="Next window"
-            onClick={() => {
-              onDateChange(addDays(selectedDate, step));
-            }}
-            size="sm"
-            variant="outline"
+            value={form.platform}
           >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+            {platformOptions.map((item) => (
+              <option key={item.platform} value={item.platform}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Post title">
+          <Input
+            onChange={(event) => {
+              setForm((value) => ({ ...value, title: event.target.value }));
+            }}
+            placeholder="Campaign post title"
+            value={form.title}
+          />
+        </Field>
+        <Field label="Caption">
+          <textarea
+            className="sf-focus-ring min-h-24 resize-none rounded-lg border border-input bg-background/80 px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground dark:bg-white/[0.035]"
+            onChange={(event) => {
+              setForm((value) => ({ ...value, caption: event.target.value }));
+            }}
+            placeholder="Write the post caption"
+            value={form.caption}
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date">
+            <Input
+              onChange={(event) => {
+                setForm((value) => ({ ...value, date: event.target.value }));
+              }}
+              type="date"
+              value={form.date}
+            />
+          </Field>
+          <Field label="Time">
+            <Input
+              onChange={(event) => {
+                setForm((value) => ({ ...value, time: event.target.value }));
+              }}
+              type="time"
+              value={form.time}
+            />
+          </Field>
         </div>
+        <Button disabled={creating} onClick={onCreate}>
+          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          Schedule
+        </Button>
       </CardContent>
     </Card>
   );
 }
 
-function TimeGrid({
-  dates,
-  posts,
-  onDropPost,
-  view,
-}: {
-  dates: string[];
-  posts: ScheduledPost[];
-  onDropPost: (event: DragEvent<HTMLDivElement>, date: string, hour: number) => void;
-  view: CalendarView;
-}) {
-  return (
-    <Card className="overflow-hidden">
-      <div className="grid border-b bg-muted/50" style={{ gridTemplateColumns: `5rem repeat(${String(dates.length)}, minmax(9rem, 1fr))` }}>
-        <div className="p-3 text-xs font-medium text-muted-foreground">Time</div>
-        {dates.map((date, index) => (
-          <div className="border-l p-3" key={date}>
-            <p className="text-xs text-muted-foreground">{view === 'week' ? weekDays[index] : 'Day'}</p>
-            <p className="text-sm font-semibold">{shortDate(date)}</p>
-          </div>
-        ))}
-      </div>
-      <div className="max-h-[44rem] overflow-auto">
-        {timeSlots.map((hour) => (
-          <div
-            className="grid min-h-24 border-b"
-            key={hour}
-            style={{ gridTemplateColumns: `5rem repeat(${String(dates.length)}, minmax(9rem, 1fr))` }}
-          >
-            <div className="border-r p-3 text-xs text-muted-foreground">{formatHour(hour)}</div>
-            {dates.map((date) => {
-              const slotPosts = posts.filter((post) => post.date === date && post.hour === hour);
-              return (
-                <div
-                  className="space-y-2 border-l p-2 transition-colors hover:bg-muted/40"
-                  key={`${date}-${String(hour)}`}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                  }}
-                  onDrop={(event) => {
-                    onDropPost(event, date, hour);
-                  }}
-                >
-                  {slotPosts.map((post) => (
-                    <ScheduledPostCard key={post.id} post={post} />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function MonthView({
-  posts,
+function WeekPlanner({
+  visibleDates,
   selectedDate,
-  onDateSelect,
+  posts,
+  loading,
+  onSelectDate,
 }: {
-  posts: ScheduledPost[];
+  visibleDates: string[];
   selectedDate: string;
-  onDateSelect: (date: string) => void;
+  posts: ScheduledPost[];
+  loading: boolean;
+  onSelectDate: (date: string) => void;
 }) {
-  const dates = monthDates(selectedDate);
-
   return (
-    <Card className="overflow-hidden">
-      <div className="grid grid-cols-7 border-b bg-muted/50">
-        {weekDays.map((day) => (
-          <div className="p-3 text-xs font-medium text-muted-foreground" key={day}>
-            {day}
-          </div>
+    <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
+      <div className="hidden border-b border-border bg-muted/40 dark:border-white/10 dark:bg-white/[0.03] lg:grid" style={{ gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))` }}>
+        <div className="p-3 text-xs font-medium text-muted-foreground">Time</div>
+        {visibleDates.map((date, index) => (
+          <button
+            className={cn(
+              'border-l border-border p-3 text-left transition hover:bg-muted/70 dark:border-white/10 dark:hover:bg-white/[0.05]',
+              date === selectedDate ? 'bg-primary/10' : '',
+            )}
+            key={date}
+            onClick={() => {
+              onSelectDate(date);
+            }}
+            type="button"
+          >
+            <div className="text-xs text-muted-foreground">{weekDays[index]}</div>
+            <div className="text-sm font-semibold">{shortDate(date)}</div>
+          </button>
         ))}
       </div>
-      <div className="grid grid-cols-7">
-        {dates.map((date) => {
-          const dayPosts = posts.filter((post) => post.date === date);
+
+      <div className="hidden max-h-[48rem] overflow-auto lg:block">
+        {loading ? (
+          <CalendarLoading />
+        ) : (
+          timeSlots.map((hour) => (
+            <div
+              className="grid min-h-28 border-b border-border dark:border-white/10"
+              key={hour}
+              style={{ gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))` }}
+            >
+              <div className="border-r border-border p-3 text-xs text-muted-foreground dark:border-white/10">{formatHour(hour)}</div>
+              {visibleDates.map((date) => {
+                const slotPosts = postsForSlot(posts, date, hour);
+                return (
+                  <div className="space-y-2 border-l border-border p-2 dark:border-white/10" key={`${date}-${String(hour)}`}>
+                    {slotPosts.map((post) => (
+                      <PostCard compact key={post.id} post={post} />
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="grid gap-3 p-3 lg:hidden">
+        {visibleDates.map((date) => {
+          const dayPosts = postsForDate(posts, date);
           return (
             <button
               className={cn(
-                'min-h-32 border-b border-r p-2 text-left transition-colors hover:bg-muted/40',
-                date === selectedDate ? 'bg-primary/5' : '',
+                'rounded-lg border border-border bg-background/70 p-3 text-left dark:border-white/10 dark:bg-white/[0.03]',
+                date === selectedDate ? 'border-primary ring-2 ring-primary/20' : '',
               )}
               key={date}
               onClick={() => {
-                onDateSelect(date);
+                onSelectDate(date);
               }}
               type="button"
             >
-              <p className="text-xs font-medium text-muted-foreground">{shortDate(date)}</p>
-              <div className="mt-2 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold">{weekdayLabel(date)}</div>
+                  <div className="text-xs text-muted-foreground">{shortDate(date)}</div>
+                </div>
+                <Badge variant="secondary">{dayPosts.length} posts</Badge>
+              </div>
+              <div className="mt-3 grid gap-2">
                 {dayPosts.slice(0, 3).map((post) => (
-                  <div className="truncate rounded bg-primary/10 px-2 py-1 text-xs text-primary" key={post.id}>
-                    {post.title}
-                  </div>
+                  <PostCard compact key={post.id} post={post} />
                 ))}
-                {dayPosts.length > 3 ? (
-                  <p className="text-xs text-muted-foreground">+{String(dayPosts.length - 3)} more</p>
-                ) : null}
               </div>
             </button>
           );
@@ -460,205 +786,245 @@ function MonthView({
   );
 }
 
-function ScheduledPostCard({ post }: { post: ScheduledPost }) {
+function MonthPlanner({
+  visibleDates,
+  selectedDate,
+  posts,
+  onSelectDate,
+}: {
+  visibleDates: string[];
+  selectedDate: string;
+  posts: ScheduledPost[];
+  onSelectDate: (date: string) => void;
+}) {
+  const currentMonth = parseLocalDate(selectedDate).getMonth();
+
   return (
-    <div
-      className="rounded-md border bg-card p-2 shadow-sm"
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.setData('application/socialflow-post', post.id);
-      }}
-    >
-      <div className="flex items-start gap-2">
-        <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{post.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {post.channel} · {formatHour(post.hour)}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <Badge variant={queueVariant(post.status)}>{post.status}</Badge>
-            {post.recurrence !== 'none' ? (
-              <Badge variant="outline">
-                <Repeat className="mr-1 h-3 w-3" />
-                {post.recurrence}
-              </Badge>
-            ) : null}
+    <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
+      <div className="grid grid-cols-7 border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
+        {weekDays.map((day) => (
+          <div className="p-3" key={day}>
+            {day}
           </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7">
+        {visibleDates.map((date) => {
+          const dayPosts = postsForDate(posts, date);
+          const isMuted = parseLocalDate(date).getMonth() !== currentMonth;
+
+          return (
+            <button
+              className={cn(
+                'min-h-36 border-b border-r border-border p-3 text-left transition hover:bg-muted/45 dark:border-white/10 dark:hover:bg-white/[0.04]',
+                date === selectedDate ? 'bg-primary/10 ring-2 ring-inset ring-primary/25' : '',
+                isMuted ? 'text-muted-foreground' : '',
+              )}
+              key={date}
+              onClick={() => {
+                onSelectDate(date);
+              }}
+              type="button"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{shortDate(date)}</span>
+                {dayPosts.length ? <Badge variant="secondary">{dayPosts.length}</Badge> : null}
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {dayPosts.slice(0, 3).map((post) => (
+                  <MonthPostPill key={post.id} post={post} />
+                ))}
+                {dayPosts.length > 3 ? <div className="text-xs text-muted-foreground">+{String(dayPosts.length - 3)} more</div> : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
+  const sortedPosts = [...posts].sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
+
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader>
+        <CardTitle className="text-lg">Scheduled content</CardTitle>
+        <CardDescription>All upcoming posts in publishing order.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {sortedPosts.length ? (
+          sortedPosts.map((post) => <PostCard key={post.id} post={post} />)
+        ) : (
+          <EmptyState label="No scheduled posts match the current filters." />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DayAgenda({ date, posts }: { date: string; posts: ScheduledPost[] }) {
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Clock3 className="h-4 w-4" />
+          {weekdayLabel(date)}
+        </CardTitle>
+        <CardDescription>{shortDate(date)} publishing plan.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {posts.length ? posts.map((post) => <PostCard compact key={post.id} post={post} />) : <EmptyState label="No posts scheduled for this day." />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Channel mix</CardTitle>
+        <CardDescription>Scheduled volume by publishing destination.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {platformOptions.map((item) => {
+          const count = posts.filter((post) => post.platform === item.platform).length;
+          return (
+            <div className="flex items-center gap-3" key={item.platform}>
+              <item.icon className={cn('h-4 w-4', item.tone)} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span>{item.label}</span>
+                  <span className="font-medium">{count}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${String(Math.min(count * 12, 100))}%` }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewQueue({ posts }: { posts: ScheduledPost[] }) {
+  const reviewPosts = posts.filter((post) => post.status === 'FAILED' || post.status === 'PENDING_APPROVAL');
+
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <AlertTriangle className="h-4 w-4" />
+          Needs attention
+        </CardTitle>
+        <CardDescription>Failed or approval-pending scheduled posts.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {reviewPosts.length ? reviewPosts.slice(0, 4).map((post) => <PostCard compact key={post.id} post={post} />) : <EmptyState label="No posts need attention." />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: boolean }) {
+  const config = platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
+  const Icon = config.icon;
+
+  return (
+    <article className="rounded-lg border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.035]">
+      <div className="flex gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-white/[0.06]">
+          <Icon className={cn('h-5 w-5', config.tone)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className={cn('line-clamp-2 font-semibold', compact ? 'text-sm' : 'text-base')}>{post.title}</h3>
+            <StatusBadge status={post.status} />
+          </div>
+          {post.caption && !compact ? <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.caption}</p> : null}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{formatDateTime(post.scheduledFor)}</span>
+            <span>{post.channel}</span>
+            {post.platformAccount ? <span>{post.platformAccount}</span> : null}
+          </div>
+          {post.tags.length && !compact ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {post.tags.slice(0, 4).map((tag) => (
+                <Badge key={tag} variant="outline">{tag.startsWith('#') ? tag : `#${tag}`}</Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
+    </article>
+  );
+}
+
+function MonthPostPill({ post }: { post: ScheduledPost }) {
+  const config = platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
+  const Icon = config.icon;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-xs shadow-sm dark:bg-white/[0.05]">
+      <Icon className={cn('h-3.5 w-3.5 shrink-0', config.tone)} />
+      <span className="truncate">{post.title}</span>
     </div>
   );
 }
 
-function QueuePanel({ queuedPosts }: { queuedPosts: ScheduledPost[] }) {
+function StatusBadge({ status }: { status: PublishStatus }) {
+  const className: Record<PublishStatus, string> = {
+    DRAFT: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300',
+    PENDING_APPROVAL: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    APPROVED: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+    SCHEDULED: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+    PROCESSING: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300',
+    PUBLISHED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    FAILED: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    CANCELLED: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300',
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Queue Integration</CardTitle>
-        <CardDescription>Posts staged for publishing workers.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <QueueFact label="Queued" value={String(queuedPosts.filter((post) => post.status === 'queued').length)} />
-          <QueueFact
-            label="Processing"
-            value={String(queuedPosts.filter((post) => post.status === 'processing').length)}
-          />
-          <QueueFact label="Workers" value="3" />
-        </div>
-        <Separator />
-        <div className="space-y-3">
-          {queuedPosts.slice(0, 4).map((post) => (
-            <div className="flex items-center justify-between gap-3" key={post.id}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{post.title}</p>
-                <p className="text-xs text-muted-foreground">{post.date}</p>
-              </div>
-              <Badge variant={queueVariant(post.status)}>{post.status}</Badge>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <Badge className={className[status]} variant="outline">
+      {titleCase(status)}
+    </Badge>
   );
 }
 
-function QueueFact({ label, value }: { label: string; value: string }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-md border p-3">
-      <p className="text-lg font-semibold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <label className="grid gap-1.5">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground dark:border-white/10">
+      <MessageSquareText className="mx-auto mb-2 h-5 w-5" />
+      {label}
     </div>
   );
 }
 
-function DraftPanel({ drafts }: { drafts: DraftPost[] }) {
+function CalendarLoading() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Unscheduled Posts</CardTitle>
-        <CardDescription>Drag a post into a time slot.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {drafts.map((draft) => (
-          <div
-            className="cursor-grab rounded-md border bg-card p-3 active:cursor-grabbing"
-            draggable
-            key={draft.id}
-            onDragStart={(event) => {
-              event.dataTransfer.setData('application/socialflow-draft', draft.id);
-            }}
-          >
-            <div className="flex items-start gap-3">
-              <Send className="mt-0.5 h-4 w-4 text-primary" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{draft.title}</p>
-                <p className="text-xs text-muted-foreground">{draft.channel}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+    <div className="flex min-h-96 items-center justify-center text-sm text-muted-foreground">
+      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+      Loading calendar
+    </div>
   );
 }
 
-function BulkSchedulePanel({
-  bulkCount,
-  bulkRecurrence,
-  onBulkCountChange,
-  onBulkRecurrenceChange,
-  onBulkSchedule,
-}: {
-  bulkCount: number;
-  bulkRecurrence: Recurrence;
-  onBulkCountChange: (value: number) => void;
-  onBulkRecurrenceChange: (value: Recurrence) => void;
-  onBulkSchedule: () => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bulk Schedule</CardTitle>
-        <CardDescription>Create a queue-ready posting sequence.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="bulk-count">
-            Number of posts
-          </label>
-          <Input
-            id="bulk-count"
-            min={1}
-            max={30}
-            onChange={(event) => {
-              onBulkCountChange(Number(event.target.value));
-            }}
-            type="number"
-            value={bulkCount}
-          />
-        </div>
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Recurrence</p>
-          <div className="grid grid-cols-2 gap-2">
-            {(['none', 'daily', 'weekly', 'monthly'] as const).map((item) => (
-              <button
-                className={cn(
-                  'rounded-md border px-3 py-2 text-sm capitalize',
-                  bulkRecurrence === item ? 'bg-primary text-primary-foreground' : 'hover:bg-muted',
-                )}
-                key={item}
-                onClick={() => {
-                  onBulkRecurrenceChange(item);
-                }}
-                type="button"
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </div>
-        <Button className="w-full" onClick={onBulkSchedule}>
-          <CopyPlus className="h-4 w-4" />
-          Add to queue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RecurringPanel({ posts }: { posts: ScheduledPost[] }) {
-  const recurringPosts = posts.filter((post) => post.recurrence !== 'none');
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recurring Posts</CardTitle>
-        <CardDescription>Active repeating schedules.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {recurringPosts.slice(0, 5).map((post) => (
-          <div className="flex items-center gap-3 rounded-md border p-3" key={post.id}>
-            <Repeat className="h-4 w-4 text-[hsl(var(--accent))]" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{post.title}</p>
-              <p className="text-xs text-muted-foreground capitalize">{post.recurrence}</p>
-            </div>
-            <CheckCircle2 className="h-4 w-4 text-[hsl(var(--accent))]" />
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function datesForView(selectedDate: string, view: CalendarView): string[] {
-  if (view === 'day') {
-    return [selectedDate];
-  }
-
-  return Array.from({ length: 7 }, (_value, index) => addDays(startOfWeek(selectedDate), index));
+function weekDates(selectedDate: string): string[] {
+  const start = startOfWeek(selectedDate);
+  return Array.from({ length: 7 }, (_value, index) => addDays(start, index));
 }
 
 function monthDates(selectedDate: string): string[] {
@@ -701,24 +1067,20 @@ function toDateInputValue(date: Date): string {
 }
 
 function shortDate(dateValue: string): string {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(
-    parseLocalDate(dateValue),
-  );
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(parseLocalDate(dateValue));
+}
+
+function weekdayLabel(dateValue: string): string {
+  return new Intl.DateTimeFormat('en', { weekday: 'long' }).format(parseLocalDate(dateValue));
 }
 
 function formatDateLabel(dateValue: string, view: CalendarView): string {
-  if (view === 'day') {
-    return shortDate(dateValue);
-  }
-
   if (view === 'week') {
     const start = startOfWeek(dateValue);
     return `${shortDate(start)} - ${shortDate(addDays(start, 6))}`;
   }
 
-  return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(
-    parseLocalDate(dateValue),
-  );
+  return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(parseLocalDate(dateValue));
 }
 
 function formatHour(hour: number): string {
@@ -727,66 +1089,55 @@ function formatHour(hour: number): string {
   return `${String(normalized)} ${suffix}`;
 }
 
-function queueVariant(status: QueueStatus): 'default' | 'secondary' | 'outline' | 'success' {
-  if (status === 'scheduled') {
-    return 'success';
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return 'Not scheduled';
   }
 
-  if (status === 'processing') {
-    return 'default';
-  }
-
-  if (status === 'queued') {
-    return 'secondary';
-  }
-
-  return 'outline';
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
-function postFromApi(post: {
-  id: string;
-  title: string;
-  channel: string;
-  scheduledFor: string | null;
-  status: string;
-  tags: string[];
-}): ScheduledPost {
-  const scheduledFor = post.scheduledFor ? new Date(post.scheduledFor) : new Date();
+function postsForDate(posts: ScheduledPost[], date: string): ScheduledPost[] {
+  return posts
+    .filter((post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === date)
+    .sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
+}
+
+function postsForSlot(posts: ScheduledPost[], date: string, hour: number): ScheduledPost[] {
+  return postsForDate(posts, date).filter((post) => {
+    if (!post.scheduledFor) {
+      return false;
+    }
+
+    return new Date(post.scheduledFor).getHours() === hour;
+  });
+}
+
+function dateTimeValue(value: string | null): number {
+  return value ? new Date(value).getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function titleCase(value: string): string {
+  return value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function postFromApi(post: ApiPost): ScheduledPost {
   return {
     id: post.id,
     title: post.title,
+    caption: post.caption,
+    platform: post.platform,
     channel: post.channel,
-    date: toDateInputValue(scheduledFor),
-    hour: scheduledFor.getHours(),
-    durationHours: 1,
-    status: queueStatusFromApi(post.status),
-    recurrence: 'none',
+    platformAccount: post.platformAccount,
+    scheduledFor: post.scheduledFor,
+    publishedAt: post.publishedAt,
+    status: post.status,
     tags: post.tags,
+    createdAt: post.createdAt,
   };
-}
-
-function queueStatusFromApi(status: string): QueueStatus {
-  if (status === 'PROCESSING') {
-    return 'processing';
-  }
-
-  if (status === 'SCHEDULED' || status === 'APPROVED') {
-    return 'scheduled';
-  }
-
-  if (status === 'DRAFT') {
-    return 'draft';
-  }
-
-  return 'queued';
-}
-
-function upsertPost(posts: ScheduledPost[], nextPost: ScheduledPost): ScheduledPost[] {
-  const existingIndex = posts.findIndex((post) => post.id === nextPost.id);
-
-  if (existingIndex === -1) {
-    return [...posts, nextPost];
-  }
-
-  return posts.map((post) => (post.id === nextPost.id ? nextPost : post));
 }

@@ -11,6 +11,34 @@ export class AuthRepository {
     return this.prisma.user.create({ data });
   }
 
+  async createUserWithDefaultOrganization(
+    data: Prisma.UserCreateInput,
+    organization: { name: string; slug: string },
+  ): Promise<User> {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({ data });
+      const createdOrganization = await tx.organization.create({
+        data: {
+          name: organization.name,
+          slug: organization.slug,
+          ownerUserId: user.id,
+        },
+      });
+
+      await tx.organizationMember.create({
+        data: {
+          organizationId: createdOrganization.id,
+          userId: user.id,
+        },
+      });
+
+      return tx.user.update({
+        where: { id: user.id },
+        data: { defaultOrganizationId: createdOrganization.id },
+      });
+    });
+  }
+
   findUserByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
   }

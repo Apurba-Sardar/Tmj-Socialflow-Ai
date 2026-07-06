@@ -134,13 +134,11 @@ const tabs: { label: DetailTab; icon: typeof FileText }[] = [
 
 export function WordPressPostDetail({
   articleId,
-  user,
 }: {
   articleId: string;
   user: AuthenticatedUser;
 }) {
   const apiBaseUrl = getApiBaseUrl();
-  const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const [article, setArticle] = useState<WordPressDetailArticle | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
   const [loading, setLoading] = useState(true);
@@ -172,11 +170,6 @@ export function WordPressPostDetail({
   }
 
   async function generateCampaign() {
-    if (!isAdmin) {
-      setMessage('Admin access is required to generate campaigns.');
-      return;
-    }
-
     setGenerating(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/wordpress/hub/posts/${articleId}/generate-campaign`, {
@@ -234,7 +227,7 @@ export function WordPressPostDetail({
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <Button
-            disabled={generating || !isAdmin}
+            disabled={generating}
             onClick={() => {
               void generateCampaign();
             }}

@@ -99,18 +99,18 @@ export class WordPressController {
   }
 
   @Post('hub/posts/:id/generate-campaign')
-  generateCampaign(@Param('id') id: string, @Body() dto: GenerateCampaignDto) {
-    return this.wordpressService.generateCampaign(id, dto);
+  generateCampaign(@Param('id') id: string, @Body() dto: GenerateCampaignDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.generateCampaign(id, dto, user);
   }
 
   @Post('hub/bulk')
-  bulkHubAction(@Body() dto: BulkWordPressActionDto) {
-    return this.wordpressService.bulkHubAction(dto);
+  bulkHubAction(@Body() dto: BulkWordPressActionDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.bulkHubAction(dto, user);
   }
 
   @Post('library/:id/repurpose')
-  repurposeArticle(@Param('id') id: string, @Body() dto: RepurposeArticleDto) {
-    return this.wordpressService.repurposeArticle(id, dto);
+  repurposeArticle(@Param('id') id: string, @Body() dto: RepurposeArticleDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.repurposeArticle(id, dto, user);
   }
 
   @Post('repurpose/bulk')

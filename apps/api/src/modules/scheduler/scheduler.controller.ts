@@ -13,8 +13,22 @@ export class SchedulerController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('posts')
-  async posts() {
+  async posts(@CurrentUser() user: AuthenticatedUser) {
+    const organization = await this.prisma.organization.findFirst({
+      where: {
+        members: {
+          some: { userId: user.id },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!organization) {
+      throw new UnprocessableEntityException('User is not assigned to an organization.');
+    }
+
     const posts = await this.prisma.publishJob.findMany({
+      where: { organizationId: organization.id },
       orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'desc' }],
       take: 200,
     });
@@ -23,10 +37,15 @@ export class SchedulerController {
       data: posts.map((post) => ({
         id: post.id,
         title: post.title,
+        caption: post.caption,
+        platform: post.platform,
         channel: this.platformLabel(post.platform),
+        platformAccount: post.platformAccount,
         scheduledFor: post.scheduledFor,
+        publishedAt: post.publishedAt,
         status: post.status,
         tags: post.hashtags,
+        createdAt: post.createdAt,
       })),
     };
   }

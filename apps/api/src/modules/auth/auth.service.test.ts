@@ -10,6 +10,7 @@ const now = new Date('2026-06-30T12:00:00.000Z');
 
 const user: User = {
   id: 'user_1',
+  defaultOrganizationId: 'org_1',
   email: 'user@example.com',
   passwordHash: '',
   displayName: null,
@@ -34,7 +35,7 @@ describe('AuthService', () => {
   it('registers a user, queues verification, and creates a session', async () => {
     const repository = createRepositoryMock({
       findUserByEmail: vi.fn().mockResolvedValue(null),
-      createUser: vi.fn().mockResolvedValue({ ...user, passwordHash: 'hashed' }),
+      createUserWithDefaultOrganization: vi.fn().mockResolvedValue({ ...user, passwordHash: 'hashed' }),
     });
     const emailService = createEmailServiceMock();
     const service = new AuthService(repository, new JwtService(), emailService);
@@ -44,8 +45,9 @@ describe('AuthService', () => {
       password: 'very-secure-password',
     });
 
-    expect(repository.createUser).toHaveBeenCalledWith(
+    expect(repository.createUserWithDefaultOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'user@example.com' }),
+      expect.objectContaining({ name: 'user Workspace' }),
     );
     expect(emailService.sendEmailVerification).toHaveBeenCalledOnce();
     expect(session.user.email).toBe('user@example.com');
@@ -87,6 +89,7 @@ describe('AuthService', () => {
 function createRepositoryMock(overrides: Partial<Record<keyof AuthRepository, unknown>> = {}) {
   return {
     createUser: vi.fn(),
+    createUserWithDefaultOrganization: vi.fn(),
     findUserByEmail: vi.fn(),
     findUserById: vi.fn(),
     markEmailVerified: vi.fn(),

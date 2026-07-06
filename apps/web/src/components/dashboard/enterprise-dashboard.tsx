@@ -228,6 +228,7 @@ const navigation: { label: string; href: string; icon: LucideIcon; count?: strin
   { label: 'Approvals', href: '/dashboard#approvals', icon: FileCheck2, count: '31' },
   { label: 'Analytics', href: '/dashboard#analytics', icon: BarChart3 },
   { label: 'AI Studio', href: '/dashboard#ai', icon: WandSparkles },
+  { label: 'Channels', href: '/admin/channels', icon: RadioTower },
   { label: 'Settings', href: '/dashboard#settings', icon: Settings },
 ];
 

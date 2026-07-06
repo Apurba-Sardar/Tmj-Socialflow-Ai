@@ -15,6 +15,7 @@ import {
   Menu,
   Moon,
   Plus,
+  RadioTower,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -126,7 +127,6 @@ const platformDefaults = ['PINTEREST', 'INSTAGRAM', 'LINKEDIN', 'X'];
 export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
   const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
-  const canGenerate = user.role !== 'VIEWER';
   const [articles, setArticles] = useState<HubArticle[]>([]);
   const [connections, setConnections] = useState<WordPressConnection[]>([]);
   const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
@@ -300,11 +300,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   }
 
   async function generateCampaign(article: HubArticle) {
-    if (!canGenerate) {
-      notify('You do not have permission to generate campaigns.', 'warning');
-      return;
-    }
-
     setBusyId(article.id);
     try {
       const response = await fetch(`${apiBaseUrl}/api/wordpress/hub/posts/${article.id}/generate-campaign`, {
@@ -332,11 +327,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   async function runBulk(action: 'generate' | 'archive') {
     if (action === 'archive' && !isAdmin) {
       notify('Admin access is required to archive posts.', 'warning');
-      return;
-    }
-
-    if (action === 'generate' && !canGenerate) {
-      notify('You do not have permission to generate campaigns.', 'warning');
       return;
     }
 
@@ -590,7 +580,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
-                      disabled={!selectedCount || bulkBusy !== null || !canGenerate}
+                      disabled={!selectedCount || bulkBusy !== null}
                       onClick={() => {
                         void runBulk('generate');
                       }}
@@ -763,7 +753,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                               toggleArticle(article.id);
                             }}
                             selected={selectedArticles.includes(article.id)}
-                            userCanAct={canGenerate}
                           />
                         ))
                       ) : (
@@ -796,7 +785,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                           toggleArticle(article.id);
                         }}
                         selected={selectedArticles.includes(article.id)}
-                        userCanAct={canGenerate}
                       />
                     ))
                   ) : (
@@ -891,6 +879,10 @@ function HubSidebar({
           <FileText className="h-4 w-4" />
           WordPress Hub
         </Link>
+        <Link className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground" href="/admin/channels">
+          <RadioTower className="h-4 w-4" />
+          Channels
+        </Link>
       </nav>
       <Separator className="my-4" />
       <div className="grid gap-2 px-2">
@@ -919,14 +911,12 @@ function HubRow({
   article,
   busy,
   selected,
-  userCanAct,
   onGenerate,
   onToggle,
 }: {
   article: HubArticle;
   busy: boolean;
   selected: boolean;
-  userCanAct: boolean;
   onGenerate: () => void;
   onToggle: () => void;
 }) {
@@ -1001,10 +991,10 @@ function HubRow({
           </Button>
           <Button
             className="min-w-28"
-            disabled={busy || !userCanAct}
+            disabled={busy}
             onClick={onGenerate}
             size="sm"
-            title={userCanAct ? 'Generate AI campaign' : 'Generation is not available for this role'}
+            title="Generate AI campaign"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Generate
@@ -1019,14 +1009,12 @@ function MobileArticleCard({
   article,
   busy,
   selected,
-  userCanAct,
   onGenerate,
   onToggle,
 }: {
   article: HubArticle;
   busy: boolean;
   selected: boolean;
-  userCanAct: boolean;
   onGenerate: () => void;
   onToggle: () => void;
 }) {
@@ -1056,7 +1044,7 @@ function MobileArticleCard({
             <Button asChild size="sm" variant="outline">
               <Link href={`/wordpress-hub/${article.id}`}>Open</Link>
             </Button>
-            <Button disabled={busy || !userCanAct} onClick={onGenerate} size="sm">
+            <Button disabled={busy} onClick={onGenerate} size="sm">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Generate
             </Button>

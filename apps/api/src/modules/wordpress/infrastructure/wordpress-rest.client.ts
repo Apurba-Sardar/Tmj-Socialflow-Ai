@@ -19,7 +19,7 @@ export class WordPressRestClient {
     connection: WordPressConnectionConfig,
     params: { page: number; perPage: number; status?: string; postType?: string },
   ): Promise<WordPressHttpResponse<WordPressRawPost[]>> {
-    const restBase = params.postType?.trim() || 'posts';
+    const restBase = params.postType?.trim() ?? 'posts';
     const query = {
       page: String(params.page),
       per_page: String(params.perPage),
