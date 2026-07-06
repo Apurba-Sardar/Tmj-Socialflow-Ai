@@ -5,7 +5,10 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   BarChart3,
+  CalendarDays,
+  CheckSquare,
   Clock3,
+  FileCheck2,
   FileText,
   History,
   Image,
@@ -13,7 +16,9 @@ import {
   Moon,
   Send,
   Sparkles,
+  Square,
   Sun,
+  Trash2,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -114,14 +119,17 @@ interface WordPressDetailArticle {
   socialDrafts: {
     id: string;
     platform: string;
-    status: string;
+    status: 'DRAFT' | 'APPROVED' | 'SCHEDULED' | 'PUBLISHED' | 'REJECTED';
     title: string;
     body: string;
     hashtags: string[];
     mediaUrl: string | null;
+    scheduledFor?: string | null;
     createdAt: string;
   }[];
 }
+
+type WordPressSocialDraft = WordPressDetailArticle['socialDrafts'][number];
 
 const tabs: { label: DetailTab; icon: typeof FileText }[] = [
   { label: 'Overview', icon: FileText },
@@ -143,6 +151,8 @@ export function WordPressPostDetail({
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [busyDraftId, setBusyDraftId] = useState<string | null>(null);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -161,7 +171,9 @@ export function WordPressPostDetail({
       if (!response.ok) {
         throw new Error('Unable to load WordPress post.');
       }
-      setArticle((await response.json()) as WordPressDetailArticle);
+      const payload = (await response.json()) as WordPressDetailArticle;
+      setArticle(payload);
+      setSelectedDraftIds((ids) => ids.filter((id) => payload.socialDrafts.some((draft) => draft.id === id)));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load WordPress post.');
     } finally {
@@ -195,6 +207,84 @@ export function WordPressPostDetail({
     }
   }
 
+  async function approveDrafts(drafts: WordPressSocialDraft[]) {
+    const approvableDrafts = drafts.filter((draft) => draft.status === 'DRAFT');
+
+    if (!approvableDrafts.length) {
+      setMessage('Selected drafts are already approved or scheduled.');
+      return;
+    }
+
+    setBusyDraftId(approvableDrafts.length === 1 ? approvableDrafts[0]?.id ?? 'approve' : 'approve-selected');
+    try {
+      await Promise.all(
+        approvableDrafts.map(async (draft) => {
+          const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draft.id}/approve`, {
+            method: 'PATCH',
+            credentials: 'include',
+          });
+
+          if (!response.ok) {
+            throw new Error(`Unable to approve ${titleCase(draft.platform)} draft.`);
+          }
+        }),
+      );
+
+      setMessage(approvableDrafts.length === 1 ? 'Draft approved.' : 'Selected drafts approved.');
+      await loadArticle();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to approve drafts.');
+    } finally {
+      setBusyDraftId(null);
+    }
+  }
+
+  async function scheduleDraft(draft: WordPressSocialDraft) {
+    setBusyDraftId(draft.id);
+    try {
+      const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draft.id}/schedule`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledFor }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to schedule draft.');
+      }
+
+      setMessage('Draft scheduled for tomorrow.');
+      await loadArticle();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to schedule draft.');
+    } finally {
+      setBusyDraftId(null);
+    }
+  }
+
+  async function deleteDraft(draft: WordPressSocialDraft) {
+    setBusyDraftId(draft.id);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draft.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to delete draft.');
+      }
+
+      setMessage('Draft deleted.');
+      setSelectedDraftIds((ids) => ids.filter((id) => id !== draft.id));
+      await loadArticle();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to delete draft.');
+    } finally {
+      setBusyDraftId(null);
+    }
+  }
+
   function toggleTheme() {
     const current = darkMode ?? document.documentElement.classList.contains('dark');
     const next = !current;
@@ -205,6 +295,7 @@ export function WordPressPostDetail({
 
   const campaigns = article?.campaigns ?? [];
   const generations = campaigns.flatMap((campaign) => campaign.generations);
+  const socialDrafts = article?.socialDrafts ?? [];
   const publishingHistory = campaigns.flatMap((campaign) => campaign.publishingHistory);
   const regenerationHistory = campaigns.flatMap((campaign) => campaign.regenerationHistory);
   const analytics = campaigns.flatMap((campaign) => campaign.analytics);
@@ -301,8 +392,39 @@ export function WordPressPostDetail({
             </div>
 
             {activeTab === 'Overview' ? <OverviewTab article={article} /> : null}
-            {activeTab === 'Generated Content' ? <GeneratedContentTab generations={generations} /> : null}
-            {activeTab === 'Media Assets' ? <MediaAssetsTab article={article} generations={generations} /> : null}
+            {activeTab === 'Generated Content' ? (
+              <GeneratedContentTab
+                busyDraftId={busyDraftId}
+                drafts={socialDrafts}
+                selectedDraftIds={selectedDraftIds}
+                onApproveAll={() => {
+                  void approveDrafts(socialDrafts);
+                }}
+                onApproveDraft={(draft) => {
+                  void approveDrafts([draft]);
+                }}
+                onApproveSelected={() => {
+                  void approveDrafts(socialDrafts.filter((draft) => selectedDraftIds.includes(draft.id)));
+                }}
+                onDeleteDraft={(draft) => {
+                  void deleteDraft(draft);
+                }}
+                onScheduleDraft={(draft) => {
+                  void scheduleDraft(draft);
+                }}
+                onToggleDraft={(draftId) => {
+                  setSelectedDraftIds((ids) =>
+                    ids.includes(draftId) ? ids.filter((id) => id !== draftId) : [...ids, draftId],
+                  );
+                }}
+                onToggleAll={() => {
+                  setSelectedDraftIds((ids) =>
+                    ids.length === socialDrafts.length ? [] : socialDrafts.map((draft) => draft.id),
+                  );
+                }}
+              />
+            ) : null}
+            {activeTab === 'Media Assets' ? <MediaAssetsTab article={article} drafts={socialDrafts} generations={generations} /> : null}
             {activeTab === 'Publishing History' ? <PublishingHistoryTab items={publishingHistory} /> : null}
             {activeTab === 'AI History' ? <AiHistoryTab items={regenerationHistory} /> : null}
             {activeTab === 'Analytics' ? <AnalyticsTab items={analytics} /> : null}
@@ -360,32 +482,120 @@ function OverviewTab({ article }: { article: WordPressDetailArticle }) {
   );
 }
 
-function GeneratedContentTab({ generations }: { generations: WordPressCampaignGeneration[] }) {
-  if (!generations.length) {
+function GeneratedContentTab({
+  busyDraftId,
+  drafts,
+  selectedDraftIds,
+  onApproveAll,
+  onApproveDraft,
+  onApproveSelected,
+  onDeleteDraft,
+  onScheduleDraft,
+  onToggleAll,
+  onToggleDraft,
+}: {
+  busyDraftId: string | null;
+  drafts: WordPressSocialDraft[];
+  selectedDraftIds: string[];
+  onApproveAll: () => void;
+  onApproveDraft: (draft: WordPressSocialDraft) => void;
+  onApproveSelected: () => void;
+  onDeleteDraft: (draft: WordPressSocialDraft) => void;
+  onScheduleDraft: (draft: WordPressSocialDraft) => void;
+  onToggleAll: () => void;
+  onToggleDraft: (draftId: string) => void;
+}) {
+  if (!drafts.length) {
     return <EmptyState title="No generated content yet" />;
   }
 
+  const allSelected = selectedDraftIds.length === drafts.length;
+  const selectedCount = selectedDraftIds.length;
+  const approvableCount = drafts.filter((draft) => draft.status === 'DRAFT').length;
+
   return (
-    <section className="grid gap-3 lg:grid-cols-2">
-      {generations.map((item) => (
-        <Card className="border-border/80 dark:border-white/10" key={item.id}>
+    <section className="grid gap-4">
+      <Card className="border-border/80 bg-card/80 dark:border-white/10 dark:bg-white/[0.04]">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-semibold">Generated channel drafts</p>
+            <p className="text-xs text-muted-foreground">
+              {String(drafts.length)} drafts, {String(approvableCount)} waiting for approval.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button className="h-8 px-2" onClick={onToggleAll} size="sm" variant="outline">
+              {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {allSelected ? 'Clear selection' : 'Select all'}
+            </Button>
+            <Button
+              className="h-8 px-2"
+              disabled={!selectedCount || busyDraftId !== null}
+              onClick={onApproveSelected}
+              size="sm"
+              variant="outline"
+            >
+              <FileCheck2 className="h-4 w-4" />
+              Approve selected {selectedCount ? `(${String(selectedCount)})` : ''}
+            </Button>
+            <Button
+              className="h-8 px-2"
+              disabled={!approvableCount || busyDraftId !== null}
+              onClick={onApproveAll}
+              size="sm"
+            >
+              <FileCheck2 className="h-4 w-4" />
+              Approve all
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {drafts.map((draft) => {
+          const selected = selectedDraftIds.includes(draft.id);
+          const busy = busyDraftId === draft.id || busyDraftId === 'approve-selected';
+
+          return (
+            <Card
+              className={cn(
+                'overflow-hidden border-border/80 dark:border-white/10',
+                selected ? 'border-primary ring-2 ring-primary/20' : '',
+              )}
+              key={draft.id}
+            >
+              <button
+                className="flex w-full items-center justify-between gap-3 border-b border-border/70 p-3 text-left transition hover:bg-muted/60 dark:border-white/10 dark:hover:bg-white/[0.04]"
+                onClick={() => {
+                  onToggleDraft(draft.id);
+                }}
+                type="button"
+              >
+                <div className="flex items-center gap-2">
+                  {selected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">Select draft</span>
+                </div>
+                <Badge variant={draft.status === 'DRAFT' || draft.status === 'REJECTED' ? 'outline' : 'success'}>
+                  {titleCase(draft.status)}
+                </Badge>
+              </button>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base">{titleCase(item.platform)}</CardTitle>
-              <Badge variant="outline">v{item.version}</Badge>
+                  <CardTitle className="text-base">{titleCase(draft.platform)}</CardTitle>
+                  <Badge variant="outline">{formatDate(draft.createdAt)}</Badge>
             </div>
-            <CardDescription>{item.aiModel} - {item.promptVersion}</CardDescription>
+                <CardDescription>{draft.title}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {item.imageUrl ? (
+                {draft.mediaUrl ? (
               <div className="overflow-hidden rounded-xl border border-border bg-background/70 dark:border-white/10 dark:bg-white/[0.03]">
                 <img
-                  alt={`${titleCase(item.platform)} generated campaign visual`}
+                      alt={`${titleCase(draft.platform)} generated campaign visual`}
                   className={cn(
                     'w-full object-cover',
-                    item.platform === 'PINTEREST' ? 'aspect-[2/3]' : 'aspect-video',
+                        draft.platform === 'PINTEREST' ? 'aspect-[2/3]' : 'aspect-video',
                   )}
-                  src={item.imageUrl}
+                      src={draft.mediaUrl}
                 />
               </div>
             ) : (
@@ -394,25 +604,66 @@ function GeneratedContentTab({ generations }: { generations: WordPressCampaignGe
               </div>
             )}
             <p className="rounded-md border border-border bg-background/70 p-3 text-sm leading-6 dark:border-white/10 dark:bg-white/[0.03]">
-              {item.caption}
+                  {draft.body}
             </p>
             <div className="flex flex-wrap gap-2">
-              {item.hashtags.map((tag) => (
+                  {draft.hashtags.map((tag) => (
                 <Badge key={tag} variant="secondary">{tag}</Badge>
               ))}
             </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    className="h-8 px-2"
+                    disabled={busyDraftId !== null || draft.status !== 'DRAFT'}
+                    onClick={() => {
+                      onApproveDraft(draft);
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
+                    Approve
+                  </Button>
+                  <Button
+                    className="h-8 px-2"
+                    disabled={busyDraftId !== null || draft.status === 'SCHEDULED' || draft.status === 'PUBLISHED'}
+                    onClick={() => {
+                      onScheduleDraft(draft);
+                    }}
+                    size="sm"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+                    Schedule
+                  </Button>
+                  <Button
+                    className="h-8 px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
+                    disabled={busyDraftId !== null}
+                    onClick={() => {
+                      onDeleteDraft(draft);
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Delete
+                  </Button>
+                </div>
           </CardContent>
         </Card>
-      ))}
+          );
+        })}
+      </div>
     </section>
   );
 }
 
 function MediaAssetsTab({
   article,
+  drafts,
   generations,
 }: {
   article: WordPressDetailArticle;
+  drafts: WordPressSocialDraft[];
   generations: WordPressCampaignGeneration[];
 }) {
   const images: { id: string; url: string; label: string }[] = [];
@@ -428,6 +679,12 @@ function MediaAssetsTab({
   generations.forEach((item) => {
     if (item.imageUrl) {
       images.push({ id: item.id, url: item.imageUrl, label: titleCase(item.platform) });
+    }
+  });
+
+  drafts.forEach((draft) => {
+    if (draft.mediaUrl) {
+      images.push({ id: draft.id, url: draft.mediaUrl, label: `${titleCase(draft.platform)} draft image` });
     }
   });
 
