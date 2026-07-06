@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Role, SocialPlatform } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/types.js';
@@ -143,18 +143,14 @@ export class PromptTemplatesService {
     });
   }
 
-  async reset(platform: SocialPlatform, user: AuthenticatedUser) {
+  async reset(platform: string, user: AuthenticatedUser) {
     this.ensureAdmin(user);
-    const organizationId = await this.defaultOrganizationId(user.id);
-    const defaults = defaultPromptTemplates[platform];
-
-    if (!defaults) {
-      throw new NotFoundException('Prompt defaults were not found for this platform.');
-    }
+    const cleanPlatform = this.parsePlatform(platform);
+    const defaults = defaultPromptTemplates[cleanPlatform];
 
     return this.upsert(
       {
-        platform,
+        platform: cleanPlatform,
         purpose: PROMPT_PURPOSE_IMAGE,
         ...defaults,
         active: true,
@@ -167,9 +163,9 @@ export class PromptTemplatesService {
     const rendered = await this.renderImagePrompt({
       platform: dto.platform,
       article: {
-        title: dto.title?.trim() || 'Example WordPress article',
-        excerpt: dto.excerpt?.trim() || 'A concise article summary used for image direction.',
-        contentText: dto.content?.trim() || null,
+        title: nonEmpty(dto.title?.trim(), 'Example WordPress article'),
+        excerpt: nonEmpty(dto.excerpt?.trim(), 'A concise article summary used for image direction.'),
+        contentText: nonEmptyOrNull(dto.content?.trim()),
         url: 'https://example.com/article',
         categoryNames: this.parseCsv(dto.categories),
       },
@@ -201,7 +197,7 @@ export class PromptTemplatesService {
       articleExcerpt: input.article.excerpt,
       articleContext: this.truncate(input.article.contentText ?? input.article.excerpt, 1200),
       articleUrl: input.article.url,
-      categories: input.article.categoryNames.join(', ') || 'social media article',
+      categories: nonEmpty(input.article.categoryNames.join(', '), 'social media article'),
       platform: platformTitle(input.platform),
       captionTitle: input.captionTitle ?? input.article.title,
       captionBody: input.captionBody ?? '',
@@ -220,7 +216,7 @@ export class PromptTemplatesService {
         renderedStyleNotes ? `Style notes: ${renderedStyleNotes}` : '',
         renderedNegative ? `Negative prompt: ${renderedNegative}` : '',
       ].filter(Boolean).join('\n\n'),
-      promptVersion: `admin-${input.platform.toLowerCase()}-${template?.version ?? 1}`,
+      promptVersion: `admin-${input.platform.toLowerCase()}-${String(template?.version ?? 1)}`,
       templateId: template?.id ?? null,
     };
   }
@@ -274,13 +270,21 @@ export class PromptTemplatesService {
     }
   }
 
+  private parsePlatform(platform: string): SocialPlatform {
+    if (!Object.values(SocialPlatform).includes(platform as SocialPlatform)) {
+      throw new BadRequestException('Unsupported social platform.');
+    }
+
+    return platform as SocialPlatform;
+  }
+
   private purpose(value?: string) {
-    return value?.trim().toUpperCase() || PROMPT_PURPOSE_IMAGE;
+    return nonEmpty(value?.trim().toUpperCase(), PROMPT_PURPOSE_IMAGE);
   }
 
   private optionalTrim(value?: string): string | undefined {
     const clean = value?.trim();
-    return clean || undefined;
+    return nonEmptyOrUndefined(clean);
   }
 
   private parseCsv(value?: string): string[] {
@@ -323,4 +327,16 @@ export class PromptTemplatesService {
 
 function platformTitle(platform: SocialPlatform): string {
   return platform.charAt(0) + platform.slice(1).toLowerCase();
+}
+
+function nonEmpty(value: string | undefined, fallback: string): string {
+  return value && value.length > 0 ? value : fallback;
+}
+
+function nonEmptyOrNull(value: string | undefined): string | null {
+  return value && value.length > 0 ? value : null;
+}
+
+function nonEmptyOrUndefined(value: string | undefined): string | undefined {
+  return value && value.length > 0 ? value : undefined;
 }

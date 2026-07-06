@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, UnprocessableEntityException, UseGuards } from '@nestjs/common';
-import { PublishJobStatus } from '@prisma/client';
+import { PublishJobStatus, SocialDraftStatus } from '@prisma/client';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -27,26 +27,66 @@ export class SchedulerController {
       throw new UnprocessableEntityException('User is not assigned to an organization.');
     }
 
-    const posts = await this.prisma.publishJob.findMany({
-      where: { organizationId: organization.id },
-      orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'desc' }],
-      take: 200,
-    });
+    const [posts, drafts] = await Promise.all([
+      this.prisma.publishJob.findMany({
+        where: { organizationId: organization.id },
+        orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'desc' }],
+        take: 200,
+      }),
+      this.prisma.socialDraft.findMany({
+        where: {
+          article: {
+            connection: {
+              organizationId: organization.id,
+            },
+          },
+          scheduledFor: { not: null },
+          status: { in: [SocialDraftStatus.SCHEDULED, SocialDraftStatus.PUBLISHED] },
+        },
+        include: {
+          article: {
+            select: {
+              title: true,
+              categoryNames: true,
+            },
+          },
+        },
+        orderBy: [{ scheduledFor: 'asc' }, { createdAt: 'desc' }],
+        take: 200,
+      }),
+    ]);
 
     return {
-      data: posts.map((post) => ({
-        id: post.id,
-        title: post.title,
-        caption: post.caption,
-        platform: post.platform,
-        channel: this.platformLabel(post.platform),
-        platformAccount: post.platformAccount,
-        scheduledFor: post.scheduledFor,
-        publishedAt: post.publishedAt,
-        status: post.status,
-        tags: post.hashtags,
-        createdAt: post.createdAt,
-      })),
+      data: [
+        ...posts.map((post) => ({
+          id: post.id,
+          source: 'publish-job',
+          title: post.title,
+          caption: post.caption,
+          platform: post.platform,
+          channel: this.platformLabel(post.platform),
+          platformAccount: post.platformAccount,
+          scheduledFor: post.scheduledFor,
+          publishedAt: post.publishedAt,
+          status: post.status,
+          tags: post.hashtags,
+          createdAt: post.createdAt,
+        })),
+        ...drafts.map((draft) => ({
+          id: draft.id,
+          source: 'draft',
+          title: draft.title || draft.article.title,
+          caption: draft.body,
+          platform: draft.platform,
+          channel: this.platformLabel(draft.platform),
+          platformAccount: null,
+          scheduledFor: draft.scheduledFor,
+          publishedAt: null,
+          status: draft.status === SocialDraftStatus.PUBLISHED ? PublishJobStatus.PUBLISHED : PublishJobStatus.SCHEDULED,
+          tags: draft.hashtags.length ? draft.hashtags : draft.article.categoryNames,
+          createdAt: draft.createdAt,
+        })),
+      ].sort((a, b) => new Date(a.scheduledFor ?? a.createdAt).getTime() - new Date(b.scheduledFor ?? b.createdAt).getTime()),
     };
   }
 

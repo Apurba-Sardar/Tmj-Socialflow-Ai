@@ -8,6 +8,7 @@ import {
   AtSign,
   BarChart3,
   Camera,
+  CalendarPlus,
   CalendarClock,
   CalendarDays,
   ChevronLeft,
@@ -27,6 +28,7 @@ import {
   Search,
   Send,
   Sun,
+  Wand2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -42,6 +44,7 @@ import { cn } from '@/lib/utils';
 
 type CalendarView = 'week' | 'month' | 'list';
 type Platform = 'PINTEREST' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'X';
+type CalendarSource = 'publish-job' | 'draft';
 type PublishStatus =
   | 'DRAFT'
   | 'PENDING_APPROVAL'
@@ -54,6 +57,7 @@ type PublishStatus =
 
 interface ScheduledPost {
   id: string;
+  source: CalendarSource;
   title: string;
   caption: string | null;
   platform: Platform;
@@ -68,6 +72,7 @@ interface ScheduledPost {
 
 interface ApiPost {
   id: string;
+  source?: CalendarSource;
   title: string;
   caption: string | null;
   platform: Platform;
@@ -78,6 +83,36 @@ interface ApiPost {
   status: PublishStatus;
   tags: string[];
   createdAt: string;
+}
+
+type DraftStatus = 'DRAFT' | 'APPROVED' | 'SCHEDULED' | 'PUBLISHED' | 'REJECTED';
+
+interface GeneratedDraft {
+  id: string;
+  platform: Platform;
+  status: DraftStatus;
+  title: string;
+  body: string;
+  hashtags: string[];
+  callToAction: string | null;
+  mediaUrl: string | null;
+  sourceUrl: string;
+  scheduledFor: string | null;
+  createdAt: string;
+  article: {
+    id: string;
+    wordpressId: number;
+    title: string;
+    url: string;
+    categoryNames: string[];
+  };
+}
+
+interface DraftsResponse {
+  data: GeneratedDraft[];
+  pagination: {
+    total: number;
+  };
 }
 
 interface DraftForm {
@@ -125,11 +160,17 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
   const [view, setView] = useState<CalendarView>('week');
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
+  const [drafts, setDrafts] = useState<GeneratedDraft[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
+  const [draftSearch, setDraftSearch] = useState('');
+  const [draftFilter, setDraftFilter] = useState<Platform | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [schedulingDraftId, setSchedulingDraftId] = useState<string | null>(null);
+  const [draggedDraftId, setDraggedDraftId] = useState<string | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -143,7 +184,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
   useEffect(() => {
     setDarkMode(document.documentElement.classList.contains('dark'));
-    void loadPosts();
+    void loadCalendarData();
   }, []);
 
   useEffect(() => {
@@ -179,6 +220,27 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const scheduledCount = posts.filter((post) => post.status === 'SCHEDULED').length;
   const needsReviewCount = posts.filter((post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED').length;
   const publishedCount = posts.filter((post) => post.status === 'PUBLISHED').length;
+  const unscheduledDrafts = useMemo(() => {
+    const cleanSearch = draftSearch.trim().toLowerCase();
+
+    return drafts.filter((draft) => {
+      const available = !draft.scheduledFor && (draft.status === 'DRAFT' || draft.status === 'APPROVED');
+      const platformMatch = draftFilter === 'ALL' || draft.platform === draftFilter;
+      const searchMatch =
+        !cleanSearch ||
+        draft.title.toLowerCase().includes(cleanSearch) ||
+        draft.body.toLowerCase().includes(cleanSearch) ||
+        draft.article.title.toLowerCase().includes(cleanSearch);
+
+      return available && platformMatch && searchMatch;
+    });
+  }, [draftFilter, draftSearch, drafts]);
+  const scheduledDraftCount = drafts.filter((draft) => draft.scheduledFor).length;
+  const dailySlotsUsed = selectedDayPosts.length;
+
+  async function loadCalendarData() {
+    await Promise.all([loadPosts(), loadDrafts()]);
+  }
 
   async function loadPosts() {
     setLoading(true);
@@ -198,6 +260,28 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       notify(error instanceof Error ? error.message : 'Scheduler failed to load.', 'warning');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadDrafts() {
+    setLoadingDrafts(true);
+    try {
+      const params = new URLSearchParams({ page: '1', perPage: '200' });
+      const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts?${params.toString()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error('Generated drafts could not be loaded.');
+      }
+
+      const payload = (await response.json()) as DraftsResponse;
+      setDrafts(payload.data);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Draft inbox failed to load.', 'warning');
+    } finally {
+      setLoadingDrafts(false);
     }
   }
 
@@ -228,12 +312,45 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
       notify('Post scheduled.', 'success');
       setForm((current) => ({ ...current, title: '', caption: '' }));
-      await loadPosts();
+      await loadCalendarData();
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Post scheduling failed.', 'warning');
     } finally {
       setCreating(false);
     }
+  }
+
+  async function scheduleGeneratedDraft(draftId: string, date: string, hour: number, minute = 0) {
+    setSchedulingDraftId(draftId);
+    try {
+      const scheduledFor = new Date(`${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`);
+      const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draftId}/schedule`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledFor: scheduledFor.toISOString() }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Draft could not be scheduled.');
+      }
+
+      notify('Draft scheduled on the calendar.', 'success');
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Draft scheduling failed.', 'warning');
+    } finally {
+      setSchedulingDraftId(null);
+      setDraggedDraftId(null);
+    }
+  }
+
+  function scheduleDraggedDraft(date: string, hour: number) {
+    if (!draggedDraftId) {
+      return;
+    }
+
+    void scheduleGeneratedDraft(draggedDraftId, date, hour);
   }
 
   function notify(message: string, tone: Toast['tone']) {
@@ -306,6 +423,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
             <section className="grid gap-4 xl:grid-cols-[1fr_22rem]">
               <div className="space-y-4">
                 <PlannerHero
+                  draftCount={unscheduledDrafts.length}
+                  scheduledDraftCount={scheduledDraftCount}
                   needsReviewCount={needsReviewCount}
                   publishedCount={publishedCount}
                   scheduledCount={scheduledCount}
@@ -315,7 +434,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 />
                 <PlannerFilters
                   onRefresh={() => {
-                    void loadPosts();
+                    void loadCalendarData();
                   }}
                   search={search}
                   selectedPlatform={selectedPlatform}
@@ -333,29 +452,56 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
               />
             </section>
 
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <section className="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+              <DraftInbox
+                drafts={unscheduledDrafts}
+                draftFilter={draftFilter}
+                draftSearch={draftSearch}
+                loading={loadingDrafts}
+                schedulingDraftId={schedulingDraftId}
+                selectedDate={selectedDate}
+                setDraftFilter={setDraftFilter}
+                setDraftSearch={setDraftSearch}
+                onDragEnd={() => {
+                  setDraggedDraftId(null);
+                }}
+                onDragStart={setDraggedDraftId}
+                onRefresh={() => {
+                  void loadDrafts();
+                }}
+                onSchedule={(draftId, hour) => {
+                  void scheduleGeneratedDraft(draftId, selectedDate, hour);
+                }}
+              />
               <div className="min-w-0">
                 {view === 'month' ? (
                   <MonthPlanner
+                    draggedDraftId={draggedDraftId}
                     posts={filteredPosts}
                     selectedDate={selectedDate}
                     visibleDates={visibleDates}
                     onSelectDate={setSelectedDate}
+                    onDropDraft={(date) => {
+                      scheduleDraggedDraft(date, 9);
+                    }}
                   />
                 ) : view === 'list' ? (
                   <ListPlanner posts={filteredPosts} />
                 ) : (
                   <WeekPlanner
+                    draggedDraftId={draggedDraftId}
                     loading={loading}
                     posts={filteredPosts}
                     selectedDate={selectedDate}
                     visibleDates={visibleDates}
                     onSelectDate={setSelectedDate}
+                    onDropDraft={scheduleDraggedDraft}
                   />
                 )}
               </div>
 
               <aside className="grid gap-5">
+                <DayWorkload date={selectedDate} posts={selectedDayPosts} draftCount={dailySlotsUsed} />
                 <DayAgenda date={selectedDate} posts={selectedDayPosts} />
                 <ChannelHealth posts={posts} />
                 <ReviewQueue posts={posts} />
@@ -412,6 +558,8 @@ function PlannerHero({
   selectedDate,
   view,
   scheduledCount,
+  draftCount,
+  scheduledDraftCount,
   needsReviewCount,
   publishedCount,
   setSelectedDate,
@@ -419,6 +567,8 @@ function PlannerHero({
   selectedDate: string;
   view: CalendarView;
   scheduledCount: number;
+  draftCount: number;
+  scheduledDraftCount: number;
   needsReviewCount: number;
   publishedCount: number;
   setSelectedDate: (date: string) => void;
@@ -440,6 +590,8 @@ function PlannerHero({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SummaryPill label="Scheduled" value={scheduledCount} />
+          <SummaryPill label="Draft inbox" value={draftCount} />
+          <SummaryPill label="Drafts planned" value={scheduledDraftCount} tone="success" />
           <SummaryPill label="Review" value={needsReviewCount} tone="warning" />
           <SummaryPill label="Published" value={publishedCount} tone="success" />
           <Button
@@ -690,18 +842,207 @@ function CreatePostPanel({
   );
 }
 
+function DraftInbox({
+  drafts,
+  loading,
+  selectedDate,
+  draftSearch,
+  draftFilter,
+  schedulingDraftId,
+  setDraftSearch,
+  setDraftFilter,
+  onDragStart,
+  onDragEnd,
+  onSchedule,
+  onRefresh,
+}: {
+  drafts: GeneratedDraft[];
+  loading: boolean;
+  selectedDate: string;
+  draftSearch: string;
+  draftFilter: Platform | 'ALL';
+  schedulingDraftId: string | null;
+  setDraftSearch: (value: string) => void;
+  setDraftFilter: (platform: Platform | 'ALL') => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onSchedule: (id: string, hour: number) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <Card className="h-fit overflow-hidden border-border/80 bg-card/95 dark:border-white/10 xl:sticky xl:top-24">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wand2 className="h-4 w-4" />
+              Generated drafts
+            </CardTitle>
+            <CardDescription>Drag content into daily or weekly slots.</CardDescription>
+          </div>
+          <Button aria-label="Refresh drafts" onClick={onRefresh} size="sm" variant="outline">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            onChange={(event) => {
+              setDraftSearch(event.target.value);
+            }}
+            placeholder="Search generated drafts"
+            value={draftSearch}
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <FilterChip
+            active={draftFilter === 'ALL'}
+            label="All"
+            onClick={() => {
+              setDraftFilter('ALL');
+            }}
+          />
+          {platformOptions.map((item) => (
+            <button
+              aria-label={item.label}
+              className={cn(
+                'flex h-9 w-10 shrink-0 items-center justify-center rounded-lg border transition',
+                draftFilter === item.platform
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background/70 hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.03]',
+              )}
+              key={item.platform}
+              onClick={() => {
+                setDraftFilter(item.platform);
+              }}
+              type="button"
+            >
+              <item.icon className={cn('h-4 w-4', draftFilter === item.platform ? '' : item.tone)} />
+            </button>
+          ))}
+        </div>
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
+          Drop a draft onto an hour cell, or use quick schedule for {weekdayLabel(selectedDate)}.
+        </div>
+        <div className="grid max-h-[46rem] gap-3 overflow-auto pr-1">
+          {loading ? (
+            <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground dark:border-white/10">
+              <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+              Loading generated drafts
+            </div>
+          ) : drafts.length ? (
+            drafts.map((draft) => (
+              <GeneratedDraftCard
+                draft={draft}
+                key={draft.id}
+                scheduling={schedulingDraftId === draft.id}
+                onDragEnd={onDragEnd}
+                onDragStart={() => {
+                  onDragStart(draft.id);
+                }}
+                onSchedule={(hour) => {
+                  onSchedule(draft.id, hour);
+                }}
+              />
+            ))
+          ) : (
+            <EmptyState label="No unscheduled generated drafts match this filter." />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GeneratedDraftCard({
+  draft,
+  scheduling,
+  onDragStart,
+  onDragEnd,
+  onSchedule,
+}: {
+  draft: GeneratedDraft;
+  scheduling: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onSchedule: (hour: number) => void;
+}) {
+  const config = platformOptions.find((item) => item.platform === draft.platform) ?? fallbackPlatform;
+  const Icon = config.icon;
+
+  return (
+    <article
+      className="cursor-grab rounded-xl border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/50 active:cursor-grabbing dark:border-white/10 dark:bg-white/[0.04]"
+      draggable
+      onDragEnd={onDragEnd}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draft.id);
+        onDragStart();
+      }}
+    >
+      <div className="flex gap-3">
+        {draft.mediaUrl ? (
+          <img alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" src={draft.mediaUrl} />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-white/[0.06]">
+            <Icon className={cn('h-5 w-5', config.tone)} />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Icon className={cn('h-3.5 w-3.5', config.tone)} />
+            <span className="text-xs font-medium text-muted-foreground">{config.label}</span>
+            <Badge variant="secondary">{titleCase(draft.status)}</Badge>
+          </div>
+          <h3 className="mt-1 line-clamp-2 text-sm font-semibold">{draft.title}</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{draft.body}</p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {draft.hashtags.slice(0, 3).map((tag) => (
+          <Badge key={tag} variant="outline">{tag.startsWith('#') ? tag : `#${tag}`}</Badge>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[9, 13, 18].map((hour) => (
+          <Button
+            disabled={scheduling}
+            key={hour}
+            onClick={() => {
+              onSchedule(hour);
+            }}
+            size="sm"
+            variant="outline"
+          >
+            {scheduling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+            {formatHour(hour)}
+          </Button>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function WeekPlanner({
   visibleDates,
   selectedDate,
   posts,
   loading,
+  draggedDraftId,
   onSelectDate,
+  onDropDraft,
 }: {
   visibleDates: string[];
   selectedDate: string;
   posts: ScheduledPost[];
   loading: boolean;
+  draggedDraftId: string | null;
   onSelectDate: (date: string) => void;
+  onDropDraft: (date: string, hour: number) => void;
 }) {
   return (
     <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
@@ -739,7 +1080,28 @@ function WeekPlanner({
               {visibleDates.map((date) => {
                 const slotPosts = postsForSlot(posts, date, hour);
                 return (
-                  <div className="space-y-2 border-l border-border p-2 dark:border-white/10" key={`${date}-${String(hour)}`}>
+                  <div
+                    className={cn(
+                      'space-y-2 border-l border-border p-2 transition dark:border-white/10',
+                      draggedDraftId ? 'bg-primary/5 ring-1 ring-inset ring-primary/15' : '',
+                    )}
+                    key={`${date}-${String(hour)}`}
+                    onDragOver={(event) => {
+                      if (draggedDraftId) {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      onDropDraft(date, hour);
+                    }}
+                  >
+                    {draggedDraftId && !slotPosts.length ? (
+                      <div className="flex h-full min-h-20 items-center justify-center rounded-lg border border-dashed border-primary/40 text-xs font-medium text-primary">
+                        Drop at {formatHour(hour)}
+                      </div>
+                    ) : null}
                     {slotPosts.map((post) => (
                       <PostCard compact key={post.id} post={post} />
                     ))}
@@ -759,8 +1121,19 @@ function WeekPlanner({
               className={cn(
                 'rounded-lg border border-border bg-background/70 p-3 text-left dark:border-white/10 dark:bg-white/[0.03]',
                 date === selectedDate ? 'border-primary ring-2 ring-primary/20' : '',
+                draggedDraftId ? 'border-primary/50 bg-primary/5' : '',
               )}
               key={date}
+              onDragOver={(event) => {
+                if (draggedDraftId) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                onDropDraft(date, 9);
+              }}
               onClick={() => {
                 onSelectDate(date);
               }}
@@ -790,12 +1163,16 @@ function MonthPlanner({
   visibleDates,
   selectedDate,
   posts,
+  draggedDraftId,
   onSelectDate,
+  onDropDraft,
 }: {
   visibleDates: string[];
   selectedDate: string;
   posts: ScheduledPost[];
+  draggedDraftId: string | null;
   onSelectDate: (date: string) => void;
+  onDropDraft: (date: string) => void;
 }) {
   const currentMonth = parseLocalDate(selectedDate).getMonth();
 
@@ -818,9 +1195,20 @@ function MonthPlanner({
               className={cn(
                 'min-h-36 border-b border-r border-border p-3 text-left transition hover:bg-muted/45 dark:border-white/10 dark:hover:bg-white/[0.04]',
                 date === selectedDate ? 'bg-primary/10 ring-2 ring-inset ring-primary/25' : '',
+                draggedDraftId ? 'bg-primary/5' : '',
                 isMuted ? 'text-muted-foreground' : '',
               )}
               key={date}
+              onDragOver={(event) => {
+                if (draggedDraftId) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                onDropDraft(date);
+              }}
               onClick={() => {
                 onSelectDate(date);
               }}
@@ -831,6 +1219,11 @@ function MonthPlanner({
                 {dayPosts.length ? <Badge variant="secondary">{dayPosts.length}</Badge> : null}
               </div>
               <div className="mt-3 space-y-1.5">
+                {draggedDraftId && !dayPosts.length ? (
+                  <div className="rounded-md border border-dashed border-primary/40 px-2 py-3 text-center text-xs font-medium text-primary">
+                    Drop here
+                  </div>
+                ) : null}
                 {dayPosts.slice(0, 3).map((post) => (
                   <MonthPostPill key={post.id} post={post} />
                 ))}
@@ -861,6 +1254,65 @@ function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function DayWorkload({ date, posts, draftCount }: { date: string; posts: ScheduledPost[]; draftCount: number }) {
+  const byPlatform = platformOptions.map((item) => ({
+    ...item,
+    count: posts.filter((post) => post.platform === item.platform).length,
+  }));
+  const suggestedHours = [9, 12, 15, 18].filter((hour) => !postsForSlot(posts, date, hour).length);
+
+  return (
+    <Card className="border-border/80 bg-card/95 dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarPlus className="h-4 w-4" />
+          Daily planner
+        </CardTitle>
+        <CardDescription>{weekdayLabel(date)} publishing capacity.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid grid-cols-3 gap-2">
+          <MiniMetric label="Planned" value={draftCount} />
+          <MiniMetric label="Open slots" value={Math.max(0, 8 - posts.length)} />
+          <MiniMetric label="Channels" value={byPlatform.filter((item) => item.count > 0).length} />
+        </div>
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Best open windows</div>
+          <div className="flex flex-wrap gap-2">
+            {suggestedHours.length ? (
+              suggestedHours.map((hour) => (
+                <Badge key={hour} variant="outline">{formatHour(hour)}</Badge>
+              ))
+            ) : (
+              <span className="text-sm text-muted-foreground">This day is tightly packed.</span>
+            )}
+          </div>
+        </div>
+        <div className="grid gap-2">
+          {byPlatform.map((item) => (
+            <div className="flex items-center justify-between gap-3 text-sm" key={item.platform}>
+              <span className="flex items-center gap-2">
+                <item.icon className={cn('h-4 w-4', item.tone)} />
+                {item.label}
+              </span>
+              <Badge variant={item.count ? 'secondary' : 'outline'}>{item.count}</Badge>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-background/70 p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="text-lg font-semibold">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
   );
 }
 
@@ -949,6 +1401,7 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatDateTime(post.scheduledFor)}</span>
             <span>{post.channel}</span>
+            <span>{post.source === 'draft' ? 'Generated draft' : 'Manual post'}</span>
             {post.platformAccount ? <span>{post.platformAccount}</span> : null}
           </div>
           {post.tags.length && !compact ? (
@@ -1129,6 +1582,7 @@ function titleCase(value: string): string {
 function postFromApi(post: ApiPost): ScheduledPost {
   return {
     id: post.id,
+    source: post.source ?? 'publish-job',
     title: post.title,
     caption: post.caption,
     platform: post.platform,

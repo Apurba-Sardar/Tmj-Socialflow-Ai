@@ -841,7 +841,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   <div>
                     <div className="text-sm font-semibold">Current template</div>
                     <div className="text-xs text-muted-foreground">
-                      {selectedPrompt ? `Version ${selectedPrompt.version} - updated ${formatDate(selectedPrompt.updatedAt)}` : 'No saved prompt selected'}
+                      {selectedPrompt ? `Version ${String(selectedPrompt.version)} - updated ${formatDate(selectedPrompt.updatedAt)}` : 'No saved prompt selected'}
                     </div>
                   </div>
                   <Badge variant="secondary">{promptForm.platform}</Badge>

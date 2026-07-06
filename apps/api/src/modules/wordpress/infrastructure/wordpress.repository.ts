@@ -554,7 +554,19 @@ export class WordPressRepository {
       return [];
     }
 
-    await this.prisma.socialDraft.createMany({ data: drafts });
+    await this.prisma.socialDraft.createMany({
+      data: drafts.map((draft) => ({
+        articleId: draft.articleId,
+        repurposeJobId: draft.repurposeJobId,
+        platform: draft.platform,
+        title: draft.title,
+        body: draft.body,
+        hashtags: draft.hashtags,
+        callToAction: draft.callToAction,
+        mediaUrl: draft.mediaUrl,
+        sourceUrl: draft.sourceUrl,
+      })),
+    });
     return this.prisma.socialDraft.findMany({
       where: {
         repurposeJobId: drafts[0]?.repurposeJobId,

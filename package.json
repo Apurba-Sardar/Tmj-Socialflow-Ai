@@ -15,7 +15,7 @@
     "test:integration": "npm run test:integration --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky",
+    "prepare": "node -e \"if (process.env.CI !== 'true' && process.env.NODE_ENV !== 'production') { try { require('child_process').execSync('husky', { stdio: 'inherit' }) } catch(e) {} }\"",
     "prisma:generate": "npm run prisma:generate -w @socialflow/database",
     "prisma:migrate": "npm run prisma:migrate -w @socialflow/database"
   },

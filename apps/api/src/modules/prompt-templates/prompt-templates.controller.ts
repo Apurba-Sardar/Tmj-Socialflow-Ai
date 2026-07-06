@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { SocialPlatform } from '@prisma/client';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -33,7 +32,7 @@ export class PromptTemplatesController {
   }
 
   @Post(':platform/reset')
-  reset(@Param('platform') platform: SocialPlatform, @CurrentUser() user: AuthenticatedUser) {
+  reset(@Param('platform') platform: string, @CurrentUser() user: AuthenticatedUser) {
     return this.promptTemplatesService.reset(platform, user);
   }
 }
