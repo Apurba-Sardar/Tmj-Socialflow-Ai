@@ -647,7 +647,7 @@ export class WordPressRepository {
           regenerationHistory: true,
         },
       });
-    });
+    }, { timeout: 20_000 });
   }
 
   async markArticleRepurposed(articleId: string) {

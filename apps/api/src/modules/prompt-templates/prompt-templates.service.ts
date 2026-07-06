@@ -224,7 +224,7 @@ export class PromptTemplatesService {
 
   private productionCreativeBrief(platform: SocialPlatform): string {
     const base =
-      'Production quality requirements: create a premium, postable social media creative directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. Leave clean negative space for SocialFlow to overlay the headline later. Do not include text in the generated image itself.';
+      'Production quality requirements: create a premium, postable social media asset directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. The image must work alongside the separate caption in the app. Do not add any headline, caption, platform label, social network name, UI, logo, watermark, words, letters, numbers, signs, or readable text inside the image. No Instagram/Pinterest/Facebook/LinkedIn/X label should appear on the image.';
 
     const channel = {
       [SocialPlatform.PINTEREST]:

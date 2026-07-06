@@ -1,4 +1,21 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let currentDir = __dirname;
+while (currentDir) {
+  const envPath = path.join(currentDir, '.env');
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+  const parent = path.dirname(currentDir);
+  if (parent === currentDir) break;
+  currentDir = parent;
+}
+
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';

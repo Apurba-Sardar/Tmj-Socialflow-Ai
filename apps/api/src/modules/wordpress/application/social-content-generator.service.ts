@@ -224,7 +224,7 @@ export class SocialContentGeneratorService {
 
       return {
         ...draft,
-        mediaUrl: await this.composePostImage(b64Json, article, draft),
+        mediaUrl: await this.composePostImage(b64Json, draft),
         prompt: renderedPrompt.prompt,
         promptVersion: renderedPrompt.promptVersion,
       };
@@ -309,84 +309,15 @@ export class SocialContentGeneratorService {
 
   private async composePostImage(
     imageBase64: string,
-    article: ArticleForGeneration,
     draft: SocialDraftInput,
   ): Promise<string> {
     const size = this.visualSize(draft.platform);
-    const overlay = this.captionOverlay(article, draft, size);
     const image = await sharp(Buffer.from(imageBase64, 'base64'))
       .resize(size.width, size.height, { fit: 'cover', position: 'center' })
-      .composite([{ input: Buffer.from(overlay), left: 0, top: 0 }])
       .jpeg({ quality: 92, mozjpeg: true })
       .toBuffer();
 
     return `data:image/jpeg;base64,${image.toString('base64')}`;
-  }
-
-  private captionOverlay(
-    article: ArticleForGeneration,
-    draft: SocialDraftInput,
-    size: { width: number; height: number },
-  ): string {
-    const isPortrait = size.height > size.width;
-    const isSquare = size.height === size.width;
-    const isWide = size.width > size.height;
-    const headline = draft.title || article.title;
-    const subtitle = this.captionSnippet(draft.body);
-    const headlineLines = this.wrapText(headline, isPortrait ? 20 : isSquare ? 24 : 34, isWide ? 2 : 3);
-    const subtitleLines = this.wrapText(subtitle, isPortrait ? 28 : isSquare ? 34 : 54, isWide ? 1 : 2);
-    const padding = isPortrait ? 72 : isSquare ? 70 : 96;
-    const headlineY = isPortrait ? size.height - 470 : isSquare ? size.height - 330 : size.height - 230;
-    const headlineSize = isPortrait ? 58 : isSquare ? 48 : 48;
-    const headlineGap = isPortrait ? 66 : isSquare ? 56 : 54;
-    const subtitleStart = headlineY + headlineLines.length * headlineGap + (isWide ? 20 : 30);
-    const subtitleSize = isPortrait ? 28 : isSquare ? 25 : 25;
-    const scrimStart = isPortrait ? 0.35 : isSquare ? 0.42 : 0.28;
-    const accentY = headlineY - (isPortrait ? 70 : 54);
-
-    return `
-<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
-  <defs>
-    <linearGradient id="editorialScrim" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#050505" stop-opacity="0"/>
-      <stop offset="${scrimStart}" stop-color="#050505" stop-opacity="0.10"/>
-      <stop offset="0.72" stop-color="#050505" stop-opacity="0.54"/>
-      <stop offset="1" stop-color="#050505" stop-opacity="0.86"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="0">
-      <stop offset="0" stop-color="#8b5cf6"/>
-      <stop offset="1" stop-color="#22d3ee"/>
-    </linearGradient>
-    <filter id="textShadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000000" flood-opacity="0.42"/>
-    </filter>
-  </defs>
-  <rect width="${size.width}" height="${size.height}" fill="url(#editorialScrim)"/>
-  <rect x="${padding}" y="${accentY}" width="${isWide ? 230 : 190}" height="${isPortrait ? 12 : 10}" rx="999" fill="url(#accent)" opacity="0.96"/>
-  <text x="${padding}" y="${accentY - 22}" fill="#ffffff" opacity="0.78" font-size="${isPortrait ? 25 : 22}" font-family="Inter, Arial, sans-serif" font-weight="800" letter-spacing="3">${escapeXml(platformTitle(draft.platform).toUpperCase())}</text>
-  ${headlineLines
-    .map(
-      (line, index) =>
-        `<text x="${padding}" y="${headlineY + index * headlineGap}" fill="#ffffff" font-size="${headlineSize}" font-family="Inter, Arial, sans-serif" font-weight="900" filter="url(#textShadow)">${escapeXml(line)}</text>`,
-    )
-    .join('')}
-  ${subtitleLines
-    .map(
-      (line, index) =>
-        `<text x="${padding}" y="${subtitleStart + index * (subtitleSize + 13)}" fill="#ffffff" opacity="0.86" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif" font-weight="650" filter="url(#textShadow)">${escapeXml(line)}</text>`,
-    )
-    .join('')}
-</svg>`.trim();
-  }
-
-  private captionSnippet(body: string): string {
-    const firstLine = body
-      .replace(/#[a-zA-Z0-9]+/g, '')
-      .split(/\n|\. /)
-      .map((line) => line.trim())
-      .find(Boolean);
-
-    return this.truncate(firstLine ?? body, 150);
   }
 
   private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1536x1024' | '1024x1536' {
@@ -477,44 +408,37 @@ export class SocialContentGeneratorService {
     hashtags: string[],
   ): string {
     const size = this.visualSize(platform);
-    const titleLines = this.wrapText(article.title, platform === SocialPlatform.PINTEREST ? 19 : 30, 4);
-    const category = article.categoryNames[0] ?? platformTitle(platform);
-    const footerTags = hashtags.slice(0, 2).join('  ');
+    const topicSeed = `${article.title} ${article.excerpt} ${article.categoryNames.join(' ')} ${hashtags.join(' ')}`.length;
     const isPortrait = size.height > size.width;
     const palette = this.visualTheme(platform);
-    const cardX = isPortrait ? 82 : 116;
-    const cardY = isPortrait ? 104 : 84;
-    const cardWidth = size.width - cardX * 2;
-    const cardHeight = isPortrait ? 470 : 315;
-    const titleStart = cardY + (isPortrait ? 150 : 128);
-    const titleSize = isPortrait ? 62 : 58;
-    const lineGap = isPortrait ? 70 : 66;
+    const centerX = Math.round(size.width * (0.46 + (topicSeed % 7) * 0.01));
+    const centerY = Math.round(size.height * (isPortrait ? 0.43 : 0.48));
+    const mainRadius = isPortrait ? 210 : 170;
+    const accentRadius = isPortrait ? 112 : 90;
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
   <defs>
-    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+    <linearGradient id="backdrop" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0" stop-color="${palette.from}"/>
       <stop offset="0.55" stop-color="${palette.mid}"/>
       <stop offset="1" stop-color="${palette.to}"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#8b7b68" flood-opacity="0.18"/>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.88"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#76685c" flood-opacity="0.18"/>
     </filter>
   </defs>
-  <rect width="100%" height="100%" fill="url(#paper)"/>
-  <circle cx="${size.width - 125}" cy="${isPortrait ? 260 : 145}" r="${isPortrait ? 150 : 112}" fill="#ffffff" opacity="0.38"/>
-  <circle cx="${isPortrait ? 150 : 220}" cy="${size.height - (isPortrait ? 165 : 120)}" r="${isPortrait ? 220 : 170}" fill="#ffffff" opacity="0.25"/>
-  <path d="M${size.width * 0.62} ${size.height * 0.68} C${size.width * 0.74} ${size.height * 0.52}, ${size.width * 0.92} ${size.height * 0.7}, ${size.width * 0.86} ${size.height * 0.86}" fill="none" stroke="#8fb8a8" stroke-opacity="0.38" stroke-width="${isPortrait ? 16 : 12}" stroke-linecap="round"/>
-  <rect x="${cardX}" y="${cardY}" width="${cardWidth}" height="${cardHeight}" rx="${isPortrait ? 42 : 34}" fill="#fffaf1" opacity="0.92" filter="url(#shadow)"/>
-  <rect x="${cardX + 22}" y="${cardY + 22}" width="${cardWidth - 44}" height="${cardHeight - 44}" rx="${isPortrait ? 28 : 24}" fill="none" stroke="#3b3027" stroke-opacity="0.12" stroke-width="3"/>
-  <text x="${cardX + 52}" y="${cardY + 78}" fill="#8a6f5a" font-size="${isPortrait ? 26 : 23}" font-family="Inter, Arial, sans-serif" font-weight="800">${escapeXml(category)}</text>
-  ${titleLines
-    .map(
-      (line, index) =>
-        `<text x="${cardX + 52}" y="${titleStart + index * lineGap}" fill="#27221e" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="900">${escapeXml(line)}</text>`,
-    )
-    .join('')}
-  <text x="${cardX + 52}" y="${cardY + cardHeight - 60}" fill="#7b6d5f" opacity="0.88" font-size="${isPortrait ? 25 : 22}" font-family="Inter, Arial, sans-serif" font-weight="800">${escapeXml(footerTags || '#ContentMarketing')}</text>
+  <rect width="100%" height="100%" fill="url(#backdrop)"/>
+  <circle cx="${centerX}" cy="${centerY}" r="${mainRadius + 130}" fill="url(#glow)" opacity="0.55"/>
+  <ellipse cx="${centerX}" cy="${centerY + Math.round(mainRadius * 0.18)}" rx="${mainRadius * 1.24}" ry="${mainRadius * 0.78}" fill="#fffaf1" opacity="0.82" filter="url(#softShadow)"/>
+  <circle cx="${centerX - Math.round(mainRadius * 0.36)}" cy="${centerY - Math.round(mainRadius * 0.18)}" r="${accentRadius}" fill="#91c7b1" opacity="0.72"/>
+  <circle cx="${centerX + Math.round(mainRadius * 0.32)}" cy="${centerY - Math.round(mainRadius * 0.04)}" r="${Math.round(accentRadius * 0.88)}" fill="#f3b97c" opacity="0.74"/>
+  <circle cx="${centerX + Math.round(mainRadius * 0.05)}" cy="${centerY + Math.round(mainRadius * 0.26)}" r="${Math.round(accentRadius * 0.76)}" fill="#8fb5e8" opacity="0.62"/>
+  <path d="M${centerX - mainRadius} ${centerY + mainRadius * 0.42} C${centerX - mainRadius * 0.38} ${centerY + mainRadius * 0.72}, ${centerX + mainRadius * 0.42} ${centerY + mainRadius * 0.72}, ${centerX + mainRadius} ${centerY + mainRadius * 0.36}" fill="none" stroke="#7a9f8a" stroke-width="${isPortrait ? 18 : 14}" stroke-linecap="round" opacity="0.34"/>
+  <path d="M${centerX - mainRadius * 0.72} ${centerY - mainRadius * 0.62} C${centerX - mainRadius * 0.1} ${centerY - mainRadius * 0.92}, ${centerX + mainRadius * 0.42} ${centerY - mainRadius * 0.86}, ${centerX + mainRadius * 0.82} ${centerY - mainRadius * 0.52}" fill="none" stroke="#c9a46f" stroke-width="${isPortrait ? 12 : 10}" stroke-linecap="round" opacity="0.32"/>
 </svg>`.trim();
 
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -593,13 +517,4 @@ function platformTitle(platform: SocialPlatform): string {
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
