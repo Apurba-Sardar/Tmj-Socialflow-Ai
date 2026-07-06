@@ -450,7 +450,6 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 draftSearch={draftSearch}
                 loading={loadingDrafts}
                 schedulingDraftId={schedulingDraftId}
-                selectedDate={selectedDate}
                 setDraftFilter={setDraftFilter}
                 setDraftSearch={setDraftSearch}
                 onDragEnd={() => {
@@ -576,18 +575,18 @@ function PlannerHero({
 
   return (
     <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
-      <CardContent className="grid gap-4 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+      <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-center">
         <div className="min-w-0">
           <Badge className="mb-3 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" variant="outline">
             <CalendarClock className="mr-1 h-3.5 w-3.5" />
             Meta-style publishing planner
           </Badge>
           <h2 className="text-2xl font-semibold tracking-normal">{formatDateLabel(selectedDate, view)}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Review scheduled content, select a day, and plan posts without leaving the calendar.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Drag generated drafts onto the calendar, balance channels, and plan each day from one workspace.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
           <SummaryPill label="Scheduled" value={scheduledCount} />
           <SummaryPill label="Draft inbox" value={draftCount} />
           <SummaryPill label="Drafts planned" value={scheduledDraftCount} tone="success" />
@@ -775,9 +774,9 @@ function CreatePostPanel({
           <Plus className="h-4 w-4" />
           Schedule post
         </CardTitle>
-        <CardDescription>Create a queue-ready post for a selected channel.</CardDescription>
+        <CardDescription>Manual post, separate from generated drafts.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="grid gap-2.5">
         <Field label="Channel">
           <select
             className="sf-focus-ring h-10 rounded-lg border border-input bg-background/80 px-3 text-sm dark:bg-white/[0.035]"
@@ -804,7 +803,7 @@ function CreatePostPanel({
         </Field>
         <Field label="Caption">
           <textarea
-            className="sf-focus-ring min-h-24 resize-none rounded-lg border border-input bg-background/80 px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground dark:bg-white/[0.035]"
+            className="sf-focus-ring min-h-20 resize-none rounded-lg border border-input bg-background/80 px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground dark:bg-white/[0.035]"
             onChange={(event) => {
               setForm((value) => ({ ...value, caption: event.target.value }));
             }}
@@ -844,7 +843,6 @@ function CreatePostPanel({
 function DraftInbox({
   drafts,
   loading,
-  selectedDate,
   draftSearch,
   draftFilter,
   schedulingDraftId,
@@ -857,7 +855,6 @@ function DraftInbox({
 }: {
   drafts: GeneratedDraft[];
   loading: boolean;
-  selectedDate: string;
   draftSearch: string;
   draftFilter: Platform | 'ALL';
   schedulingDraftId: string | null;
@@ -877,7 +874,7 @@ function DraftInbox({
               <Wand2 className="h-4 w-4" />
               Generated drafts
             </CardTitle>
-            <CardDescription>Drag content into daily or weekly slots.</CardDescription>
+            <CardDescription>Drag active drafts into daily or weekly slots.</CardDescription>
           </div>
           <Button aria-label="Refresh drafts" onClick={onRefresh} size="sm" variant="outline">
             <RefreshCw className="h-4 w-4" />
@@ -924,7 +921,7 @@ function DraftInbox({
           ))}
         </div>
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
-          Drop a draft onto an hour cell, or use quick schedule for {weekdayLabel(selectedDate)}.
+          Showing draft and scheduled generated content. Drop any item onto a time slot to schedule or move it.
         </div>
         <div className="grid max-h-[46rem] gap-3 overflow-auto pr-1">
           {loading ? (
