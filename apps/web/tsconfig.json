@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "allowJs": false,
     "jsx": "preserve",
     "module": "ESNext",
@@ -20,7 +21,7 @@
   },
   "include": [
     "next-env.d.ts",
-    "next.config.ts",
+    "next.config.mjs",
     "vitest.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
