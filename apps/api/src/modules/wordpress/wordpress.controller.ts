@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -131,5 +131,10 @@ export class WordPressController {
   @Patch('drafts/:id/schedule')
   scheduleDraft(@Param('id') id: string, @Body() dto: ScheduleDraftDto) {
     return this.wordpressService.scheduleDraft(id, dto);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(@Param('id') id: string) {
+    return this.wordpressService.deleteDraft(id);
   }
 }

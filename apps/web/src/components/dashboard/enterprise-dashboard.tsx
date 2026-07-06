@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Clock3,
   Contact,
+  Trash2,
   FileCheck2,
   FileText,
   Image,
@@ -189,12 +190,25 @@ interface WordPressDraft {
   status: 'DRAFT' | 'APPROVED' | 'SCHEDULED' | 'PUBLISHED' | 'REJECTED';
   title: string;
   body: string;
+  mediaUrl: string | null;
   sourceUrl: string;
   scheduledFor: string | null;
   article?: {
+    id: string;
     title: string;
     wordpressId: number;
+    url?: string;
+    categoryNames?: string[];
   };
+}
+
+interface WordPressDraftGroup {
+  key: string;
+  title: string;
+  wordpressId: number | null;
+  sourceUrl: string;
+  categories: string[];
+  drafts: WordPressDraft[];
 }
 
 interface PaginatedResponse<T> {
@@ -375,7 +389,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
           cache: 'no-store',
           credentials: 'include',
         }),
-        fetch(`${getApiBaseUrl()}/api/wordpress/drafts?perPage=6&page=1`, {
+        fetch(`${getApiBaseUrl()}/api/wordpress/drafts?perPage=100&page=1`, {
           cache: 'no-store',
           credentials: 'include',
         }),
@@ -506,24 +520,46 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   }
 
   async function approveWordPressDraft(draft: WordPressDraft) {
-    setWordpressBusyId(draft.id);
+    await approveWordPressDrafts([draft]);
+  }
+
+  async function approveWordPressDrafts(drafts: WordPressDraft[]) {
+    const approvableDrafts = drafts.filter((draft) => draft.status === 'DRAFT');
+
+    if (!approvableDrafts.length) {
+      notify('Selected drafts are already approved.', 'info');
+      return;
+    }
+
+    setWordpressBusyId(approvableDrafts.length === 1 ? approvableDrafts[0]?.id ?? 'drafts' : 'drafts-bulk-approve');
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`, {
-        method: 'PATCH',
-        credentials: 'include',
-      });
+      await Promise.all(
+        approvableDrafts.map(async (draft) => {
+          const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`, {
+            method: 'PATCH',
+            credentials: 'include',
+          });
 
-      if (!response.ok) {
-        throw new Error('Could not approve draft.');
-      }
+          if (!response.ok) {
+            throw new Error(`Could not approve ${platformLabel(draft.platform)} draft.`);
+          }
+        }),
+      );
 
       await refreshWordPressData();
-      pushActivity('WordPress draft approved', draft.title, 'text-emerald-500', FileCheck2);
-      notify('WordPress draft approved.');
+      pushActivity(
+        approvableDrafts.length === 1 ? 'WordPress draft approved' : 'WordPress campaign drafts approved',
+        approvableDrafts.length === 1
+          ? approvableDrafts[0]?.title ?? 'Draft'
+          : `${String(approvableDrafts.length)} channel drafts approved`,
+        'text-emerald-500',
+        FileCheck2,
+      );
+      notify(approvableDrafts.length === 1 ? 'WordPress draft approved.' : 'Selected channel drafts approved.');
     } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not approve draft.');
-      notify('Could not approve draft.', 'warning');
+      setWordpressError(error instanceof Error ? error.message : 'Could not approve drafts.');
+      notify('Could not approve drafts.', 'warning');
     } finally {
       setWordpressBusyId(null);
     }
@@ -551,6 +587,30 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
     } catch (error) {
       setWordpressError(error instanceof Error ? error.message : 'Could not schedule draft.');
       notify('Could not schedule draft.', 'warning');
+    } finally {
+      setWordpressBusyId(null);
+    }
+  }
+
+  async function deleteWordPressDraft(draft: WordPressDraft) {
+    setWordpressBusyId(draft.id);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Could not delete draft.');
+      }
+
+      await refreshWordPressData();
+      pushActivity('WordPress draft deleted', draft.title, 'text-rose-500', Trash2);
+      notify('Draft deleted.', 'info');
+    } catch (error) {
+      setWordpressError(error instanceof Error ? error.message : 'Could not delete draft.');
+      notify('Could not delete draft.', 'warning');
     } finally {
       setWordpressBusyId(null);
     }
@@ -698,8 +758,14 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               drafts={filteredWordPressDrafts}
               error={wordpressError}
               loading={wordpressLoading}
-              onApproveDraft={(draft) => {
-                void approveWordPressDraft(draft);
+                onApproveDraft={(draft) => {
+                  void approveWordPressDraft(draft);
+                }}
+                onApproveDrafts={(drafts) => {
+                  void approveWordPressDrafts(drafts);
+                }}
+              onDeleteDraft={(draft) => {
+                void deleteWordPressDraft(draft);
               }}
               onRefresh={() => {
                 void refreshWordPressData();
@@ -1100,6 +1166,8 @@ function WordPressLibraryPanel({
   error,
   loading,
   onApproveDraft,
+  onApproveDrafts,
+  onDeleteDraft,
   onRefresh,
   onRepurpose,
   onScheduleDraft,
@@ -1112,12 +1180,18 @@ function WordPressLibraryPanel({
   error: string | null;
   loading: boolean;
   onApproveDraft: (draft: WordPressDraft) => void;
+  onApproveDrafts: (drafts: WordPressDraft[]) => void;
+  onDeleteDraft: (draft: WordPressDraft) => void;
   onRefresh: () => void;
   onRepurpose: (article: WordPressArticle) => void;
   onScheduleDraft: (draft: WordPressDraft) => void;
   onSync: () => void;
   total: number;
 }) {
+  const draftGroups = useMemo(() => groupWordPressDrafts(drafts), [drafts]);
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  const selectedGroup = draftGroups.find((group) => group.key === selectedGroupKey) ?? null;
+
   return (
     <Card className="dark:border-white/10 dark:bg-white/[0.045]" id="wordpress">
       <CardHeader className="p-4 pb-3">
@@ -1245,35 +1319,163 @@ function WordPressLibraryPanel({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Generated Drafts</p>
-              <p className="text-xs text-muted-foreground">Approve or schedule campaign assets.</p>
+              <p className="text-xs text-muted-foreground">Grouped by source article for channel review.</p>
             </div>
-            <Badge variant="outline">{String(drafts.length)}</Badge>
+            <Badge variant="outline">
+              {String(draftGroups.length)} campaigns
+            </Badge>
           </div>
           <div className="space-y-2">
-            {drafts.length ? (
-              drafts.map((draft) => (
+            {draftGroups.length ? (
+              draftGroups.map((group) => {
+                const approvedCount = group.drafts.filter((draft) => draft.status === 'APPROVED').length;
+                const scheduledCount = group.drafts.filter((draft) => draft.status === 'SCHEDULED').length;
+                const pendingCount = group.drafts.filter((draft) => draft.status === 'DRAFT').length;
+
+                return (
+                  <button
+                    className="w-full rounded-md border bg-card p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted dark:border-white/10 dark:bg-white/[0.045] dark:hover:bg-white/[0.07]"
+                    key={group.key}
+                    onClick={() => {
+                      setSelectedGroupKey(group.key);
+                    }}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          {group.wordpressId ? (
+                            <Badge variant="outline">WP #{String(group.wordpressId)}</Badge>
+                          ) : null}
+                          <Badge variant={pendingCount > 0 ? 'outline' : 'success'}>
+                            {String(group.drafts.length)} channel drafts
+                          </Badge>
+                        </div>
+                        <p className="line-clamp-2 text-sm font-semibold">{group.title}</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {group.drafts.map((draft) => (
+                            <span
+                              className={cn(
+                                'rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                                channelTone(draft.platform),
+                              )}
+                              key={draft.id}
+                            >
+                              {platformLabel(draft.platform)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <ArrowUpRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-md bg-muted/70 px-2 py-2 dark:bg-white/[0.04]">
+                        <p className="font-semibold text-foreground">{String(pendingCount)}</p>
+                        <p className="text-muted-foreground">Draft</p>
+                      </div>
+                      <div className="rounded-md bg-emerald-500/10 px-2 py-2 text-emerald-700 dark:text-emerald-300">
+                        <p className="font-semibold">{String(approvedCount)}</p>
+                        <p>Approved</p>
+                      </div>
+                      <div className="rounded-md bg-blue-500/10 px-2 py-2 text-blue-700 dark:text-blue-300">
+                        <p className="font-semibold">{String(scheduledCount)}</p>
+                        <p>Scheduled</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState label="Repurpose a WordPress post to create grouped channel drafts." />
+            )}
+          </div>
+        </div>
+      </CardContent>
+
+      {selectedGroup ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-xl border bg-card shadow-2xl dark:border-white/10 dark:bg-[#111113]">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 dark:border-white/10">
+              <div className="min-w-0">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge className="bg-violet-500/15 text-violet-700 dark:text-violet-200">
+                    Campaign review
+                  </Badge>
+                  {selectedGroup.wordpressId ? (
+                    <Badge variant="outline">WP #{String(selectedGroup.wordpressId)}</Badge>
+                  ) : null}
+                  <Badge variant="outline">{String(selectedGroup.drafts.length)} channels</Badge>
+                </div>
+                <h3 className="line-clamp-2 text-lg font-semibold">{selectedGroup.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Review what was generated for each channel, then approve all or selected drafts.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  disabled={busyId !== null || selectedGroup.drafts.every((draft) => draft.status !== 'DRAFT')}
+                  onClick={() => {
+                    onApproveDrafts(selectedGroup.drafts);
+                  }}
+                  size="sm"
+                >
+                  <FileCheck2 className="h-4 w-4" />
+                  Approve all
+                </Button>
+                <Button
+                  aria-label="Close draft review"
+                  onClick={() => {
+                    setSelectedGroupKey(null);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid max-h-[calc(90vh-7.5rem)] gap-3 overflow-auto p-4 md:grid-cols-2">
+              {selectedGroup.drafts.map((draft) => (
                 <div
-                  className="rounded-md border bg-card p-3 dark:border-white/10 dark:bg-white/[0.045]"
+                  className="rounded-lg border bg-background/70 p-4 dark:border-white/10 dark:bg-white/[0.035]"
                   key={draft.id}
                 >
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{platformLabel(draft.platform)}</Badge>
-                    <Badge
-                      variant={
-                        draft.status === 'APPROVED' || draft.status === 'SCHEDULED'
-                          ? 'success'
-                          : 'outline'
-                      }
-                    >
-                      {draft.status.toLowerCase()}
-                    </Badge>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={channelTone(draft.platform)} variant="outline">
+                        {platformLabel(draft.platform)}
+                      </Badge>
+                      <Badge variant={statusBadgeVariant(draft.status)}>
+                        {draft.status.toLowerCase()}
+                      </Badge>
+                    </div>
+                    {draft.scheduledFor ? (
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTimeLabel(draft.scheduledFor)}
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="line-clamp-1 text-sm font-medium">{draft.title}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{draft.body}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  {draft.mediaUrl ? (
+                    <div className="mb-3 overflow-hidden rounded-lg border bg-muted dark:border-white/10 dark:bg-black/20">
+                      <img
+                        alt={`${platformLabel(draft.platform)} generated creative`}
+                        className="max-h-72 w-full object-cover"
+                        src={draft.mediaUrl}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mb-3 flex h-40 items-center justify-center rounded-lg border border-dashed bg-muted/30 text-sm text-muted-foreground dark:border-white/10 dark:bg-black/20">
+                      Image will appear after generation
+                    </div>
+                  )}
+                  <p className="text-sm font-semibold">{draft.title}</p>
+                  <div className="mt-3 max-h-44 overflow-auto rounded-md border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground dark:border-white/10 dark:bg-black/20">
+                    {draft.body}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <Button
                       className="h-8 px-2"
-                      disabled={busyId !== null || draft.status === 'APPROVED'}
+                      disabled={busyId !== null || draft.status !== 'DRAFT'}
                       onClick={() => {
                         onApproveDraft(draft);
                       }}
@@ -1294,16 +1496,78 @@ function WordPressLibraryPanel({
                       <CalendarDays className="h-4 w-4" />
                       Schedule
                     </Button>
+                    <Button
+                      className="h-8 px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
+                      disabled={busyId !== null}
+                      onClick={() => {
+                        onDeleteDraft(draft);
+                      }}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
                   </div>
                 </div>
-              ))
-            ) : (
-              <EmptyState label="Repurpose a WordPress post to create drafts." />
-            )}
+              ))}
+            </div>
           </div>
         </div>
-      </CardContent>
+      ) : null}
     </Card>
+  );
+}
+
+function groupWordPressDrafts(drafts: WordPressDraft[]): WordPressDraftGroup[] {
+  const groups = new Map<string, WordPressDraftGroup>();
+
+  drafts.forEach((draft) => {
+    const key = draft.article?.id ?? draft.sourceUrl;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.drafts.push(draft);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      title: draft.article?.title ?? draft.title,
+      wordpressId: draft.article?.wordpressId ?? null,
+      sourceUrl: draft.article?.url ?? draft.sourceUrl,
+      categories: draft.article?.categoryNames ?? [],
+      drafts: [draft],
+    });
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    drafts: [...group.drafts].sort((a, b) => platformLabel(a.platform).localeCompare(platformLabel(b.platform))),
+  }));
+}
+
+function statusBadgeVariant(status: WordPressDraft['status']): 'outline' | 'success' | 'destructive' {
+  if (status === 'APPROVED' || status === 'SCHEDULED' || status === 'PUBLISHED') {
+    return 'success';
+  }
+
+  if (status === 'REJECTED') {
+    return 'destructive';
+  }
+
+  return 'outline';
+}
+
+function channelTone(platform: string): string {
+  return (
+    {
+      FACEBOOK: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+      INSTAGRAM: 'border-pink-500/25 bg-pink-500/10 text-pink-700 dark:text-pink-300',
+      LINKEDIN: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+      PINTEREST: 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300',
+      X: 'border-zinc-500/25 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300',
+    }[platform] ?? 'border-border bg-muted text-foreground'
   );
 }
 

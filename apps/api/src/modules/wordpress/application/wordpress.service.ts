@@ -408,6 +408,10 @@ export class WordPressService {
     return this.repository.scheduleDraft(id, scheduledFor);
   }
 
+  async deleteDraft(id: string) {
+    return this.repository.deleteDraft(id);
+  }
+
   private async mapPost(
     connection: WordPressConnectionConfig,
     post: WordPressRawPost,

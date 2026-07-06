@@ -213,12 +213,33 @@ export class PromptTemplatesService {
     return {
       prompt: [
         renderedBody,
+        this.productionCreativeBrief(input.platform),
         renderedStyleNotes ? `Style notes: ${renderedStyleNotes}` : '',
         renderedNegative ? `Negative prompt: ${renderedNegative}` : '',
       ].filter(Boolean).join('\n\n'),
       promptVersion: `admin-${input.platform.toLowerCase()}-${String(template?.version ?? 1)}`,
       templateId: template?.id ?? null,
     };
+  }
+
+  private productionCreativeBrief(platform: SocialPlatform): string {
+    const base =
+      'Production quality requirements: create a premium, postable social media creative directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. Leave clean negative space for SocialFlow to overlay the headline later. Do not include text in the generated image itself.';
+
+    const channel = {
+      [SocialPlatform.PINTEREST]:
+        'Pinterest specifics: vertical 2:3 save-worthy educational pin composition, clear hero concept, soft editorial illustration or premium collage, helpful reference-board mood, airy spacing.',
+      [SocialPlatform.INSTAGRAM]:
+        'Instagram specifics: square premium lifestyle/editorial composition, warm subject-led scene, balanced center of interest, elegant color harmony, instantly understandable in feed.',
+      [SocialPlatform.FACEBOOK]:
+        'Facebook specifics: friendly square or landscape educational visual, approachable human/lifestyle context when safe, broad-audience clarity, warm optimistic tone.',
+      [SocialPlatform.LINKEDIN]:
+        'LinkedIn specifics: credible professional editorial visual, research/strategy feel, clean workspace or abstract concept scene, muted premium palette, business-health education polish.',
+      [SocialPlatform.X]:
+        'X specifics: wide landscape preview image, high-contrast simple composition, one bold idea, very readable at small preview size, minimal detail.',
+    }[platform];
+
+    return `${base}\n${channel}`;
   }
 
   private async ensureDefaults(organizationId: string | null, userId?: string) {

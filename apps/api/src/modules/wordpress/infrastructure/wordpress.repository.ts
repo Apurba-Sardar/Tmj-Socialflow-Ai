@@ -714,6 +714,12 @@ export class WordPressRepository {
     });
   }
 
+  async deleteDraft(id: string) {
+    return this.prisma.socialDraft.delete({
+      where: { id },
+    });
+  }
+
   async archiveArticles(articleIds: string[]) {
     return this.prisma.wordPressCampaign.updateMany({
       where: { articleId: { in: articleIds } },

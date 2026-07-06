@@ -336,41 +336,44 @@ export class SocialContentGeneratorService {
     const headlineLines = this.wrapText(headline, isPortrait ? 20 : isSquare ? 24 : 34, isWide ? 2 : 3);
     const subtitleLines = this.wrapText(subtitle, isPortrait ? 28 : isSquare ? 34 : 54, isWide ? 1 : 2);
     const padding = isPortrait ? 72 : isSquare ? 70 : 96;
-    const cardWidth = size.width - padding * 2;
-    const cardHeight = isPortrait ? 470 : isSquare ? 345 : 260;
-    const cardY = isPortrait ? 86 : isSquare ? 70 : 58;
-    const headlineY = cardY + (isPortrait ? 118 : isSquare ? 108 : 92);
+    const headlineY = isPortrait ? size.height - 470 : isSquare ? size.height - 330 : size.height - 230;
     const headlineSize = isPortrait ? 58 : isSquare ? 48 : 48;
     const headlineGap = isPortrait ? 66 : isSquare ? 56 : 54;
-    const subtitleStart = headlineY + headlineLines.length * headlineGap + (isWide ? 24 : 34);
+    const subtitleStart = headlineY + headlineLines.length * headlineGap + (isWide ? 20 : 30);
     const subtitleSize = isPortrait ? 28 : isSquare ? 25 : 25;
-    const borderOpacity = isWide ? 0.1 : 0.12;
+    const scrimStart = isPortrait ? 0.35 : isSquare ? 0.42 : 0.28;
+    const accentY = headlineY - (isPortrait ? 70 : 54);
 
     return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
   <defs>
-    <linearGradient id="soft" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#fffaf3" stop-opacity="0.42"/>
-      <stop offset="0.52" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.56"/>
+    <linearGradient id="editorialScrim" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#050505" stop-opacity="0"/>
+      <stop offset="${scrimStart}" stop-color="#050505" stop-opacity="0.10"/>
+      <stop offset="0.72" stop-color="#050505" stop-opacity="0.54"/>
+      <stop offset="1" stop-color="#050505" stop-opacity="0.86"/>
     </linearGradient>
-    <filter id="paperShadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#6b5d4d" flood-opacity="0.16"/>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <filter id="textShadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000000" flood-opacity="0.42"/>
     </filter>
   </defs>
-  <rect width="${size.width}" height="${size.height}" fill="url(#soft)"/>
-  <rect x="${padding}" y="${cardY}" width="${cardWidth}" height="${cardHeight}" rx="${isPortrait ? 38 : isSquare ? 34 : 28}" fill="#fffaf1" opacity="0.96" filter="url(#paperShadow)"/>
-  <rect x="${padding + 18}" y="${cardY + 18}" width="${cardWidth - 36}" height="${cardHeight - 36}" rx="${isPortrait ? 26 : isSquare ? 24 : 18}" fill="none" stroke="#2f2923" stroke-opacity="${borderOpacity}" stroke-width="3"/>
+  <rect width="${size.width}" height="${size.height}" fill="url(#editorialScrim)"/>
+  <rect x="${padding}" y="${accentY}" width="${isWide ? 230 : 190}" height="${isPortrait ? 12 : 10}" rx="999" fill="url(#accent)" opacity="0.96"/>
+  <text x="${padding}" y="${accentY - 22}" fill="#ffffff" opacity="0.78" font-size="${isPortrait ? 25 : 22}" font-family="Inter, Arial, sans-serif" font-weight="800" letter-spacing="3">${escapeXml(platformTitle(draft.platform).toUpperCase())}</text>
   ${headlineLines
     .map(
       (line, index) =>
-        `<text x="${padding + 48}" y="${headlineY + index * headlineGap}" fill="#211f1d" font-size="${headlineSize}" font-family="Inter, Arial, sans-serif" font-weight="900">${escapeXml(line)}</text>`,
+        `<text x="${padding}" y="${headlineY + index * headlineGap}" fill="#ffffff" font-size="${headlineSize}" font-family="Inter, Arial, sans-serif" font-weight="900" filter="url(#textShadow)">${escapeXml(line)}</text>`,
     )
     .join('')}
   ${subtitleLines
     .map(
       (line, index) =>
-        `<text x="${padding + 50}" y="${subtitleStart + index * (subtitleSize + 13)}" fill="#4f463d" opacity="0.94" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif" font-weight="650">${escapeXml(line)}</text>`,
+        `<text x="${padding}" y="${subtitleStart + index * (subtitleSize + 13)}" fill="#ffffff" opacity="0.86" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif" font-weight="650" filter="url(#textShadow)">${escapeXml(line)}</text>`,
     )
     .join('')}
 </svg>`.trim();
