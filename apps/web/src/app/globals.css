@@ -66,6 +66,35 @@ body {
     "cv11";
 }
 
+select,
+option,
+optgroup {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+select {
+  color-scheme: light;
+}
+
+.dark select {
+  color-scheme: dark;
+}
+
+option:checked,
+option:hover,
+option:focus {
+  background-color: hsl(var(--primary) / 0.18);
+  color: hsl(var(--foreground));
+}
+
+.dark option:checked,
+.dark option:hover,
+.dark option:focus {
+  background-color: hsl(var(--primary) / 0.28);
+  color: hsl(var(--foreground));
+}
+
 body.sf-dragging-draft,
 body.sf-dragging-draft * {
   cursor: grabbing !important;

@@ -144,6 +144,7 @@ export interface WordPressHttpResponse<T> {
 export interface WordPressArticleLibraryItem {
   id: string;
   wordpressId: number;
+  slug: string;
   title: string;
   excerpt: string;
   url: string;

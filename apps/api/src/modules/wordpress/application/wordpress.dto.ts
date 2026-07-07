@@ -84,6 +84,10 @@ export class WordPressLibraryQueryDto extends WordPressPostsQueryDto {
 
   @IsOptional()
   @IsString()
+  slug?: string;
+
+  @IsOptional()
+  @IsString()
   category?: string;
 
   @IsOptional()
@@ -157,5 +161,5 @@ export class BulkWordPressActionDto {
   articleIds!: string[];
 
   @IsString()
-  action!: 'archive' | 'generate';
+  action!: 'archive' | 'generate' | 'remove';
 }

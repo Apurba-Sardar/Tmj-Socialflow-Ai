@@ -27,7 +27,7 @@ const defaultPromptTemplates: Record<SocialPlatform, { name: string; description
     name: 'Pinterest educational pin image',
     description: 'Tall save-worthy editorial visual for Pinterest pins.',
     template:
-      'Create a tall vertical Pinterest image for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: light editorial illustration, watercolor or clean vector collage, pastel palette, useful magazine or pin-board feel, one clear hero concept, airy white space, no dark backgrounds. Reserve clean negative space for the app to overlay a short headline. Avoid placing key objects under the headline area.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first, no software branding.',
+      'Create a tall vertical Pinterest-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: premium save-worthy educational visual, light editorial illustration or polished collage, pastel palette, useful magazine or pin-board feel, one clear hero concept, airy white space, no dark backgrounds. The image must support the separate caption in SocialFlow, not repeat it inside the image.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first, no software branding, no platform label.',
     negativePrompt:
       'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid clutter, dark backgrounds, generic stock-photo styling, medical procedures, and unrelated decoration.',
     styleNotes: 'Vertical 2:3, warm pastel editorial, one simple idea.',
@@ -36,7 +36,7 @@ const defaultPromptTemplates: Record<SocialPlatform, { name: string; description
     name: 'Instagram premium feed image',
     description: 'Square editorial lifestyle visual for Instagram feed posts.',
     template:
-      'Create a square Instagram image for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: premium lifestyle/editorial illustration, centered subject, balanced composition, soft gradients or paper texture, visually engaging at feed size, minimal and warm, no clutter. Reserve clean negative space for app headline overlay.\n\nTopic safety guidance: {{topicGuidance}}\n\nMake it polished enough to publish on a brand account.',
+      'Create a square Instagram-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: premium lifestyle/editorial visual, centered subject, balanced composition, soft gradients or paper texture, visually engaging at feed size, minimal and warm, no clutter. The image must pair with the separate caption in SocialFlow, not contain caption text.\n\nTopic safety guidance: {{topicGuidance}}\n\nMake it polished enough to publish on a brand account. No platform label.',
     negativePrompt:
       'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid childish cartoon styling, busy infographic layouts, medical procedures, and sensational imagery.',
     styleNotes: 'Square 1:1, warm premium editorial illustration.',
@@ -45,7 +45,7 @@ const defaultPromptTemplates: Record<SocialPlatform, { name: string; description
     name: 'Facebook friendly educational image',
     description: 'Friendly square/landscape image for broad Facebook audiences.',
     template:
-      'Create a friendly Facebook social image for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: approachable lifestyle illustration, warm and clear educational visual, suitable for a broad audience, no clutter. Use one clear concept and keep negative space for an app headline overlay.\n\nTopic safety guidance: {{topicGuidance}}',
+      'Create a friendly Facebook-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: approachable lifestyle/editorial visual, warm and clear educational asset, suitable for a broad audience, no clutter. Use one clear concept that works with the separate post caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo platform label, no caption text inside the image.',
     negativePrompt:
       'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid fear-based imagery, clinical drama, and unrelated generic objects.',
     styleNotes: 'Square/landscape, warm, approachable, easy to understand.',
@@ -54,7 +54,7 @@ const defaultPromptTemplates: Record<SocialPlatform, { name: string; description
     name: 'LinkedIn professional research image',
     description: 'Professional editorial image for business and health education feeds.',
     template:
-      'Create a professional LinkedIn image for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: credible editorial research visual, clean desk or abstract science composition, muted premium palette, polished business/health education feel, no childish cartoon styling. Reserve clean negative space for an app headline overlay.\n\nTopic safety guidance: {{topicGuidance}}',
+      'Create a professional LinkedIn-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: credible editorial research visual, clean desk or abstract science composition, muted premium palette, polished business/health education feel, no childish cartoon styling. The visual should support the separate professional caption and not include any text.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo platform label.',
     negativePrompt:
       'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid childish cartoons, sensational health claims, medical procedures, and clutter.',
     styleNotes: 'Professional, muted premium palette, credible research mood.',
@@ -63,7 +63,7 @@ const defaultPromptTemplates: Record<SocialPlatform, { name: string; description
     name: 'X high-contrast preview image',
     description: 'Wide simple visual designed to read well in X previews.',
     template:
-      'Create a wide landscape X image for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: simple high-contrast editorial composition, one clear idea, readable at small preview size, minimal background detail, no infographic clutter. Keep negative space for an app headline overlay.\n\nTopic safety guidance: {{topicGuidance}}',
+      'Create a wide landscape X-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: simple high-contrast editorial composition, one clear idea, readable at small preview size, minimal background detail, no infographic clutter. It must work with the separate post caption and not include any readable text.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo X/Twitter label.',
     negativePrompt:
       'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid tiny details, busy layouts, medical procedures, and body-transformation imagery.',
     styleNotes: 'Wide 16:9, high-contrast, simple preview-safe composition.',

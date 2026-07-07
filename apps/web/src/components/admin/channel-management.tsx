@@ -15,6 +15,7 @@ import {
   RadioTower,
   RefreshCw,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -146,6 +147,39 @@ const platformTone: Record<Platform, string> = {
   X: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300',
   FACEBOOK: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
 };
+
+const visualStylePresets = [
+  {
+    label: 'Premium editorial',
+    value:
+      'Premium editorial image asset, polished magazine-quality composition, refined color grading, clear subject, useful social feed visual.',
+  },
+  {
+    label: 'Realistic lifestyle',
+    value:
+      'Realistic lifestyle/editorial photography feel, natural light, authentic environment, warm human context when appropriate, not stocky or staged.',
+  },
+  {
+    label: 'Soft illustration',
+    value:
+      'Sophisticated editorial illustration, soft texture, warm restrained palette, mature non-childish style, clean readable composition.',
+  },
+  {
+    label: 'Research visual',
+    value:
+      'Credible research/editorial visual, abstract science or clean workspace symbolism, muted premium palette, trustworthy education tone.',
+  },
+];
+
+const compositionPresets = [
+  'One clear hero concept, no clutter, strong focal point',
+  'Leave breathing room around the subject, but do not add text',
+  'Works at small mobile preview size',
+  'Content asset only, caption stays outside the image',
+];
+
+const noTextPolicy =
+  'No readable text anywhere. Do not add headlines, captions, platform names, social network labels, logos, watermarks, UI, letters, numbers, signs, posters, charts, document text, or typographic marks.';
 
 export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
@@ -366,6 +400,42 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
 
     setPromptForm((value) => ({ ...value, platform }));
     setPromptPreview('');
+  }
+
+  function applyPremiumImageBaseline() {
+    setPromptForm((value) => ({
+      ...value,
+      name: value.name || `${titleCase(value.platform)} premium post image`,
+      description:
+        value.description ||
+        'Clean postable image asset generated from WordPress content. Caption remains separate in SocialFlow.',
+      template: premiumImagePromptFor(value.platform),
+      negativePrompt: noTextPolicy,
+      styleNotes: platformStyleNotes(value.platform),
+    }));
+    setPromptPreview('');
+    notify('Premium image baseline applied.');
+  }
+
+  function addStyleNote(note: string) {
+    setPromptForm((value) => ({
+      ...value,
+      styleNotes: appendUniqueLine(value.styleNotes, note),
+    }));
+    setPromptPreview('');
+  }
+
+  function enforceNoTextPolicy() {
+    setPromptForm((value) => ({
+      ...value,
+      negativePrompt: appendUniqueLine(value.negativePrompt, noTextPolicy),
+      template: appendUniqueLine(
+        value.template,
+        'The image must be a clean visual asset only. The social caption is stored separately and must not be written inside the image.',
+      ),
+    }));
+    setPromptPreview('');
+    notify('No-text image policy added.');
   }
 
   async function savePromptTemplate() {
@@ -692,10 +762,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Sparkles className="h-5 w-5" />
-                Prompt Studio
+                Image Creative Studio
               </CardTitle>
               <CardDescription>
-                Manage the exact image-generation prompt used for every channel when WordPress content creates campaign visuals.
+                Control the postable image assets generated from old WordPress content for every social channel.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -728,7 +798,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           <Card className="border-border/80 bg-card/95 dark:border-white/10">
             <CardHeader className="flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <CardTitle className="text-lg">Image prompt editor</CardTitle>
+                <CardTitle className="text-lg">Image asset prompt editor</CardTitle>
                 <CardDescription>
                   Variables: {'{{articleTitle}}'}, {'{{articleExcerpt}}'}, {'{{articleContext}}'}, {'{{categories}}'}, {'{{platform}}'}, {'{{topicGuidance}}'}, {'{{captionTitle}}'}, {'{{captionBody}}'}.
                 </CardDescription>
@@ -804,6 +874,86 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   value={promptForm.description}
                 />
               </Field>
+
+              <div className="rounded-xl border border-border bg-muted/35 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Image generation controls
+                    </div>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                      Use these controls for the core workflow: WordPress article in, clean channel-ready image asset out. The caption is kept outside the image.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={applyPremiumImageBaseline} size="sm" type="button">
+                      <Sparkles className="h-4 w-4" />
+                      Apply premium baseline
+                    </Button>
+                    <Button onClick={enforceNoTextPolicy} size="sm" type="button" variant="outline">
+                      <ShieldCheck className="h-4 w-4" />
+                      Enforce no text
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Visual style
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {visualStylePresets.map((preset) => (
+                        <button
+                          className="rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-medium transition hover:border-primary/50 hover:text-primary dark:border-white/10 dark:bg-white/[0.035]"
+                          key={preset.label}
+                          onClick={() => {
+                            addStyleNote(preset.value);
+                          }}
+                          type="button"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Composition rules
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {compositionPresets.map((preset) => (
+                        <button
+                          className="rounded-full border border-border bg-background/70 px-3 py-1.5 text-xs font-medium transition hover:border-primary/50 hover:text-primary dark:border-white/10 dark:bg-white/[0.035]"
+                          key={preset}
+                          onClick={() => {
+                            addStyleNote(preset);
+                          }}
+                          type="button"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 text-xs text-muted-foreground md:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background/70 p-3 dark:border-white/10 dark:bg-black/20">
+                    <div className="font-semibold text-foreground">Output</div>
+                    <p className="mt-1">Clean image asset only. Caption stays in the draft card.</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/70 p-3 dark:border-white/10 dark:bg-black/20">
+                    <div className="font-semibold text-foreground">Safety</div>
+                    <p className="mt-1">Topic guidance is injected automatically for wellness, medical, parenting, and research content.</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background/70 p-3 dark:border-white/10 dark:bg-black/20">
+                    <div className="font-semibold text-foreground">Channel shape</div>
+                    <p className="mt-1">Pinterest vertical, Instagram/Facebook square, LinkedIn/X landscape.</p>
+                  </div>
+                </div>
+              </div>
 
               <Field label="Main image prompt">
                 <textarea
@@ -1003,6 +1153,76 @@ function parseScopes(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function appendUniqueLine(current: string, next: string): string {
+  const cleanNext = next.trim();
+
+  if (!cleanNext) {
+    return current;
+  }
+
+  const lines = current
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.some((line) => line.toLowerCase() === cleanNext.toLowerCase())) {
+    return current;
+  }
+
+  return [...lines, cleanNext].join('\n');
+}
+
+function premiumImagePromptFor(platform: Platform): string {
+  const channelDirection: Record<Platform, string> = {
+    PINTEREST:
+      'Vertical 2:3 Pinterest-ready image asset, save-worthy educational composition, one clear hero concept, light premium editorial illustration or polished collage, airy spacing.',
+    INSTAGRAM:
+      'Square Instagram-ready image asset, premium lifestyle/editorial composition, centered subject, warm visual emotion, refined color harmony, instantly understandable in a feed.',
+    FACEBOOK:
+      'Square or landscape Facebook-ready image asset, friendly educational visual, approachable lifestyle context when appropriate, broad-audience clarity, warm and trustworthy tone.',
+    LINKEDIN:
+      'Landscape LinkedIn-ready image asset, credible professional editorial visual, research/strategy mood, clean workspace or abstract concept, muted premium palette.',
+    X:
+      'Wide X-ready preview image asset, simple high-contrast editorial composition, one bold idea, minimal detail, readable as a small link preview.',
+  };
+
+  return [
+    `Create a premium postable image asset for {{platform}} from this WordPress article.`,
+    '',
+    'Article title: {{articleTitle}}',
+    'Excerpt: {{articleExcerpt}}',
+    'Categories: {{categories}}',
+    'Article context: {{articleContext}}',
+    '',
+    `Channel direction: ${channelDirection[platform]}`,
+    '',
+    'Use a visual idea that is directly connected to the article content. Do not create a generic wellness, office, or marketing background.',
+    'The image should work alongside the separate SocialFlow caption: {{captionTitle}} / {{captionBody}}',
+    'Do not write the caption or article title into the image.',
+    '',
+    'Topic safety guidance: {{topicGuidance}}',
+    '',
+    'No platform label, no social network label, no UI, no logos, no watermark, no readable text.',
+  ].join('\n');
+}
+
+function platformStyleNotes(platform: Platform): string {
+  const shape: Record<Platform, string> = {
+    PINTEREST: 'Aspect: vertical 2:3. Best for saves, evergreen education, and visually useful article ideas.',
+    INSTAGRAM: 'Aspect: square 1:1. Best for polished feed impact, warm subject-led imagery, and emotional clarity.',
+    FACEBOOK: 'Aspect: square or landscape. Best for broad-audience educational context and approachable storytelling.',
+    LINKEDIN: 'Aspect: landscape. Best for professional credibility, research context, and practical business/health education.',
+    X: 'Aspect: wide landscape. Best for fast preview scanning with one bold visual idea.',
+  };
+
+  return [
+    shape[platform],
+    'Output must be a clean image asset only; caption, title, hashtags, and CTA remain outside the image.',
+    'Prefer premium editorial quality over cartoon-like or template-like visuals.',
+    'Avoid repeated generic parent-child, office, leaf, notebook, or abstract background scenes unless they are specifically relevant to the article.',
+  ].join('\n');
 }
 
 function titleCase(value: string): string {

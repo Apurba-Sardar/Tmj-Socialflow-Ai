@@ -7,6 +7,7 @@ import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CampaignsModule } from './campaigns/campaigns.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { GoogleAnalyticsModule } from './google-analytics/google-analytics.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MediaModule } from './media/media.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -31,6 +32,7 @@ import { WordPressModule } from './wordpress/wordpress.module.js';
     AiPipelineModule,
     CampaignsModule,
     DashboardModule,
+    GoogleAnalyticsModule,
     MediaModule,
     PromptTemplatesModule,
     SchedulerModule,

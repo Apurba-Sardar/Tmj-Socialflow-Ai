@@ -82,6 +82,15 @@ interface WordPressCampaignAnalytics {
   capturedAt: string;
 }
 
+interface GoogleAnalyticsPostMetric {
+  articleId: string;
+  pageViews: number;
+  activeUsers: number;
+  sessions: number;
+  eventCount: number;
+  averageSessionDuration: number;
+}
+
 interface WordPressCampaign {
   id: string;
   name: string;
@@ -153,6 +162,9 @@ export function WordPressPostDetail({
   const [generating, setGenerating] = useState(false);
   const [busyDraftId, setBusyDraftId] = useState<string | null>(null);
   const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [googleAnalytics, setGoogleAnalytics] = useState<GoogleAnalyticsPostMetric | null>(null);
+  const [googleAnalyticsLoading, setGoogleAnalyticsLoading] = useState(false);
+  const [googleAnalyticsError, setGoogleAnalyticsError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -174,10 +186,32 @@ export function WordPressPostDetail({
       const payload = (await response.json()) as WordPressDetailArticle;
       setArticle(payload);
       setSelectedDraftIds((ids) => ids.filter((id) => payload.socialDrafts.some((draft) => draft.id === id)));
+      void loadGoogleAnalytics();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load WordPress post.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadGoogleAnalytics() {
+    setGoogleAnalyticsLoading(true);
+    setGoogleAnalyticsError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts/${articleId}?days=30`, {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(await apiErrorMessage(response, 'Google Analytics data is not available.'));
+      }
+      const payload = (await response.json()) as GoogleAnalyticsPostMetric[];
+      setGoogleAnalytics(payload[0] ?? null);
+    } catch (error) {
+      setGoogleAnalyticsError(error instanceof Error ? error.message : 'Google Analytics data is not available.');
+      setGoogleAnalytics(null);
+    } finally {
+      setGoogleAnalyticsLoading(false);
     }
   }
 
@@ -427,7 +461,14 @@ export function WordPressPostDetail({
             {activeTab === 'Media Assets' ? <MediaAssetsTab article={article} drafts={socialDrafts} generations={generations} /> : null}
             {activeTab === 'Publishing History' ? <PublishingHistoryTab items={publishingHistory} /> : null}
             {activeTab === 'AI History' ? <AiHistoryTab items={regenerationHistory} /> : null}
-            {activeTab === 'Analytics' ? <AnalyticsTab items={analytics} /> : null}
+            {activeTab === 'Analytics' ? (
+              <AnalyticsTab
+                googleAnalytics={googleAnalytics}
+                googleAnalyticsError={googleAnalyticsError}
+                googleAnalyticsLoading={googleAnalyticsLoading}
+                items={analytics}
+              />
+            ) : null}
           </>
         ) : (
           <div className="sf-card rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground dark:border-white/10">
@@ -765,7 +806,17 @@ function AiHistoryTab({ items }: { items: WordPressRegenerationHistory[] }) {
   );
 }
 
-function AnalyticsTab({ items }: { items: WordPressCampaignAnalytics[] }) {
+function AnalyticsTab({
+  googleAnalytics,
+  googleAnalyticsError,
+  googleAnalyticsLoading,
+  items,
+}: {
+  googleAnalytics: GoogleAnalyticsPostMetric | null;
+  googleAnalyticsError: string | null;
+  googleAnalyticsLoading: boolean;
+  items: WordPressCampaignAnalytics[];
+}) {
   const totals = items.reduce(
     (sum, item) => ({
       impressions: sum.impressions + item.impressions,
@@ -778,21 +829,65 @@ function AnalyticsTab({ items }: { items: WordPressCampaignAnalytics[] }) {
   );
 
   return (
-    <section className="grid gap-4 lg:grid-cols-5">
-      {Object.entries(totals).map(([label, value]) => (
-        <Card className="sf-card-hover border-border/80 dark:border-white/10" key={label}>
-          <CardContent className="p-4">
-            <div className="text-2xl font-semibold">{formatNumber(value)}</div>
-            <div className="text-sm capitalize text-muted-foreground">{label}</div>
-          </CardContent>
-        </Card>
-      ))}
-      {!items.length ? (
-        <div className="lg:col-span-5">
-          <EmptyState title="Analytics will populate after publishing" />
-        </div>
-      ) : null}
+    <section className="grid gap-4">
+      <Card className="border-border/80 dark:border-white/10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <BarChart3 className="h-5 w-5" />
+            Google Analytics
+          </CardTitle>
+          <CardDescription>Last 30 days for this WordPress article URL.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {googleAnalyticsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading Google Analytics
+            </div>
+          ) : googleAnalyticsError ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-200">
+              {googleAnalyticsError}
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <AnalyticsMetric label="Views" value={googleAnalytics?.pageViews ?? 0} />
+              <AnalyticsMetric label="Users" value={googleAnalytics?.activeUsers ?? 0} />
+              <AnalyticsMetric label="Sessions" value={googleAnalytics?.sessions ?? 0} />
+              <AnalyticsMetric label="Events" value={googleAnalytics?.eventCount ?? 0} />
+              <AnalyticsMetric
+                label="Avg. session"
+                value={`${Math.round(googleAnalytics?.averageSessionDuration ?? 0).toString()}s`}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        {Object.entries(totals).map(([label, value]) => (
+          <Card className="sf-card-hover border-border/80 dark:border-white/10" key={label}>
+            <CardContent className="p-4">
+              <div className="text-2xl font-semibold">{formatNumber(value)}</div>
+              <div className="text-sm capitalize text-muted-foreground">{label}</div>
+            </CardContent>
+          </Card>
+        ))}
+        {!items.length ? (
+          <div className="lg:col-span-5">
+            <EmptyState title="Social publishing analytics will populate after publishing" />
+          </div>
+        ) : null}
+      </div>
     </section>
+  );
+}
+
+function AnalyticsMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="text-2xl font-semibold">{typeof value === 'number' ? formatNumber(value) : value}</div>
+      <div className="text-sm text-muted-foreground">{label}</div>
+    </div>
   );
 }
 
@@ -857,4 +952,16 @@ function titleCase(value: string) {
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+async function apiErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = (await response.json()) as { message?: string | string[] };
+    if (Array.isArray(payload.message)) {
+      return payload.message.join(' ');
+    }
+    return payload.message ?? fallback;
+  } catch {
+    return fallback;
+  }
 }

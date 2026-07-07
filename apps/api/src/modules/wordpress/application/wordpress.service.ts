@@ -240,6 +240,7 @@ export class WordPressService {
       page: query.page ?? 1,
       perPage: query.perPage ?? 25,
       search: query.search,
+      slug: query.slug,
       category: query.category,
       status: query.status,
       repurposed: query.repurposed === undefined ? undefined : query.repurposed === 'true',
@@ -261,6 +262,7 @@ export class WordPressService {
       page: query.page ?? 1,
       perPage: query.perPage ?? 25,
       search: query.search,
+      slug: query.slug,
       category: query.category,
       status: query.status,
       repurposed: query.repurposed === undefined ? undefined : query.repurposed === 'true',
@@ -346,6 +348,14 @@ export class WordPressService {
     switch (dto.action) {
       case 'archive': {
         const result = await this.repository.archiveArticles(dto.articleIds);
+        return {
+          action: dto.action,
+          processed: result.count,
+        };
+      }
+
+      case 'remove': {
+        const result = await this.repository.removeArticles(dto.articleIds);
         return {
           action: dto.action,
           processed: result.count,

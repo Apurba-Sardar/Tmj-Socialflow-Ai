@@ -23,6 +23,7 @@ export interface LibraryQuery {
   page: number;
   perPage: number;
   search?: string;
+  slug?: string;
   category?: string;
   status?: string;
   repurposed?: boolean;
@@ -730,6 +731,12 @@ export class WordPressRepository {
     });
   }
 
+  async removeArticles(articleIds: string[]) {
+    return this.prisma.wordPressArticle.deleteMany({
+      where: { id: { in: articleIds } },
+    });
+  }
+
   private articleData(connectionId: string, post: WordPressPost) {
     return {
       connectionId,
@@ -759,19 +766,34 @@ export class WordPressRepository {
 
   private articleWhere(query: LibraryQuery): Prisma.WordPressArticleWhereInput {
     const hubQuery = query as HubPostsQuery;
+    const slugFilter = normalizeSlugFilter(query.slug);
+    const andConditions: Prisma.WordPressArticleWhereInput[] = [];
+
+    if (query.search) {
+      andConditions.push({
+        OR: [
+          { title: { contains: query.search, mode: 'insensitive' } },
+          { excerpt: { contains: query.search, mode: 'insensitive' } },
+          { contentText: { contains: query.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (slugFilter) {
+      andConditions.push({
+        OR: [
+          { slug: { contains: slugFilter.lastSegment, mode: 'insensitive' } },
+          { url: { contains: `/${slugFilter.path}`, mode: 'insensitive' } },
+          { url: { contains: `/${slugFilter.path}/`, mode: 'insensitive' } },
+          { url: { endsWith: `/${slugFilter.path}`, mode: 'insensitive' } },
+        ],
+      });
+    }
 
     return {
+      ...(andConditions.length ? { AND: andConditions } : {}),
       ...(hubQuery.connectionId
         ? { connectionId: hubQuery.connectionId }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { title: { contains: query.search, mode: 'insensitive' } },
-              { excerpt: { contains: query.search, mode: 'insensitive' } },
-              { contentText: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
         : {}),
       ...(query.category ? { categorySlugs: { has: query.category } } : {}),
       ...(hubQuery.tag ? { tagSlugs: { has: hubQuery.tag } } : {}),
@@ -817,6 +839,7 @@ export class WordPressRepository {
 function mapArticle(article: {
   id: string;
   wordpressId: number;
+  slug: string;
   title: string;
   excerpt: string;
   url: string;
@@ -833,6 +856,7 @@ function mapArticle(article: {
   return {
     id: article.id,
     wordpressId: article.wordpressId,
+    slug: article.slug,
     title: article.title,
     excerpt: article.excerpt,
     url: article.url,
@@ -855,6 +879,37 @@ function titleCasePlatform(platform: SocialPlatform): string {
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+function normalizeSlugFilter(value?: string): { path: string; lastSegment: string } | null {
+  const raw = value?.trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  const withoutQuery = raw.split(/[?#]/)[0] ?? raw;
+  let path = withoutQuery;
+
+  try {
+    path = new URL(withoutQuery).pathname;
+  } catch {
+    path = withoutQuery.replace(/^https?:\/\/[^/]+/i, '');
+  }
+
+  path = path
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+
+  if (!path) {
+    return null;
+  }
+
+  const segments = path.split('/').filter(Boolean);
+  const lastSegment = segments.at(-1) ?? path;
+
+  return { path, lastSegment };
 }
 
 function parseOptionalDate(value: string): Date | undefined {
