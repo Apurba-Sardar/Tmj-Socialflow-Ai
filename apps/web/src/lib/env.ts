@@ -6,13 +6,15 @@ declare const process: {
 };
 
 export const getApiBaseUrl = (): string => {
-  const configuredUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    (typeof window !== 'undefined'
+  const explicitApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const fallbackApiBaseUrl =
+    typeof window !== 'undefined'
       ? window.location.origin
       : process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : 'http://localhost:3000');
+        : 'http://localhost:3000';
+  const configuredUrl =
+    explicitApiBaseUrl && explicitApiBaseUrl.length > 0 ? explicitApiBaseUrl : fallbackApiBaseUrl;
 
   if (typeof window === 'undefined') {
     return configuredUrl.replace(/\/$/, '');
