@@ -16,7 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "node -e \"if (process.env.CI !== 'true' && process.env.NODE_ENV !== 'production') { try { require('child_process').execSync('husky', { stdio: 'inherit' }) } catch(e) {} }\"",
-    "prisma:generate": "npm run prisma:generate -w @socialflow/database",
+    "prisma:generate": "prisma generate --schema packages/database/prisma/schema.prisma",
     "prisma:migrate": "npm run prisma:migrate -w @socialflow/database"
   },
   "devDependencies": {
@@ -29,6 +29,7 @@
     "jsdom": "^26.1.0",
     "lint-staged": "^16.1.2",
     "prettier": "^3.6.2",
+    "prisma": "^6.19.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.1"
   },
