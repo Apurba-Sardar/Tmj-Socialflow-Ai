@@ -98,7 +98,7 @@ export class GoogleAnalyticsService {
     });
 
     return articles.map((article) => {
-      const articlePath = normalizePath(article.url);
+      const articlePath = normalizeArticlePath(article.url, article.slug);
       const matches = rowMetrics.filter((row) => {
         if (!row.path) {
           return false;
@@ -128,25 +128,28 @@ export class GoogleAnalyticsService {
       return [];
     }
 
-    const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${await this.token()}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await this.token()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dateRanges: [{ startDate: '2015-08-14', endDate: 'today' }],
+          dimensions: [{ name: 'pagePath' }],
+          metrics: [
+            { name: 'screenPageViews' },
+            { name: 'activeUsers' },
+            { name: 'sessions' },
+            { name: 'eventCount' },
+            { name: 'averageSessionDuration' },
+          ],
+          limit: 10000,
+        }),
       },
-      body: JSON.stringify({
-        dateRanges: [{ startDate: '2015-08-14', endDate: 'today' }],
-        dimensions: [{ name: 'pagePath' }],
-        metrics: [
-          { name: 'screenPageViews' },
-          { name: 'activeUsers' },
-          { name: 'sessions' },
-          { name: 'eventCount' },
-          { name: 'averageSessionDuration' },
-        ],
-        limit: 10000,
-      }),
-    });
+    );
 
     if (!response.ok) {
       const detail = await response.text();
@@ -166,7 +169,9 @@ export class GoogleAnalyticsService {
     const privateKey = process.env.GOOGLE_ANALYTICS_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
     if (!serviceAccountEmail || !privateKey) {
-      throw new InternalServerErrorException('Google Analytics service account credentials are not configured.');
+      throw new InternalServerErrorException(
+        'Google Analytics service account credentials are not configured.',
+      );
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -217,9 +222,7 @@ export class GoogleAnalyticsService {
       ['GOOGLE_ANALYTICS_PRIVATE_KEY', process.env.GOOGLE_ANALYTICS_PRIVATE_KEY],
     ];
 
-    return config
-      .filter(([, value]) => !value)
-      .map(([name]) => name);
+    return config.filter(([, value]) => !value).map(([name]) => name);
   }
 
   private propertyId() {
@@ -227,13 +230,19 @@ export class GoogleAnalyticsService {
   }
 }
 
-function emptyMetric(article: { id: string; wordpressId: number; title: string; url: string }): GoogleAnalyticsPostMetric {
+function emptyMetric(article: {
+  id: string;
+  wordpressId: number;
+  title: string;
+  url: string;
+  slug: string;
+}): GoogleAnalyticsPostMetric {
   return {
     articleId: article.id,
     wordpressId: article.wordpressId,
     title: article.title,
     url: article.url,
-    path: normalizePath(article.url),
+    path: normalizeArticlePath(article.url, article.slug),
     pageViews: 0,
     activeUsers: 0,
     sessions: 0,
@@ -255,22 +264,59 @@ function normalizePath(value: string): string {
   return normalized.length ? normalized : '/';
 }
 
-function matchesArticlePath(analyticsPath: string, articlePath: string, articleSlug: string): boolean {
+function normalizeArticlePath(value: string, slug: string): string {
+  try {
+    const url = new URL(value);
+    const pathname = normalizePath(url.pathname);
+    if (pathname !== '/') {
+      return pathname;
+    }
+  } catch {
+    const normalizedValue = normalizePath(value);
+    if (normalizedValue !== '/') {
+      return normalizedValue;
+    }
+  }
+
+  const normalizedSlug = normalizeSlug(slug);
+  return normalizedSlug ? `/${normalizedSlug}` : '/';
+}
+
+function matchesArticlePath(
+  analyticsPath: string,
+  articlePath: string,
+  articleSlug: string,
+): boolean {
   const normalizedAnalyticsPath = normalizePath(analyticsPath);
   const normalizedArticlePath = normalizePath(articlePath);
-  const normalizedSlug = articleSlug.trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+  const normalizedSlug = normalizeSlug(articleSlug);
 
   if (!normalizedSlug) {
     return normalizedAnalyticsPath === normalizedArticlePath;
   }
 
   const slugPath = `/${normalizedSlug}`;
+  const analyticsLastSegment = lastPathSegment(normalizedAnalyticsPath);
+  const articleLastSegment = lastPathSegment(normalizedArticlePath);
 
   return (
     normalizedAnalyticsPath === normalizedArticlePath ||
     normalizedAnalyticsPath === slugPath ||
-    normalizedAnalyticsPath.endsWith(slugPath)
+    normalizedAnalyticsPath.endsWith(slugPath) ||
+    analyticsLastSegment === normalizedSlug ||
+    (!!articleLastSegment && analyticsLastSegment === articleLastSegment)
   );
+}
+
+function normalizeSlug(value: string): string {
+  return value
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .toLowerCase();
+}
+
+function lastPathSegment(value: string): string {
+  return normalizePath(value).split('/').filter(Boolean).at(-1) ?? '';
 }
 
 function toNumber(value?: string): number {
@@ -279,7 +325,11 @@ function toNumber(value?: string): number {
 }
 
 function base64Url(value: string | Buffer): string {
-  return Buffer.from(value).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '');
+  return Buffer.from(value)
+    .toString('base64')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/g, '');
 }
 
 function maskPropertyId(value: string | undefined): string | null {
@@ -287,5 +337,7 @@ function maskPropertyId(value: string | undefined): string | null {
     return null;
   }
 
-  return value.length <= 4 ? value : `${'*'.repeat(Math.max(value.length - 4, 0))}${value.slice(-4)}`;
+  return value.length <= 4
+    ? value
+    : `${'*'.repeat(Math.max(value.length - 4, 0))}${value.slice(-4)}`;
 }
