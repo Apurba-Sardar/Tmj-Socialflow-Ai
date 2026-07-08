@@ -38,6 +38,10 @@ export const getCurrentUser = async (): Promise<AuthenticatedUser | null> => {
     return null;
   }
 
-  const payload = (await response.json()) as { user: AuthenticatedUser };
-  return payload.user;
+  try {
+    const payload = (await response.json()) as { user?: AuthenticatedUser };
+    return payload.user ?? null;
+  } catch {
+    return null;
+  }
 };

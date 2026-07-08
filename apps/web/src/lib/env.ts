@@ -1,5 +1,6 @@
 declare const process: {
   env: {
+    API_PROXY_TARGET?: string;
     NEXT_PUBLIC_API_BASE_URL?: string;
     VERCEL_URL?: string;
   };
@@ -7,12 +8,16 @@ declare const process: {
 
 export const getApiBaseUrl = (): string => {
   const explicitApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  const fallbackApiBaseUrl =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'http://localhost:3000';
+  let fallbackApiBaseUrl = 'http://localhost:3000';
+
+  if (typeof window !== 'undefined') {
+    fallbackApiBaseUrl = window.location.origin;
+  } else if (process.env.API_PROXY_TARGET) {
+    fallbackApiBaseUrl = process.env.API_PROXY_TARGET;
+  } else if (process.env.VERCEL_URL) {
+    fallbackApiBaseUrl = `https://${process.env.VERCEL_URL}`;
+  }
+
   const configuredUrl =
     explicitApiBaseUrl && explicitApiBaseUrl.length > 0 ? explicitApiBaseUrl : fallbackApiBaseUrl;
 
