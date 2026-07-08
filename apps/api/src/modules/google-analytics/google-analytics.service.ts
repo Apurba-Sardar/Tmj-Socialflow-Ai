@@ -99,13 +99,12 @@ export class GoogleAnalyticsService {
 
     return articles.map((article) => {
       const articlePath = normalizePath(article.url);
-      const articleSlug = normalizePath(article.slug);
       const matches = rowMetrics.filter((row) => {
         if (!row.path) {
           return false;
         }
 
-        return row.path === articlePath || row.path === `/${articleSlug}` || row.path.endsWith(`/${articleSlug}`);
+        return matchesArticlePath(row.path, articlePath, article.slug);
       });
 
       return matches.reduce<GoogleAnalyticsPostMetric>(
@@ -254,6 +253,24 @@ function normalizePath(value: string): string {
 
   const normalized = path.split(/[?#]/)[0]?.replace(/\/+$/g, '').toLowerCase() ?? '/';
   return normalized.length ? normalized : '/';
+}
+
+function matchesArticlePath(analyticsPath: string, articlePath: string, articleSlug: string): boolean {
+  const normalizedAnalyticsPath = normalizePath(analyticsPath);
+  const normalizedArticlePath = normalizePath(articlePath);
+  const normalizedSlug = articleSlug.trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+
+  if (!normalizedSlug) {
+    return normalizedAnalyticsPath === normalizedArticlePath;
+  }
+
+  const slugPath = `/${normalizedSlug}`;
+
+  return (
+    normalizedAnalyticsPath === normalizedArticlePath ||
+    normalizedAnalyticsPath === slugPath ||
+    normalizedAnalyticsPath.endsWith(slugPath)
+  );
 }
 
 function toNumber(value?: string): number {
