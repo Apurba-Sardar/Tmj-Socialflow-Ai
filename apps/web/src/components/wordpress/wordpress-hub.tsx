@@ -270,7 +270,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
     try {
       const params = new URLSearchParams({
         articleIds: articleIds.join(','),
-        days: '30',
       });
       const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts?${params.toString()}`, {
         cache: 'no-store',
@@ -802,7 +801,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
                   <BarChart3 className="h-4 w-4" />
-                  {analyticsLoading ? 'Loading Google Analytics for visible posts...' : 'Google Analytics: last 30 days per WordPress URL.'}
+                  {analyticsLoading ? 'Loading lifetime views for visible posts...' : 'Google Analytics: lifetime total views per WordPress URL.'}
                   {analyticsError ? <span className="text-amber-600 dark:text-amber-300">{analyticsError}</span> : null}
                 </div>
               </CardHeader>
@@ -834,7 +833,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                         />
                         <th className="px-4 py-3 text-left">Taxonomy</th>
                         <th className="px-4 py-3 text-left">Campaign Status</th>
-                        <th className="px-4 py-3 text-left">Google Analytics</th>
+                        <th className="px-4 py-3 text-left">Lifetime Views</th>
                         <SortableHead
                           active={sortBy === 'publishedAt'}
                           label="Published"
@@ -1026,7 +1025,7 @@ function HubSidebar({
       </div>
       <div className="mt-auto rounded-lg border border-border bg-background/70 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
         <div className="font-medium">{user.email}</div>
-        <div className="text-xs text-muted-foreground">{user.role}</div>
+        <div className="text-xs text-muted-foreground">Super Admin</div>
         <Button className="mt-3 w-full" disabled={syncing} onClick={onSync} size="sm" variant="outline">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Sync now
@@ -1264,10 +1263,8 @@ function GoogleAnalyticsCell({
   }
 
   return (
-    <div className="grid min-w-40 grid-cols-3 gap-1.5 text-xs">
-      <MetricPill label="Views" value={analytics.pageViews} />
-      <MetricPill label="Users" value={analytics.activeUsers} />
-      <MetricPill label="Sessions" value={analytics.sessions} />
+    <div className="min-w-32 text-xs">
+      <MetricPill label="Lifetime views" value={analytics.pageViews} />
     </div>
   );
 }

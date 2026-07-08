@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthService } from './auth.service.js';
 import type { AuthRepository } from './auth.repository.js';
-import type { AuthEmailService } from './email.service.js';
 
 const now = new Date('2026-06-30T12:00:00.000Z');
 
@@ -32,25 +31,38 @@ describe('AuthService', () => {
     process.env.JWT_PASSWORD_RESET_SECRET = 'd'.repeat(32);
   });
 
-  it('registers a user, queues verification, and creates a session', async () => {
+  it('rejects public registration', async () => {
     const repository = createRepositoryMock({
-      findUserByEmail: vi.fn().mockResolvedValue(null),
-      createUserWithDefaultOrganization: vi.fn().mockResolvedValue({ ...user, passwordHash: 'hashed' }),
+      upsertHardcodedSuperAdmin: vi.fn(),
     });
-    const emailService = createEmailServiceMock();
-    const service = new AuthService(repository, new JwtService(), emailService);
+    const service = new AuthService(repository, new JwtService());
 
-    const session = await service.register({
+    await expect(service.register({
       email: ' USER@example.com ',
       password: 'very-secure-password',
+    })).rejects.toThrow('Signup is disabled.');
+    expect(repository.upsertHardcodedSuperAdmin).not.toHaveBeenCalled();
+  });
+
+  it('logs in only the hardcoded Super Admin and creates a session', async () => {
+    const repository = createRepositoryMock({
+      upsertHardcodedSuperAdmin: vi.fn().mockResolvedValue({
+        ...user,
+        email: 'superadmin@tmjsocialflow.local',
+        role: Role.SUPER_ADMIN,
+        emailVerifiedAt: now,
+      }),
+    });
+    const service = new AuthService(repository, new JwtService());
+
+    const session = await service.login({
+      email: 'superadmin',
+      password: 'TMJ@500',
     });
 
-    expect(repository.createUserWithDefaultOrganization).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'user@example.com' }),
-      expect.objectContaining({ name: 'user Workspace' }),
-    );
-    expect(emailService.sendEmailVerification).toHaveBeenCalledOnce();
-    expect(session.user.email).toBe('user@example.com');
+    expect(repository.upsertHardcodedSuperAdmin).toHaveBeenCalledOnce();
+    expect(session.user.email).toBe('superadmin@tmjsocialflow.local');
+    expect(session.user.role).toBe(Role.SUPER_ADMIN);
     expect(session.accessToken).toBeTruthy();
     expect(session.refreshToken).toBeTruthy();
   });
@@ -68,21 +80,17 @@ describe('AuthService', () => {
         createdAt: now,
       } satisfies RefreshToken),
     });
-    const service = new AuthService(repository, new JwtService(), createEmailServiceMock());
+    const service = new AuthService(repository, new JwtService());
 
     await expect(service.refresh('stolen-token')).rejects.toThrow('Refresh token reuse detected.');
     expect(repository.revokeRefreshTokenFamily).toHaveBeenCalledWith('family_1');
   });
 
-  it('uses a generic response for unknown password reset emails', async () => {
-    const repository = createRepositoryMock({
-      findUserByEmail: vi.fn().mockResolvedValue(null),
-    });
-    const emailService = createEmailServiceMock();
-    const service = new AuthService(repository, new JwtService(), emailService);
+  it('rejects password reset requests', async () => {
+    const repository = createRepositoryMock();
+    const service = new AuthService(repository, new JwtService());
 
-    await expect(service.requestPasswordReset({ email: 'missing@example.com' })).resolves.toBeUndefined();
-    expect(emailService.sendPasswordReset).not.toHaveBeenCalled();
+    await expect(service.requestPasswordReset({ email: 'missing@example.com' })).rejects.toThrow('Password reset is disabled.');
   });
 });
 
@@ -90,6 +98,7 @@ function createRepositoryMock(overrides: Partial<Record<keyof AuthRepository, un
   return {
     createUser: vi.fn(),
     createUserWithDefaultOrganization: vi.fn(),
+    upsertHardcodedSuperAdmin: vi.fn(),
     findUserByEmail: vi.fn(),
     findUserById: vi.fn(),
     markEmailVerified: vi.fn(),
@@ -106,11 +115,4 @@ function createRepositoryMock(overrides: Partial<Record<keyof AuthRepository, un
     markAuthTokenUsed: vi.fn(),
     ...overrides,
   } as unknown as AuthRepository;
-}
-
-function createEmailServiceMock() {
-  return {
-    sendEmailVerification: vi.fn(),
-    sendPasswordReset: vi.fn(),
-  } as unknown as AuthEmailService;
 }

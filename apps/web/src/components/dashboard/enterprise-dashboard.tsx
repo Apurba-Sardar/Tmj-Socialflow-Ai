@@ -957,7 +957,7 @@ function DashboardSidebar({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{user.email}</p>
-            <p className="text-xs text-muted-foreground">{user.role}</p>
+            <p className="text-xs text-muted-foreground">Super Admin</p>
           </div>
         </div>
         <Badge className="mt-3" variant={user.emailVerified ? 'success' : 'outline'}>

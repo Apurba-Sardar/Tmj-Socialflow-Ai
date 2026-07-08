@@ -1,11 +1,5 @@
-import { Suspense } from 'react';
-
-import { AuthForm } from '../../../components/auth/auth-form';
+import { redirect } from 'next/navigation';
 
 export default function VerifyEmailPage() {
-  return (
-    <Suspense fallback={null}>
-      <AuthForm mode="verify-email" />
-    </Suspense>
-  );
+  redirect('/login');
 }

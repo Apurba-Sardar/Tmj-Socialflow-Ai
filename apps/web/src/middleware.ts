@@ -9,6 +9,7 @@ const protectedPrefixes = [
   '/wordpress-hub',
   '/campaigns',
   '/ai-pipeline',
+  '/admin',
 ];
 
 export function middleware(request: NextRequest) {
@@ -32,5 +33,6 @@ export const config = {
     '/wordpress-hub/:path*',
     '/campaigns/:path*',
     '/ai-pipeline/:path*',
+    '/admin/:path*',
   ],
 };

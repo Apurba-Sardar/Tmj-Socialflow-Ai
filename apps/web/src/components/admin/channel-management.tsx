@@ -39,6 +39,7 @@ interface SupportedPlatform {
   authType: AuthType;
   requiredScopes: string[];
   setupHint: string;
+  oauthConfigured?: boolean;
 }
 
 interface ChannelAccount {
@@ -148,6 +149,78 @@ const platformTone: Record<Platform, string> = {
   FACEBOOK: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
 };
 
+const platformSetup: Record<
+  Platform,
+  {
+    developerUrl: string;
+    credentialLabels: string[];
+    accountIdLabel: string;
+    accountIdHelp: string;
+    steps: string[];
+  }
+> = {
+  PINTEREST: {
+    developerUrl: 'https://developers.pinterest.com/apps/',
+    credentialLabels: ['PINTEREST_CLIENT_ID', 'PINTEREST_CLIENT_SECRET'],
+    accountIdLabel: 'Pinterest board ID',
+    accountIdHelp: 'After OAuth, choose the board where generated pins should be published.',
+    steps: [
+      'Create or open your Pinterest developer app.',
+      'Paste the redirect URI below into the app OAuth settings.',
+      'Add the Client ID and Secret to .env, then restart the backend.',
+      'Click Connect OAuth and approve access with the Pinterest account that owns the board.',
+    ],
+  },
+  INSTAGRAM: {
+    developerUrl: 'https://developers.facebook.com/apps/',
+    credentialLabels: ['META_CLIENT_ID', 'META_CLIENT_SECRET'],
+    accountIdLabel: 'Instagram Business account ID',
+    accountIdHelp: 'Use the IG Business or Creator account connected to your Facebook Page.',
+    steps: [
+      'Create a Meta developer app with Instagram content publishing access.',
+      'Add this redirect URI to the Meta OAuth settings.',
+      'Add Meta Client ID and Secret to .env, then restart the backend.',
+      'Connect OAuth and select the connected Instagram Business account.',
+    ],
+  },
+  FACEBOOK: {
+    developerUrl: 'https://developers.facebook.com/apps/',
+    credentialLabels: ['META_CLIENT_ID', 'META_CLIENT_SECRET'],
+    accountIdLabel: 'Facebook Page ID',
+    accountIdHelp: 'Publishing requires a Page ID and Page publishing permissions.',
+    steps: [
+      'Create or open your Meta developer app.',
+      'Add the redirect URI below to valid OAuth redirect URIs.',
+      'Add Meta Client ID and Secret to .env, then restart the backend.',
+      'Connect OAuth with the Facebook account that manages the Page.',
+    ],
+  },
+  LINKEDIN: {
+    developerUrl: 'https://www.linkedin.com/developers/apps',
+    credentialLabels: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
+    accountIdLabel: 'LinkedIn author URN',
+    accountIdHelp: 'Use a person or organization URN, for example urn:li:organization:123.',
+    steps: [
+      'Create or open your LinkedIn developer app.',
+      'Add the redirect URI below to authorized redirect URLs.',
+      'Add LinkedIn Client ID and Secret to .env, then restart the backend.',
+      'Connect OAuth with the LinkedIn member or organization publisher.',
+    ],
+  },
+  X: {
+    developerUrl: 'https://developer.x.com/en/portal/projects-and-apps',
+    credentialLabels: ['X_CLIENT_ID', 'X_CLIENT_SECRET'],
+    accountIdLabel: 'X user',
+    accountIdHelp: 'Basic text publishing does not need a manual account ID.',
+    steps: [
+      'Create or open your X developer app.',
+      'Add the redirect URI below to OAuth 2.0 callback URLs.',
+      'Add X Client ID and Secret to .env, then restart the backend.',
+      'Connect OAuth with the X account used for publishing.',
+    ],
+  },
+};
+
 const visualStylePresets = [
   {
     label: 'Premium editorial',
@@ -192,13 +265,14 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   const [promptPreview, setPromptPreview] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [oauthStarting, setOauthStarting] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [previewingPrompt, setPreviewingPrompt] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
 
-  const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'MANAGER';
+  void user;
   const selectedPlatform = useMemo(
     () => supported.find((item) => item.platform === form.platform),
     [form.platform, supported],
@@ -207,9 +281,26 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     () => promptTemplates.find((item) => item.platform === promptForm.platform && item.purpose === 'IMAGE_GENERATION'),
     [promptForm.platform, promptTemplates],
   );
+  const selectedSetup = selectedPlatform ? platformSetup[selectedPlatform.platform] : platformSetup.PINTEREST;
+  const redirectUri = useMemo(() => {
+    const apiUrl = new URL(apiBaseUrl);
+    return `${apiUrl.origin}/api/social-channels/oauth/${form.platform}/callback`;
+  }, [apiBaseUrl, form.platform]);
 
   useEffect(() => {
     setDarkMode(document.documentElement.classList.contains('dark'));
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    const channelError = params.get('channel_error');
+
+    if (connected) {
+      notify(`${connected} connected. Review the account ID before publishing.`);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (channelError) {
+      notify(channelError);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
     void loadData();
   }, []);
 
@@ -295,6 +386,31 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     }
   }
 
+  async function startOAuth(platform: Platform) {
+    setOauthStarting(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/social-channels/oauth/${platform}/start`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(detail?.message ?? 'OAuth is not configured for this platform.');
+      }
+
+      const payload = (await response.json()) as { authorizationUrl?: string };
+
+      if (!payload.authorizationUrl) {
+        throw new Error('Provider did not return an authorization URL.');
+      }
+
+      window.location.href = payload.authorizationUrl;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'OAuth connection could not start.');
+      setOauthStarting(false);
+    }
+  }
+
   async function updateStatus(channel: ChannelAccount, status: ChannelStatus) {
     setBusyId(channel.id);
     try {
@@ -359,6 +475,15 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     window.setTimeout(() => {
       setMessage(null);
     }, 3200);
+  }
+
+  async function copyText(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      notify(`${label} copied.`);
+    } catch {
+      notify(`Could not copy ${label.toLowerCase()}.`);
+    }
   }
 
   function toggleTheme() {
@@ -577,40 +702,54 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           </Card>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.95fr_1.35fr]">
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.4fr]">
           <Card className="border-border/80 bg-card/95 dark:border-white/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Plus className="h-5 w-5" />
-                Add channel
+                Connect a channel
               </CardTitle>
-              <CardDescription>Store the channel record now. OAuth connect buttons can reuse this same backend table.</CardDescription>
+              <CardDescription>Start with OAuth for real accounts. Manual tokens are available for advanced testing.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
                 <label className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Platform</label>
-                <select
-                  className="sf-focus-ring h-11 rounded-lg border border-input bg-background/80 px-3 text-sm dark:bg-white/[0.035]"
-                  onChange={(event) => {
-                    updatePlatform(event.target.value as Platform);
-                  }}
-                  value={form.platform}
-                >
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {supported.map((item) => (
-                    <option key={item.platform} value={item.platform}>
-                      {item.label}
-                    </option>
+                    <button
+                      className={cn(
+                        'rounded-lg border border-border bg-background/70 px-3 py-2 text-left text-sm transition hover:border-primary/50 dark:border-white/10 dark:bg-white/[0.03]',
+                        form.platform === item.platform ? 'border-primary bg-primary/10 text-primary' : '',
+                      )}
+                      key={item.platform}
+                      onClick={() => {
+                        updatePlatform(item.platform);
+                      }}
+                      type="button"
+                    >
+                      <span className="font-medium">{item.label.replace(' Pages', '')}</span>
+                      <span className="mt-1 block text-[11px] text-muted-foreground">
+                        {item.oauthConfigured ? 'OAuth ready' : 'Needs keys'}
+                      </span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               {selectedPlatform ? (
-                <div className="rounded-lg border border-border bg-muted/35 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
-                  <div className="font-medium">{selectedPlatform.setupHint}</div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Required scopes: {selectedPlatform.requiredScopes.join(', ')}
-                  </div>
-                </div>
+                <SetupGuide
+                  credentials={selectedSetup.credentialLabels}
+                  developerUrl={selectedSetup.developerUrl}
+                  oauthConfigured={Boolean(selectedPlatform.oauthConfigured)}
+                  onCopyRedirect={() => {
+                    void copyText(redirectUri, 'Redirect URI');
+                  }}
+                  platform={selectedPlatform.label}
+                  redirectUri={redirectUri}
+                  requiredScopes={selectedPlatform.requiredScopes}
+                  setupHint={selectedPlatform.setupHint}
+                  steps={selectedSetup.steps}
+                />
               ) : null}
 
               <Field label="Display name">
@@ -637,9 +776,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                     onChange={(event) => {
                       setForm((value) => ({ ...value, externalAccountId: event.target.value }));
                     }}
-                    placeholder="page, board, or business account id"
+                    placeholder={selectedSetup.accountIdLabel}
                     value={form.externalAccountId}
                   />
+                  <p className="text-xs leading-5 text-muted-foreground">{selectedSetup.accountIdHelp}</p>
                 </Field>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
@@ -690,18 +830,30 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   value={form.refreshToken}
                 />
               </Field>
-              <Button
-                disabled={saving}
-                onClick={() => {
-                  void addChannel();
-                }}
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-                Add channel
-              </Button>
-              {!isAdmin ? (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-200">
-                  Your role is {user.role}. Admin, Super Admin, and Manager users should manage production credentials.
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button
+                  disabled={saving}
+                  onClick={() => {
+                    void addChannel();
+                  }}
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  Add manual channel
+                </Button>
+                <Button
+                  disabled={oauthStarting || !selectedPlatform?.oauthConfigured}
+                  onClick={() => {
+                    void startOAuth(form.platform);
+                  }}
+                  variant="outline"
+                >
+                  {oauthStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  Connect real account
+                </Button>
+              </div>
+              {!selectedPlatform?.oauthConfigured ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200">
+                  Add {selectedSetup.credentialLabels.join(' and ')} to `.env`, restart the backend, then this button will unlock.
                 </div>
               ) : null}
             </CardContent>
@@ -1007,15 +1159,110 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 )}
               </div>
 
-              {!isAdmin ? (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-200">
-                  Your role is {user.role}. Only Admin, Super Admin, and Manager users can save prompt templates.
-                </div>
-              ) : null}
             </CardContent>
           </Card>
         </section>
       </main>
+    </div>
+  );
+}
+
+function SetupGuide({
+  credentials,
+  developerUrl,
+  oauthConfigured,
+  onCopyRedirect,
+  platform,
+  redirectUri,
+  requiredScopes,
+  setupHint,
+  steps,
+}: {
+  credentials: string[];
+  developerUrl: string;
+  oauthConfigured: boolean;
+  onCopyRedirect: () => void;
+  platform: string;
+  redirectUri: string;
+  requiredScopes: string[];
+  setupHint: string;
+  steps: string[];
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-muted/30 dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4 dark:border-white/10">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{platform}</Badge>
+            <Badge
+              className={
+                oauthConfigured
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
+                  : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200'
+              }
+              variant="outline"
+            >
+              {oauthConfigured ? 'OAuth ready' : 'Env keys missing'}
+            </Badge>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{setupHint}</p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <a href={developerUrl} rel="noreferrer" target="_blank">
+            <ExternalLink className="h-4 w-4" />
+            Developer app
+          </a>
+        </Button>
+      </div>
+
+      <div className="grid gap-4 p-4">
+        <div className="grid gap-2">
+          {steps.map((step, index) => (
+            <div className="flex gap-3 text-sm" key={step}>
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                {index + 1}
+              </div>
+              <div className="leading-6">{step}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-lg border border-border bg-background/80 p-3 dark:border-white/10 dark:bg-black/20">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Redirect URI</div>
+            <Button onClick={onCopyRedirect} size="sm" type="button" variant="ghost">
+              <Clipboard className="h-4 w-4" />
+              Copy
+            </Button>
+          </div>
+          <code className="block break-all rounded-md bg-muted px-3 py-2 text-xs text-foreground dark:bg-white/[0.04]">
+            {redirectUri}
+          </code>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-border bg-background/60 p-3 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Env keys</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {credentials.map((credential) => (
+                <Badge className="font-mono text-[11px]" key={credential} variant="outline">
+                  {credential}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-3 dark:border-white/10 dark:bg-white/[0.02]">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Scopes</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {requiredScopes.map((scope) => (
+                <Badge className="font-mono text-[11px]" key={scope} variant="secondary">
+                  {scope}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

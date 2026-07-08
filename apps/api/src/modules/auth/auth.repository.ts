@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AuthTokenType, Prisma, RefreshToken, User } from '@prisma/client';
+import { Role, type AuthTokenType, type Prisma, type RefreshToken, type User } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -35,6 +35,71 @@ export class AuthRepository {
       return tx.user.update({
         where: { id: user.id },
         data: { defaultOrganizationId: createdOrganization.id },
+      });
+    });
+  }
+
+  async upsertHardcodedSuperAdmin(data: {
+    email: string;
+    passwordHash: string;
+    displayName: string;
+    organization: { name: string; slug: string };
+  }): Promise<User> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email: data.email } });
+
+      if (existing) {
+        return tx.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash: data.passwordHash,
+            displayName: data.displayName,
+            role: Role.SUPER_ADMIN,
+            disabledAt: null,
+            emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+          },
+        });
+      }
+
+      const user = await tx.user.create({
+        data: {
+          email: data.email,
+          passwordHash: data.passwordHash,
+          displayName: data.displayName,
+          role: Role.SUPER_ADMIN,
+          emailVerifiedAt: new Date(),
+        },
+      });
+      const organization = await tx.organization.upsert({
+        where: { slug: data.organization.slug },
+        update: {
+          name: data.organization.name,
+          ownerUserId: user.id,
+        },
+        create: {
+          name: data.organization.name,
+          slug: data.organization.slug,
+          ownerUserId: user.id,
+        },
+      });
+
+      await tx.organizationMember.upsert({
+        where: {
+          organizationId_userId: {
+            organizationId: organization.id,
+            userId: user.id,
+          },
+        },
+        update: {},
+        create: {
+          organizationId: organization.id,
+          userId: user.id,
+        },
+      });
+
+      return tx.user.update({
+        where: { id: user.id },
+        data: { defaultOrganizationId: organization.id },
       });
     });
   }

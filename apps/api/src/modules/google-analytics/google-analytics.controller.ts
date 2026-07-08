@@ -14,13 +14,13 @@ export class GoogleAnalyticsController {
   }
 
   @Get('wordpress-posts')
-  wordpressPosts(@Query('articleIds') articleIds?: string, @Query('days') days?: string) {
-    return this.googleAnalyticsService.wordpressPostMetrics(parseIds(articleIds), Number(days ?? 30));
+  wordpressPosts(@Query('articleIds') articleIds?: string) {
+    return this.googleAnalyticsService.wordpressPostMetrics(parseIds(articleIds));
   }
 
   @Get('wordpress-posts/:id')
-  wordpressPost(@Param('id') id: string, @Query('days') days?: string) {
-    return this.googleAnalyticsService.wordpressPostMetrics([id], Number(days ?? 30));
+  wordpressPost(@Param('id') id: string) {
+    return this.googleAnalyticsService.wordpressPostMetrics([id]);
   }
 }
 

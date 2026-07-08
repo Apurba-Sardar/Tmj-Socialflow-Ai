@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+
+import { BadRequestException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import {
   Prisma,
+  PublishJobStatus,
+  PublishLogLevel,
   SocialChannelAuthType,
   SocialChannelStatus,
   SocialPlatform,
@@ -8,7 +12,7 @@ import {
 
 import type { AuthenticatedUser } from '../auth/types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { CreateSocialChannelDto, UpdateSocialChannelDto } from './social-channels.dto.js';
+import type { CreateSocialChannelDto, OAuthCallbackDto, PublishToChannelDto, UpdateSocialChannelDto } from './social-channels.dto.js';
 
 const supportedPlatforms = [
   {
@@ -48,12 +52,107 @@ const supportedPlatforms = [
   },
 ] as const;
 
+interface SocialChannelAccountRecord {
+  id: string;
+  organizationId: string | null;
+  connectedById: string | null;
+  platform: SocialPlatform;
+  externalAccountId: string | null;
+  accessTokenCiphertext: string | null;
+  tokenExpiresAt: Date | null;
+  authType: SocialChannelAuthType;
+  status: SocialChannelStatus;
+}
+
 @Injectable()
 export class SocialChannelsService {
   constructor(private readonly prisma: PrismaService) {}
 
   supported() {
-    return supportedPlatforms;
+    return supportedPlatforms.map((platform) => ({
+      ...platform,
+      oauthConfigured: Boolean(this.providerConfig(platform.platform)),
+    }));
+  }
+
+  oauthStart(platform: SocialPlatform, user: AuthenticatedUser) {
+    const config = this.requireProviderConfig(platform);
+    const verifier = randomBytes(32).toString('base64url');
+    const state = this.signState({
+      platform,
+      userId: user.id,
+      verifier,
+      nonce: randomBytes(12).toString('hex'),
+      createdAt: Date.now(),
+    });
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      response_type: 'code',
+      scope: config.scopes.join(config.scopeSeparator),
+      state,
+    });
+
+    if (config.pkce) {
+      params.set('code_challenge', createHash('sha256').update(verifier).digest('base64url'));
+      params.set('code_challenge_method', 'S256');
+    }
+
+    if (platform === SocialPlatform.X) {
+      params.set('response_type', 'code');
+    }
+
+    return {
+      platform,
+      authorizationUrl: `${config.authorizeUrl}?${params.toString()}`,
+      redirectUri: config.redirectUri,
+      scopes: config.scopes,
+    };
+  }
+
+  async oauthCallback(platform: SocialPlatform, dto: OAuthCallbackDto) {
+    const config = this.requireProviderConfig(platform);
+    const state = this.verifyState(dto.state);
+
+    if (state.platform !== platform) {
+      throw new BadRequestException('OAuth callback platform does not match the original request.');
+    }
+
+    const token = await this.exchangeCode(config, dto.code, state.verifier);
+    const organizationId = await this.defaultOrganizationId(state.userId);
+    const supported = supportedPlatforms.find((item) => item.platform === platform);
+    const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined;
+
+    const account = await this.prisma.socialChannelAccount.create({
+      data: {
+        organizationId,
+        connectedById: state.userId,
+        platform,
+        displayName: `${supported?.label ?? platform} OAuth account`,
+        handle: token.screen_name ?? undefined,
+        externalAccountId: token.user_id ?? token.account_id ?? undefined,
+        accountType: platformAccountType(platform),
+        authType: SocialChannelAuthType.OAUTH,
+        scopes: typeof token.scope === 'string' ? token.scope.split(/[,\s]+/).filter(Boolean) : config.scopes,
+        accessTokenCiphertext: this.encodeSecret(token.access_token),
+        refreshTokenCiphertext: this.encodeSecret(token.refresh_token),
+        tokenExpiresAt: expiresAt,
+        status: token.access_token ? SocialChannelStatus.CONNECTED : SocialChannelStatus.ACTION_REQUIRED,
+        lastHealthCheckAt: new Date(),
+        metadata: {
+          setupSource: 'oauth',
+          tokenType: token.token_type,
+          provider: platform,
+          note: 'Set externalAccountId to the Page, board, organization, or IG business account ID required for publishing.',
+        },
+      },
+    });
+
+    return {
+      connected: true,
+      account,
+      nextStep: nextStep(platform),
+    };
   }
 
   async summary(user: AuthenticatedUser) {
@@ -167,10 +266,332 @@ export class SocialChannelsService {
     });
   }
 
+  async publish(id: string, dto: PublishToChannelDto, user: AuthenticatedUser) {
+    const account = await this.ensureVisible(id, user);
+    const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+
+    if (!accessToken) {
+      throw new BadRequestException('This channel has no access token. Connect it with OAuth or manual token setup.');
+    }
+
+    if (account.tokenExpiresAt && account.tokenExpiresAt.getTime() < Date.now()) {
+      await this.prisma.socialChannelAccount.update({
+        where: { id },
+        data: {
+          status: SocialChannelStatus.EXPIRED,
+          lastError: 'Access token has expired. Reconnect this channel.',
+        },
+      });
+      throw new BadRequestException('Access token has expired. Reconnect this channel.');
+    }
+
+    const organizationId = account.organizationId ?? await this.defaultOrganizationId(user.id);
+
+    if (!organizationId) {
+      throw new UnprocessableEntityException('User is not assigned to an organization.');
+    }
+
+    const job = await this.prisma.publishJob.create({
+      data: {
+        organizationId,
+        userId: user.id,
+        platform: account.platform,
+        platformAccount: account.displayName,
+        title: dto.title,
+        caption: dto.caption,
+        hashtags: dto.hashtags ?? [],
+        status: PublishJobStatus.PROCESSING,
+        metadata: {
+          channelAccountId: account.id,
+          mediaUrl: dto.mediaUrl,
+        },
+      },
+    });
+
+    try {
+      const result = await this.publishToProvider(account, accessToken, dto);
+      const updatedJob = await this.prisma.publishJob.update({
+        where: { id: job.id },
+        data: {
+          status: PublishJobStatus.PUBLISHED,
+          publishedAt: new Date(),
+          postUrl: result.postUrl,
+          attempts: { increment: 1 },
+          metadata: {
+            channelAccountId: account.id,
+            mediaUrl: dto.mediaUrl,
+            providerResponse: result.providerResponse as Prisma.InputJsonValue,
+          },
+          logs: {
+            create: {
+              level: PublishLogLevel.INFO,
+              message: `Published to ${account.platform}.`,
+              metadata: result.providerResponse as Prisma.InputJsonValue,
+            },
+          },
+        },
+      });
+
+      await this.prisma.socialChannelAccount.update({
+        where: { id: account.id },
+        data: {
+          status: SocialChannelStatus.CONNECTED,
+          lastError: null,
+          lastHealthCheckAt: new Date(),
+        },
+      });
+
+      return { published: true, job: updatedJob, result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Publishing failed.';
+      const failedJob = await this.prisma.publishJob.update({
+        where: { id: job.id },
+        data: {
+          status: PublishJobStatus.FAILED,
+          attempts: { increment: 1 },
+          lastError: message,
+          logs: {
+            create: {
+              level: PublishLogLevel.ERROR,
+              message,
+            },
+          },
+        },
+      });
+      await this.prisma.socialChannelAccount.update({
+        where: { id: account.id },
+        data: {
+          status: SocialChannelStatus.ACTION_REQUIRED,
+          lastError: message,
+          lastHealthCheckAt: new Date(),
+        },
+      });
+
+      return { published: false, job: failedJob, error: message };
+    }
+  }
+
   async remove(id: string, user: AuthenticatedUser) {
     await this.ensureVisible(id, user);
     await this.prisma.socialChannelAccount.delete({ where: { id } });
     return { deleted: true };
+  }
+
+  private async exchangeCode(config: ProviderConfig, code: string, verifier: string): Promise<TokenResponse> {
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: config.redirectUri,
+      client_id: config.clientId,
+    });
+
+    if (config.pkce) {
+      body.set('code_verifier', verifier);
+    }
+
+    if (config.clientSecret && !config.basicAuthToken) {
+      body.set('client_secret', config.clientSecret);
+    }
+
+    const response = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...(config.basicAuthToken ? { Authorization: `Basic ${config.basicAuthToken}` } : {}),
+      },
+      body,
+    });
+
+    return this.providerJson<TokenResponse>(response, 'OAuth token exchange failed.');
+  }
+
+  private async publishToProvider(
+    account: SocialChannelAccountRecord,
+    accessToken: string,
+    dto: PublishToChannelDto,
+  ): Promise<{ postUrl: string | null; providerResponse: unknown }> {
+    const caption = withHashtags(dto.caption, dto.hashtags);
+
+    switch (account.platform) {
+      case SocialPlatform.X: {
+        const payload = await this.providerJson<Record<string, unknown>>(
+          await fetch('https://api.twitter.com/2/tweets', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: caption }),
+          }),
+          'X publish failed.',
+        );
+        const id = nestedString(payload, ['data', 'id']);
+        return { postUrl: id ? `https://x.com/i/web/status/${id}` : null, providerResponse: payload };
+      }
+
+      case SocialPlatform.LINKEDIN: {
+        const author = requiredExternalId(account.externalAccountId, 'LinkedIn author URN');
+        const payload = await this.providerJson<Record<string, unknown>>(
+          await fetch('https://api.linkedin.com/v2/ugcPosts', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+              'X-Restli-Protocol-Version': '2.0.0',
+            },
+            body: JSON.stringify({
+              author,
+              lifecycleState: 'PUBLISHED',
+              specificContent: {
+                'com.linkedin.ugc.ShareContent': {
+                  shareCommentary: { text: caption },
+                  shareMediaCategory: 'NONE',
+                },
+              },
+              visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
+            }),
+          }),
+          'LinkedIn publish failed.',
+        );
+        return { postUrl: null, providerResponse: payload };
+      }
+
+      case SocialPlatform.PINTEREST: {
+        const boardId = requiredExternalId(account.externalAccountId, 'Pinterest board ID');
+        const payload = await this.providerJson<Record<string, unknown>>(
+          await fetch('https://api.pinterest.com/v5/pins', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              board_id: boardId,
+              title: dto.title,
+              description: caption,
+              ...(dto.mediaUrl
+                ? {
+                    media_source: {
+                      source_type: 'image_url',
+                      url: dto.mediaUrl,
+                    },
+                  }
+                : {}),
+            }),
+          }),
+          'Pinterest publish failed.',
+        );
+        const id = stringValue(payload.id);
+        return { postUrl: id ? `https://www.pinterest.com/pin/${id}/` : null, providerResponse: payload };
+      }
+
+      case SocialPlatform.FACEBOOK: {
+        const pageId = requiredExternalId(account.externalAccountId, 'Facebook Page ID');
+        const endpoint = dto.mediaUrl
+          ? `https://graph.facebook.com/v20.0/${pageId}/photos`
+          : `https://graph.facebook.com/v20.0/${pageId}/feed`;
+        const body = new URLSearchParams({
+          access_token: accessToken,
+          ...(dto.mediaUrl ? { url: dto.mediaUrl, caption } : { message: caption }),
+        });
+        const payload = await this.providerJson<Record<string, unknown>>(
+          await fetch(endpoint, { method: 'POST', body }),
+          'Facebook publish failed.',
+        );
+        const id = stringValue(payload.post_id) ?? stringValue(payload.id);
+        return { postUrl: id ? `https://www.facebook.com/${id}` : null, providerResponse: payload };
+      }
+
+      case SocialPlatform.INSTAGRAM: {
+        const instagramBusinessId = requiredExternalId(account.externalAccountId, 'Instagram Business account ID');
+
+        if (!dto.mediaUrl) {
+          throw new BadRequestException('Instagram publishing requires a public image URL.');
+        }
+
+        const createPayload = await this.providerJson<Record<string, unknown>>(
+          await fetch(`https://graph.facebook.com/v20.0/${instagramBusinessId}/media`, {
+            method: 'POST',
+            body: new URLSearchParams({
+              access_token: accessToken,
+              image_url: dto.mediaUrl,
+              caption,
+            }),
+          }),
+          'Instagram media container creation failed.',
+        );
+        const creationId = stringValue(createPayload.id);
+
+        if (!creationId) {
+          throw new BadRequestException('Instagram did not return a media container ID.');
+        }
+
+        const publishPayload = await this.providerJson<Record<string, unknown>>(
+          await fetch(`https://graph.facebook.com/v20.0/${instagramBusinessId}/media_publish`, {
+            method: 'POST',
+            body: new URLSearchParams({
+              access_token: accessToken,
+              creation_id: creationId,
+            }),
+          }),
+          'Instagram publish failed.',
+        );
+        const id = stringValue(publishPayload.id);
+        return { postUrl: id ? `https://www.instagram.com/p/${id}/` : null, providerResponse: publishPayload };
+      }
+    }
+  }
+
+  private async providerJson<T>(response: Response, fallback: string): Promise<T> {
+    const text = await response.text();
+    const payload = parseJson(text);
+
+    if (!response.ok) {
+      throw new BadRequestException(providerErrorMessage(payload, text, fallback));
+    }
+
+    return payload as T;
+  }
+
+  private requireProviderConfig(platform: SocialPlatform): ProviderConfig {
+    const config = this.providerConfig(platform);
+
+    if (!config) {
+      throw new BadRequestException(`OAuth is not configured for ${platform}. Add provider client ID/secret env values.`);
+    }
+
+    return config;
+  }
+
+  private providerConfig(platform: SocialPlatform): ProviderConfig | null {
+    return providerConfig(platform);
+  }
+
+  private signState(payload: OAuthStatePayload): string {
+    const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const signature = createHmac('sha256', this.stateSecret()).update(body).digest('base64url');
+    return `${body}.${signature}`;
+  }
+
+  private verifyState(state: string): OAuthStatePayload {
+    const [body, signature] = state.split('.');
+    const expected = body ? createHmac('sha256', this.stateSecret()).update(body).digest('base64url') : '';
+
+    if (!body || !signature || signature !== expected) {
+      throw new BadRequestException('Invalid OAuth state.');
+    }
+
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as OAuthStatePayload;
+
+    if (Date.now() - payload.createdAt > 10 * 60 * 1000) {
+      throw new BadRequestException('OAuth state expired. Start the connection again.');
+    }
+
+    return payload;
+  }
+
+  private stateSecret(): string {
+    return process.env.JWT_ACCESS_SECRET ?? process.env.JWT_REFRESH_SECRET ?? 'socialflow-local-oauth-state';
   }
 
   private async ensureVisible(id: string, user: AuthenticatedUser) {
@@ -218,6 +639,11 @@ export class SocialChannelsService {
     return clean ? Buffer.from(clean, 'utf8').toString('base64') : undefined;
   }
 
+  private decodeSecret(secret?: string | null): string | null {
+    const clean = secret?.trim();
+    return clean ? Buffer.from(clean, 'base64').toString('utf8') : null;
+  }
+
   private optionalTrim(value?: string): string | undefined {
     const clean = value?.trim();
     if (!clean) {
@@ -226,4 +652,207 @@ export class SocialChannelsService {
 
     return clean;
   }
+}
+
+interface ProviderConfig {
+  authorizeUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: string;
+  redirectUri: string;
+  scopes: string[];
+  scopeSeparator: string;
+  pkce: boolean;
+  basicAuthToken?: string;
+}
+
+interface OAuthStatePayload {
+  platform: SocialPlatform;
+  userId: string;
+  verifier: string;
+  nonce: string;
+  createdAt: number;
+}
+
+interface TokenResponse {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+  screen_name?: string;
+  user_id?: string;
+  account_id?: string;
+}
+
+function providerConfig(platform: SocialPlatform): ProviderConfig | null {
+  const apiBaseUrl = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? '4000'}`;
+  const redirectUri = process.env[`${platform}_REDIRECT_URI`] ?? `${apiBaseUrl}/api/social-channels/oauth/${platform}/callback`;
+  const supported = supportedPlatforms.find((item) => item.platform === platform);
+
+  if (!supported) {
+    return null;
+  }
+
+  if (platform === SocialPlatform.FACEBOOK || platform === SocialPlatform.INSTAGRAM) {
+    const clientId = process.env.META_CLIENT_ID ?? process.env.FACEBOOK_CLIENT_ID;
+    const clientSecret = process.env.META_CLIENT_SECRET ?? process.env.FACEBOOK_CLIENT_SECRET;
+    return clientId && clientSecret
+      ? {
+          authorizeUrl: 'https://www.facebook.com/v20.0/dialog/oauth',
+          tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
+          clientId,
+          clientSecret,
+          redirectUri,
+          scopes: [...supported.requiredScopes],
+          scopeSeparator: ',',
+          pkce: false,
+        }
+      : null;
+  }
+
+  if (platform === SocialPlatform.PINTEREST) {
+    const clientId = process.env.PINTEREST_CLIENT_ID;
+    const clientSecret = process.env.PINTEREST_CLIENT_SECRET;
+    return clientId && clientSecret
+      ? {
+          authorizeUrl: 'https://www.pinterest.com/oauth/',
+          tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
+          clientId,
+          clientSecret,
+          redirectUri: process.env.PINTEREST_REDIRECT_URI ?? redirectUri,
+          scopes: [...supported.requiredScopes],
+          scopeSeparator: ',',
+          pkce: false,
+          basicAuthToken: Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
+        }
+      : null;
+  }
+
+  if (platform === SocialPlatform.LINKEDIN) {
+    const clientId = process.env.LINKEDIN_CLIENT_ID;
+    const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+    return clientId && clientSecret
+      ? {
+          authorizeUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+          tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
+          clientId,
+          clientSecret,
+          redirectUri,
+          scopes: [...supported.requiredScopes],
+          scopeSeparator: ' ',
+          pkce: false,
+        }
+      : null;
+  }
+
+  const clientId = process.env.X_CLIENT_ID;
+  const clientSecret = process.env.X_CLIENT_SECRET;
+  return clientId
+    ? {
+        authorizeUrl: 'https://twitter.com/i/oauth2/authorize',
+        tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+        clientId,
+        clientSecret,
+        redirectUri,
+        scopes: [...supported.requiredScopes],
+        scopeSeparator: ' ',
+        pkce: true,
+        basicAuthToken: clientSecret ? Buffer.from(`${clientId}:${clientSecret}`).toString('base64') : undefined,
+      }
+    : null;
+}
+
+function platformAccountType(platform: SocialPlatform): string {
+  const types: Record<SocialPlatform, string> = {
+    [SocialPlatform.FACEBOOK]: 'Page',
+    [SocialPlatform.INSTAGRAM]: 'Business',
+    [SocialPlatform.PINTEREST]: 'Board',
+    [SocialPlatform.LINKEDIN]: 'Profile or Organization',
+    [SocialPlatform.X]: 'User',
+  };
+
+  return types[platform];
+}
+
+function withHashtags(caption: string, hashtags?: string[]): string {
+  const cleanTags = hashtags?.map((tag) => tag.trim()).filter(Boolean) ?? [];
+
+  if (!cleanTags.length) {
+    return caption;
+  }
+
+  return `${caption.trim()}\n\n${cleanTags.map((tag) => (tag.startsWith('#') ? tag : `#${tag}`)).join(' ')}`;
+}
+
+function requiredExternalId(value: string | null, label: string): string {
+  const clean = value?.trim();
+
+  if (!clean) {
+    throw new BadRequestException(`${label} is required. Add it as the channel Account ID in Admin > Channels.`);
+  }
+
+  return clean;
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return value ? JSON.parse(value) : {};
+  } catch {
+    return { raw: value };
+  }
+}
+
+function providerErrorMessage(payload: unknown, raw: string, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const error = record.error;
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    if (error && typeof error === 'object') {
+      const message = (error as Record<string, unknown>).message;
+      if (typeof message === 'string') {
+        return message;
+      }
+    }
+
+    const message = record.message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+
+  return raw || fallback;
+}
+
+function nestedString(payload: Record<string, unknown>, path: string[]): string | null {
+  let current: unknown = payload;
+
+  for (const key of path) {
+    if (!current || typeof current !== 'object') {
+      return null;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+
+  return stringValue(current);
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function nextStep(platform: SocialPlatform): string {
+  const steps: Record<SocialPlatform, string> = {
+    [SocialPlatform.FACEBOOK]: 'Set Account ID to the Facebook Page ID and use a Page access token with pages_manage_posts.',
+    [SocialPlatform.INSTAGRAM]: 'Set Account ID to the Instagram Business account ID connected to your Facebook Page.',
+    [SocialPlatform.PINTEREST]: 'Set Account ID to the Pinterest board ID used for publishing pins.',
+    [SocialPlatform.LINKEDIN]: 'Set Account ID to the LinkedIn author URN, such as urn:li:person:... or urn:li:organization:...',
+    [SocialPlatform.X]: 'No account ID is required for basic text publishing. Media upload support can be added after X app approval.',
+  };
+
+  return steps[platform];
 }

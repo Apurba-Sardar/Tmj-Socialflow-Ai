@@ -1,5 +1,5 @@
 import { SocialChannelAuthType, SocialChannelStatus, SocialPlatform } from '@prisma/client';
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
 
 export class CreateSocialChannelDto {
   @IsEnum(SocialPlatform)
@@ -87,4 +87,33 @@ export class UpdateSocialChannelDto {
   @IsOptional()
   @IsDateString()
   tokenExpiresAt?: string;
+}
+
+export class OAuthCallbackDto {
+  @IsString()
+  @MinLength(1)
+  code!: string;
+
+  @IsString()
+  @MinLength(1)
+  state!: string;
+}
+
+export class PublishToChannelDto {
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  @IsString()
+  @MinLength(1)
+  caption!: string;
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  mediaUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hashtags?: string[];
 }

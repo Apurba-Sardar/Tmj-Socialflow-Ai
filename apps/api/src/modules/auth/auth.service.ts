@@ -1,10 +1,9 @@
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
 
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { User } from '@prisma/client';
-import { AuthTokenType } from '@prisma/client';
-import { compare, hash } from 'bcryptjs';
+import { hash } from 'bcryptjs';
 
 import { loadEnvironment } from '@socialflow/config';
 
@@ -15,9 +14,12 @@ import type {
   ResetPasswordDto,
   VerifyEmailDto,
 } from './dto.js';
-import { AuthEmailService } from './email.service.js';
 import { AuthRepository } from './auth.repository.js';
 import type { AuthenticatedUser, JwtAccessPayload } from './types.js';
+
+const SUPERADMIN_USER_ID = 'superadmin';
+const SUPERADMIN_EMAIL = 'superadmin@tmjsocialflow.local';
+const SUPERADMIN_PASSWORD = 'TMJ@500';
 
 interface AuthSession {
   user: AuthenticatedUser;
@@ -41,50 +43,31 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
-    private readonly emailService: AuthEmailService,
   ) {}
 
-  async register(dto: RegisterDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
-    const email = dto.email.trim().toLowerCase();
-    const existingUser = await this.authRepository.findUserByEmail(email);
-
-    if (existingUser) {
-      throw new ConflictException('An account with this email already exists.');
-    }
-
-    const passwordHash = await hash(dto.password, this.env.BCRYPT_SALT_ROUNDS);
-    const displayName = dto.displayName?.trim() ?? null;
-    const user = await this.authRepository.createUserWithDefaultOrganization(
-      {
-        email,
-        passwordHash,
-        displayName,
-      },
-      this.defaultOrganizationFor(email, displayName),
-    );
-
-    const verificationToken = await this.createSingleUseToken(
-      user.id,
-      AuthTokenType.EMAIL_VERIFICATION,
-      this.env.EMAIL_VERIFICATION_TTL_SECONDS,
-    );
-    await this.emailService.sendEmailVerification(user.email, verificationToken);
-
-    return this.createSession(user, undefined, metadata);
+  register(dto: RegisterDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
+    void dto;
+    void metadata;
+    throw new ForbiddenException('Signup is disabled. Use the Super Admin login.');
   }
 
   async login(dto: LoginDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
-    const user = await this.authRepository.findUserByEmail(dto.email.trim().toLowerCase());
+    const identifier = dto.email.trim().toLowerCase();
 
-    if (!user || user.disabledAt) {
+    if (![SUPERADMIN_USER_ID, SUPERADMIN_EMAIL].includes(identifier) || dto.password !== SUPERADMIN_PASSWORD) {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
-    const validPassword = await compare(dto.password, user.passwordHash);
-
-    if (!validPassword) {
-      throw new UnauthorizedException('Invalid credentials.');
-    }
+    const passwordHash = await hash(SUPERADMIN_PASSWORD, this.env.BCRYPT_SALT_ROUNDS);
+    const user = await this.authRepository.upsertHardcodedSuperAdmin({
+      email: SUPERADMIN_EMAIL,
+      passwordHash,
+      displayName: 'TMJ Super Admin',
+      organization: {
+        name: 'TMJ SocialFlow AI',
+        slug: 'tmj-socialflow-ai',
+      },
+    });
 
     return this.createSession(user, undefined, { ...metadata, rememberMe: dto.rememberMe ?? false });
   }
@@ -136,34 +119,19 @@ export class AuthService {
     }
   }
 
-  async requestPasswordReset(dto: ForgotPasswordDto): Promise<void> {
-    const user = await this.authRepository.findUserByEmail(dto.email.trim().toLowerCase());
-
-    if (!user || user.disabledAt) {
-      return;
-    }
-
-    const token = await this.createSingleUseToken(
-      user.id,
-      AuthTokenType.PASSWORD_RESET,
-      this.env.PASSWORD_RESET_TTL_SECONDS,
-    );
-    await this.emailService.sendPasswordReset(user.email, token);
+  requestPasswordReset(dto: ForgotPasswordDto): Promise<void> {
+    void dto;
+    throw new ForbiddenException('Password reset is disabled for the hardcoded Super Admin login.');
   }
 
-  async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    const token = await this.consumeSingleUseToken(dto.token, AuthTokenType.PASSWORD_RESET);
-    const passwordHash = await hash(dto.password, this.env.BCRYPT_SALT_ROUNDS);
-
-    await this.authRepository.updatePassword(token.userId, passwordHash);
-    await this.authRepository.revokeUserRefreshTokens(token.userId);
+  resetPassword(dto: ResetPasswordDto): Promise<void> {
+    void dto;
+    throw new ForbiddenException('Password reset is disabled for the hardcoded Super Admin login.');
   }
 
-  async verifyEmail(dto: VerifyEmailDto): Promise<AuthenticatedUser> {
-    const token = await this.consumeSingleUseToken(dto.token, AuthTokenType.EMAIL_VERIFICATION);
-    const user = await this.authRepository.markEmailVerified(token.userId);
-
-    return this.toAuthenticatedUser(user);
+  verifyEmail(dto: VerifyEmailDto): Promise<AuthenticatedUser> {
+    void dto;
+    throw new ForbiddenException('Email verification is disabled for the hardcoded Super Admin login.');
   }
 
   async getCurrentUser(userId: string): Promise<AuthenticatedUser> {
@@ -226,37 +194,6 @@ export class AuthService {
     });
   }
 
-  private async createSingleUseToken(
-    userId: string,
-    type: AuthTokenType,
-    ttlSeconds: number,
-  ): Promise<string> {
-    const token = this.createOpaqueToken();
-    await this.authRepository.createAuthToken(
-      userId,
-      type,
-      this.hashToken(token),
-      this.secondsFromNow(ttlSeconds),
-    );
-    return token;
-  }
-
-  private async consumeSingleUseToken(token: string, type: AuthTokenType) {
-    const persistedToken = await this.authRepository.findAuthToken(this.hashToken(token));
-
-    if (
-      !persistedToken?.type ||
-      persistedToken.type !== type ||
-      persistedToken.usedAt ||
-      persistedToken.expiresAt <= new Date()
-    ) {
-      throw new UnauthorizedException('Invalid or expired token.');
-    }
-
-    await this.authRepository.markAuthTokenUsed(persistedToken.id);
-    return persistedToken;
-  }
-
   private toAuthenticatedUser(user: Pick<User, 'id' | 'email' | 'role' | 'emailVerifiedAt'>) {
     return {
       id: user.id,
@@ -278,19 +215,4 @@ export class AuthService {
     return new Date(Date.now() + seconds * 1000);
   }
 
-  private defaultOrganizationFor(email: string, displayName: string | null) {
-    const localPart = email.split('@')[0] ?? 'workspace';
-    const cleanName = displayName?.trim() ?? `${localPart} Workspace`;
-    const cleanedSlug = cleanName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 40);
-    const slugBase = cleanedSlug.length ? cleanedSlug : 'workspace';
-
-    return {
-      name: cleanName,
-      slug: `${slugBase}-${randomUUID().slice(0, 8)}`,
-    };
-  }
 }

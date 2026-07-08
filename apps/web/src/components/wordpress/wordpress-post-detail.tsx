@@ -198,7 +198,7 @@ export function WordPressPostDetail({
     setGoogleAnalyticsLoading(true);
     setGoogleAnalyticsError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts/${articleId}?days=30`, {
+      const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts/${articleId}`, {
         cache: 'no-store',
         credentials: 'include',
       });
@@ -836,7 +836,7 @@ function AnalyticsTab({
             <BarChart3 className="h-5 w-5" />
             Google Analytics
           </CardTitle>
-          <CardDescription>Last 30 days for this WordPress article URL.</CardDescription>
+          <CardDescription>Lifetime total views for this WordPress article URL.</CardDescription>
         </CardHeader>
         <CardContent>
           {googleAnalyticsLoading ? (
@@ -849,15 +849,8 @@ function AnalyticsTab({
               {googleAnalyticsError}
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <AnalyticsMetric label="Views" value={googleAnalytics?.pageViews ?? 0} />
-              <AnalyticsMetric label="Users" value={googleAnalytics?.activeUsers ?? 0} />
-              <AnalyticsMetric label="Sessions" value={googleAnalytics?.sessions ?? 0} />
-              <AnalyticsMetric label="Events" value={googleAnalytics?.eventCount ?? 0} />
-              <AnalyticsMetric
-                label="Avg. session"
-                value={`${Math.round(googleAnalytics?.averageSessionDuration ?? 0).toString()}s`}
-              />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <AnalyticsMetric label="Lifetime total views" value={googleAnalytics?.pageViews ?? 0} />
             </div>
           )}
         </CardContent>

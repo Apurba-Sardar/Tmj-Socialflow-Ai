@@ -573,7 +573,7 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
       <div className="mt-auto rounded-lg border border-border bg-background/70 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
         <p className="text-xs text-muted-foreground">Signed in as</p>
         <p className="mt-1 break-words font-medium">{user.email}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{user.role}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Super Admin</p>
       </div>
     </div>
   );

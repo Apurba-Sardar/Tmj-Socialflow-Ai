@@ -50,7 +50,7 @@ export class GoogleAnalyticsService {
     };
   }
 
-  async wordpressPostMetrics(articleIds: string[], days = 30): Promise<GoogleAnalyticsPostMetric[]> {
+  async wordpressPostMetrics(articleIds: string[]): Promise<GoogleAnalyticsPostMetric[]> {
     const articles = await this.prisma.wordPressArticle.findMany({
       where: articleIds.length ? { id: { in: articleIds } } : {},
       select: {
@@ -73,7 +73,7 @@ export class GoogleAnalyticsService {
       throw new InternalServerErrorException(`Google Analytics is not configured. Missing: ${missingConfig.join(', ')}`);
     }
 
-    const rows = await this.runPageReport(days);
+    const rows = await this.runLifetimePageReport();
     const rowMetrics = rows.map((row) => {
       const path = normalizePath(row.dimensionValues?.[0]?.value ?? '');
       const metrics = row.metricValues ?? [];
@@ -113,7 +113,7 @@ export class GoogleAnalyticsService {
     });
   }
 
-  private async runPageReport(days: number): Promise<GoogleAnalyticsRow[]> {
+  private async runLifetimePageReport(): Promise<GoogleAnalyticsRow[]> {
     const propertyId = this.propertyId();
 
     if (!propertyId) {
@@ -127,7 +127,7 @@ export class GoogleAnalyticsService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        dateRanges: [{ startDate: `${String(clampDays(days))}daysAgo`, endDate: 'today' }],
+        dateRanges: [{ startDate: '2015-08-14', endDate: 'today' }],
         dimensions: [{ name: 'pagePath' }],
         metrics: [
           { name: 'screenPageViews' },
@@ -245,14 +245,6 @@ function normalizePath(value: string): string {
 
   const normalized = path.split(/[?#]/)[0]?.replace(/\/+$/g, '').toLowerCase() ?? '/';
   return normalized.length ? normalized : '/';
-}
-
-function clampDays(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 30;
-  }
-
-  return Math.min(Math.max(Math.trunc(value), 1), 365);
 }
 
 function toNumber(value?: string): number {

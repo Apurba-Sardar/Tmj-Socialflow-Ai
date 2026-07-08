@@ -1,11 +1,5 @@
-import { Suspense } from 'react';
-
-import { AuthForm } from '../../../components/auth/auth-form';
+import { redirect } from 'next/navigation';
 
 export default function ForgotPasswordPage() {
-  return (
-    <Suspense fallback={null}>
-      <AuthForm mode="forgot-password" />
-    </Suspense>
-  );
+  redirect('/login');
 }

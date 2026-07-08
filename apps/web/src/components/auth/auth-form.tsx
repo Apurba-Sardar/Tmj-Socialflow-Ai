@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type SyntheticEvent } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
@@ -86,7 +85,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             <Field label="Display name" name="displayName" autoComplete="name" required={false} />
           ) : null}
           {mode !== 'reset-password' && mode !== 'verify-email' ? (
-            <Field label="Email" name="email" type="email" autoComplete="email" />
+            <Field label="User ID" name="email" autoComplete="username" placeholder="superadmin" />
           ) : null}
           {mode === 'login' || mode === 'register' || mode === 'reset-password' ? (
             <Field
@@ -96,6 +95,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               minLength={mode === 'login' ? undefined : 12}
               hint={mode === 'login' ? undefined : 'Use at least 12 characters.'}
+              placeholder={mode === 'login' ? 'TMJ@500' : undefined}
             />
           ) : null}
           {error ? (
@@ -113,7 +113,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             {buttonForMode(mode)}
           </Button>
         </form>
-        <AuthLinks mode={mode} />
       </CardContent>
     </Card>
   );
@@ -127,6 +126,7 @@ function Field({
   required = true,
   minLength,
   hint,
+  placeholder,
 }: {
   label: string;
   name: string;
@@ -135,6 +135,7 @@ function Field({
   required?: boolean;
   minLength?: number;
   hint?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -145,6 +146,7 @@ function Field({
         type={type}
         autoComplete={autoComplete}
         minLength={minLength}
+        placeholder={placeholder}
         required={required}
       />
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
@@ -168,30 +170,6 @@ async function getErrorMessage(response: Response): Promise<string> {
   }
 
   return 'The request could not be completed. Please check your details and try again.';
-}
-
-function AuthLinks({ mode }: { mode: AuthMode }) {
-  if (mode === 'login') {
-    return (
-      <div className="mt-6 flex items-center justify-between text-sm">
-        <Link className="text-primary" href="/register">
-          Create account
-        </Link>
-        <Link className="text-primary" href="/forgot-password">
-          Forgot password
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <p className="mt-6 text-sm text-muted-foreground">
-      Already have an account?{' '}
-      <Link className="text-primary" href="/login">
-        Sign in
-      </Link>
-    </p>
-  );
 }
 
 function endpointForMode(mode: AuthMode): string {
