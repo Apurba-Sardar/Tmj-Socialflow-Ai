@@ -1,6 +1,6 @@
 import { createSign } from 'node:crypto';
 
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -36,6 +36,7 @@ export interface GoogleAnalyticsPostMetric {
 
 @Injectable()
 export class GoogleAnalyticsService {
+  private readonly logger = new Logger(GoogleAnalyticsService.name);
   private accessToken: { token: string; expiresAt: number } | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
@@ -70,10 +71,18 @@ export class GoogleAnalyticsService {
     const missingConfig = this.missingConfig();
 
     if (missingConfig.length) {
-      throw new InternalServerErrorException(`Google Analytics is not configured. Missing: ${missingConfig.join(', ')}`);
+      this.logger.warn(`Google Analytics is not configured. Missing: ${missingConfig.join(', ')}`);
+      return articles.map((article) => emptyMetric(article));
     }
 
-    const rows = await this.runLifetimePageReport();
+    const rows = await this.runLifetimePageReport().catch((error: unknown) => {
+      this.logger.warn(
+        error instanceof Error
+          ? `Google Analytics report unavailable: ${error.message}`
+          : 'Google Analytics report unavailable.',
+      );
+      return [];
+    });
     const rowMetrics = rows.map((row) => {
       const path = normalizePath(row.dimensionValues?.[0]?.value ?? '');
       const metrics = row.metricValues ?? [];
