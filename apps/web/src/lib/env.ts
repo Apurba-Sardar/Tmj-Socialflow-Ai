@@ -1,14 +1,21 @@
 declare const process: {
   env: {
     NEXT_PUBLIC_API_BASE_URL?: string;
+    VERCEL_URL?: string;
   };
 };
 
 export const getApiBaseUrl = (): string => {
-  const configuredUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    (typeof window !== 'undefined'
+      ? window.location.origin
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:3000');
 
   if (typeof window === 'undefined') {
-    return configuredUrl;
+    return configuredUrl.replace(/\/$/, '');
   }
 
   const configured = new URL(configuredUrl);

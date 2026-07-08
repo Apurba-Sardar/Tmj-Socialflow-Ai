@@ -11,6 +11,16 @@ const nextConfig = {
       allowedOrigins: ['localhost:3000'],
     },
   },
+  async rewrites() {
+    const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiProxyTarget.replace(/\/$/, '')}/api/:path*`,
+      },
+    ];
+  },
   webpack(config) {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
