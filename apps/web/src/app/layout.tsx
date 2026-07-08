@@ -8,6 +8,10 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'TMJ SocialFlow AI',
   description: 'Enterprise social workflow automation.',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/pwa-192x192.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

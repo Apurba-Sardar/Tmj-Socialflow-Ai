@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  BrainCircuit,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -95,7 +95,9 @@ const platforms: { value: SocialPlatform; label: string }[] = [
 
 export function AiPipeline({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
-  const canGenerate = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'CONTENT_WRITER', 'PUBLISHER'].includes(user.role);
+  const canGenerate = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'CONTENT_WRITER', 'PUBLISHER'].includes(
+    user.role,
+  );
   const [overview, setOverview] = useState<PipelineOverview | null>(null);
   const [sources, setSources] = useState<SourceArticle[]>([]);
   const [drafts, setDrafts] = useState<SocialDraft[]>([]);
@@ -127,10 +129,13 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
     const timeout = window.setTimeout(() => {
       void loadSources();
     }, 250);
-    return () => { window.clearTimeout(timeout); };
+    return () => {
+      window.clearTimeout(timeout);
+    };
   }, [page, search]);
 
-  const allVisibleSelected = sources.length > 0 && sources.every((source) => selectedIds.includes(source.id));
+  const allVisibleSelected =
+    sources.length > 0 && sources.every((source) => selectedIds.includes(source.id));
 
   async function loadOverview() {
     const response = await fetch(`${apiBaseUrl}/api/ai-pipeline/overview`, {
@@ -240,7 +245,9 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
 
   function notify(value: string) {
     setMessage(value);
-    window.setTimeout(() => { setMessage(null); }, 3500);
+    window.setTimeout(() => {
+      setMessage(null);
+    }, 3500);
   }
 
   function toggleAllVisible() {
@@ -265,12 +272,12 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
     <div className="sf-app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 backdrop-blur-2xl dark:border-white/10">
         <div className="mx-auto flex max-w-[96rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl sf-gradient-icon">
-            <BrainCircuit className="h-5 w-5" />
-          </div>
+          <BrandIcon className="h-10 w-10 rounded-xl" priority />
           <div className="min-w-0 flex-1">
             <div className="font-semibold">AI Content Pipeline</div>
-            <div className="text-xs text-muted-foreground">Turn WordPress articles into reviewed, reusable social campaigns.</div>
+            <div className="text-xs text-muted-foreground">
+              Turn WordPress articles into reviewed, reusable social campaigns.
+            </div>
           </div>
           <Button asChild size="sm" variant="outline">
             <Link href="/campaigns">Campaigns</Link>
@@ -302,8 +309,15 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                   <CardTitle>Source Queue</CardTitle>
                   <CardDescription>WordPress posts without generated campaigns.</CardDescription>
                 </div>
-                <Button disabled={generating || !selectedIds.length || !selectedPlatforms.length} onClick={() => void generateSelected()}>
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
+                <Button
+                  disabled={generating || !selectedIds.length || !selectedPlatforms.length}
+                  onClick={() => void generateSelected()}
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <WandSparkles className="h-4 w-4" />
+                  )}
                   Generate Selected
                 </Button>
               </div>
@@ -322,7 +336,9 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                   />
                 </div>
                 <Input
-                  onChange={(event) => { setPrompt(event.target.value); }}
+                  onChange={(event) => {
+                    setPrompt(event.target.value);
+                  }}
                   placeholder="Optional AI instruction, tone, or campaign angle"
                   value={prompt}
                 />
@@ -338,7 +354,9 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                         : 'border-border text-muted-foreground hover:text-foreground dark:border-white/10',
                     )}
                     key={platform.value}
-                    onClick={() => { togglePlatform(platform.value); }}
+                    onClick={() => {
+                      togglePlatform(platform.value);
+                    }}
                     type="button"
                   >
                     {platform.label}
@@ -357,7 +375,9 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                           aria-label="Select visible articles"
                           className={cn(
                             'flex h-4 w-4 items-center justify-center rounded border border-border dark:border-white/20',
-                            allVisibleSelected ? 'bg-primary text-primary-foreground' : 'bg-background',
+                            allVisibleSelected
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background',
                           )}
                           onClick={toggleAllVisible}
                           type="button"
@@ -387,18 +407,28 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                               aria-label={`Select ${source.title}`}
                               className={cn(
                                 'mt-1 flex h-4 w-4 items-center justify-center rounded border border-border dark:border-white/20',
-                                selectedIds.includes(source.id) ? 'bg-primary text-primary-foreground' : 'bg-background',
+                                selectedIds.includes(source.id)
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-background',
                               )}
-                              onClick={() => { toggleSelected(source.id); }}
+                              onClick={() => {
+                                toggleSelected(source.id);
+                              }}
                               type="button"
                             >
-                              {selectedIds.includes(source.id) ? <Check className="h-3 w-3" /> : null}
+                              {selectedIds.includes(source.id) ? (
+                                <Check className="h-3 w-3" />
+                              ) : null}
                             </button>
                           </td>
                           <td className="max-w-xl px-4 py-4 align-top">
                             <div className="flex gap-3">
                               {source.featuredImageUrl ? (
-                                <img alt="" className="h-14 w-20 rounded-md object-cover" src={source.featuredImageUrl} />
+                                <img
+                                  alt=""
+                                  className="h-14 w-20 rounded-md object-cover"
+                                  src={source.featuredImageUrl}
+                                />
                               ) : (
                                 <div className="flex h-14 w-20 items-center justify-center rounded-md bg-muted text-muted-foreground">
                                   <FileText className="h-5 w-5" />
@@ -406,18 +436,32 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                               )}
                               <div className="min-w-0">
                                 <div className="line-clamp-2 font-medium">{source.title}</div>
-                                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{source.excerpt}</div>
+                                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                  {source.excerpt}
+                                </div>
                               </div>
                             </div>
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div className="flex max-w-56 flex-wrap gap-1.5">
-                              {source.categoryNames.slice(0, 2).map((item) => <Badge key={item} variant="secondary">{item}</Badge>)}
-                              {source.tagNames.slice(0, 2).map((item) => <Badge key={item} variant="outline">{item}</Badge>)}
+                              {source.categoryNames.slice(0, 2).map((item) => (
+                                <Badge key={item} variant="secondary">
+                                  {item}
+                                </Badge>
+                              ))}
+                              {source.tagNames.slice(0, 2).map((item) => (
+                                <Badge key={item} variant="outline">
+                                  {item}
+                                </Badge>
+                              ))}
                             </div>
                           </td>
-                          <td className="px-4 py-4 align-top text-muted-foreground">{source.connection.siteUrl.replace(/^https?:\/\//, '')}</td>
-                          <td className="px-4 py-4 align-top text-muted-foreground">{formatDate(source.modifiedAt)}</td>
+                          <td className="px-4 py-4 align-top text-muted-foreground">
+                            {source.connection.siteUrl.replace(/^https?:\/\//, '')}
+                          </td>
+                          <td className="px-4 py-4 align-top text-muted-foreground">
+                            {formatDate(source.modifiedAt)}
+                          </td>
                         </tr>
                       ))
                     ) : (
@@ -431,13 +475,31 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                 </table>
               </div>
               <div className="flex flex-col gap-3 border-t border-border px-4 py-3 text-sm dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-muted-foreground">Showing {sources.length} of {total} articles</div>
+                <div className="text-muted-foreground">
+                  Showing {sources.length} of {total} articles
+                </div>
                 <div className="flex items-center gap-2">
-                  <Button disabled={page <= 1} onClick={() => { setPage((value) => Math.max(value - 1, 1)); }} size="sm" variant="outline">
+                  <Button
+                    disabled={page <= 1}
+                    onClick={() => {
+                      setPage((value) => Math.max(value - 1, 1));
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="min-w-20 text-center text-xs text-muted-foreground">{page} / {totalPages}</span>
-                  <Button disabled={page >= totalPages} onClick={() => { setPage((value) => Math.min(value + 1, totalPages)); }} size="sm" variant="outline">
+                  <span className="min-w-20 text-center text-xs text-muted-foreground">
+                    {page} / {totalPages}
+                  </span>
+                  <Button
+                    disabled={page >= totalPages}
+                    onClick={() => {
+                      setPage((value) => Math.min(value + 1, totalPages));
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -458,13 +520,20 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
               </CardHeader>
               <CardContent className="grid gap-2">
                 {jobs.slice(0, 6).map((job) => (
-                  <div className="rounded-md border border-border p-3 text-sm dark:border-white/10" key={job.id}>
+                  <div
+                    className="rounded-md border border-border p-3 text-sm dark:border-white/10"
+                    key={job.id}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-medium">{titleCase(job.jobName)}</span>
                       <StatusBadge value={job.status} />
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{formatDate(job.finishedAt ?? job.createdAt)}</div>
-                    {job.failedReason ? <div className="mt-1 text-xs text-destructive">{job.failedReason}</div> : null}
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {formatDate(job.finishedAt ?? job.createdAt)}
+                    </div>
+                    {job.failedReason ? (
+                      <div className="mt-1 text-xs text-destructive">{job.failedReason}</div>
+                    ) : null}
                   </div>
                 ))}
                 {!jobs.length ? <EmptyState label="No AI jobs yet." /> : null}
@@ -478,7 +547,10 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
               </CardHeader>
               <CardContent className="grid gap-3">
                 {drafts.slice(0, 5).map((draft) => (
-                  <div className="rounded-md border border-border p-3 text-sm dark:border-white/10" key={draft.id}>
+                  <div
+                    className="rounded-md border border-border p-3 text-sm dark:border-white/10"
+                    key={draft.id}
+                  >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <Badge variant="secondary">{titleCase(draft.platform)}</Badge>
                       <StatusBadge value={draft.status} />
@@ -486,11 +558,21 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
                     <div className="font-medium">{draft.title}</div>
                     <p className="mt-2 line-clamp-4 text-muted-foreground">{draft.body}</p>
                     <div className="mt-3 flex gap-2">
-                      <Button disabled={!canGenerate} onClick={() => void updateDraftStatus(draft.id, 'APPROVED')} size="sm" variant="outline">
+                      <Button
+                        disabled={!canGenerate}
+                        onClick={() => void updateDraftStatus(draft.id, 'APPROVED')}
+                        size="sm"
+                        variant="outline"
+                      >
                         <Check className="h-4 w-4" />
                         Approve
                       </Button>
-                      <Button disabled={!canGenerate} onClick={() => void updateDraftStatus(draft.id, 'REJECTED')} size="sm" variant="outline">
+                      <Button
+                        disabled={!canGenerate}
+                        onClick={() => void updateDraftStatus(draft.id, 'REJECTED')}
+                        size="sm"
+                        variant="outline"
+                      >
                         <X className="h-4 w-4" />
                         Reject
                       </Button>
@@ -512,7 +594,9 @@ function Metric({ label, value }: { label: string; value: number }) {
     <Card className="sf-card-hover border-border/80 dark:border-white/10">
       <CardContent className="flex items-center justify-between p-4">
         <div>
-          <div className="text-2xl font-semibold">{new Intl.NumberFormat('en-US').format(value)}</div>
+          <div className="text-2xl font-semibold">
+            {new Intl.NumberFormat('en-US').format(value)}
+          </div>
           <div className="text-sm text-muted-foreground">{label}</div>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -528,7 +612,11 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function EmptyState({ label }: { label: string }) {
-  return <div className="rounded-xl border border-dashed border-border bg-background/40 p-5 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.025]">{label}</div>;
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-background/40 p-5 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.025]">
+      {label}
+    </div>
+  );
 }
 
 async function readError(response: Response) {

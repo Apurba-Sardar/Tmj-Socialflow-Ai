@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -100,7 +101,10 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
     () => Array.from(new Set(assets.flatMap((asset) => asset.tags))).sort(),
     [assets],
   );
-  const folders = useMemo(() => Array.from(new Set(assets.map((asset) => asset.folder))).sort(), [assets]);
+  const folders = useMemo(
+    () => Array.from(new Set(assets.map((asset) => asset.folder))).sort(),
+    [assets],
+  );
   const collections = useMemo(
     () => Array.from(new Set(assets.map((asset) => asset.collection))).sort(),
     [assets],
@@ -114,7 +118,8 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
         const matchesCollection =
           selectedCollection === 'All' || asset.collection === selectedCollection;
         const matchesTags =
-          selectedTags.length === 0 || selectedTags.every((tagValue) => asset.tags.includes(tagValue));
+          selectedTags.length === 0 ||
+          selectedTags.every((tagValue) => asset.tags.includes(tagValue));
         const matchesQuery = query.trim().length === 0 || score > 0;
         return matchesFolder && matchesCollection && matchesTags && matchesQuery;
       })
@@ -122,7 +127,8 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
       .map(({ asset }) => asset);
   }, [aiSearch, assets, query, selectedCollection, selectedFolder, selectedTags]);
 
-  const previewAsset = assets.find((asset) => asset.id === previewAssetId) ?? filteredAssets[0] ?? assets[0];
+  const previewAsset =
+    assets.find((asset) => asset.id === previewAssetId) ?? filteredAssets[0] ?? assets[0];
   const selectedAssets = assets.filter((asset) => selectedAssetIds.includes(asset.id));
 
   function ingestFiles(fileList: FileList): void {
@@ -322,9 +328,7 @@ function MediaSidebar({ user }: { user: AuthenticatedUser }) {
   return (
     <div className="flex h-full min-h-screen flex-col px-4 py-5">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <span className="text-xs font-bold tracking-wide">TMJ</span>
-        </div>
+        <BrandIcon className="h-10 w-10 rounded-xl" priority />
         <div>
           <p className="text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="text-xs text-muted-foreground">Asset Operations</p>
@@ -621,7 +625,9 @@ function AssetThumbnail({ asset, className }: { asset: MediaAsset; className?: s
   }
 
   return (
-    <div className={cn('flex items-center justify-center bg-gradient-to-br', asset.accent, className)}>
+    <div
+      className={cn('flex items-center justify-center bg-gradient-to-br', asset.accent, className)}
+    >
       <div className="rounded-md bg-background/90 p-4 text-foreground shadow-sm">
         <FileImage className="h-8 w-8" />
       </div>

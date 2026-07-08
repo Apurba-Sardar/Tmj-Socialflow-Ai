@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -490,26 +491,24 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
     setWordpressError(null);
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/library/${article.id}/repurpose`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platforms: ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'],
-        }),
-      });
+      const response = await fetch(
+        `${getApiBaseUrl()}/api/wordpress/library/${article.id}/repurpose`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            platforms: ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'],
+          }),
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Could not generate social drafts.');
       }
 
       await refreshWordPressData();
-      pushActivity(
-        'WordPress article repurposed',
-        article.title,
-        'text-violet-500',
-        Sparkles,
-      );
+      pushActivity('WordPress article repurposed', article.title, 'text-violet-500', Sparkles);
       notify('Social drafts generated from WordPress content.');
     } catch (error) {
       setWordpressError(error instanceof Error ? error.message : 'Could not repurpose article.');
@@ -531,15 +530,20 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
       return;
     }
 
-    setWordpressBusyId(approvableDrafts.length === 1 ? approvableDrafts[0]?.id ?? 'drafts' : 'drafts-bulk-approve');
+    setWordpressBusyId(
+      approvableDrafts.length === 1 ? (approvableDrafts[0]?.id ?? 'drafts') : 'drafts-bulk-approve',
+    );
 
     try {
       await Promise.all(
         approvableDrafts.map(async (draft) => {
-          const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`, {
-            method: 'PATCH',
-            credentials: 'include',
-          });
+          const response = await fetch(
+            `${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`,
+            {
+              method: 'PATCH',
+              credentials: 'include',
+            },
+          );
 
           if (!response.ok) {
             throw new Error(`Could not approve ${platformLabel(draft.platform)} draft.`);
@@ -549,14 +553,20 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
 
       await refreshWordPressData();
       pushActivity(
-        approvableDrafts.length === 1 ? 'WordPress draft approved' : 'WordPress campaign drafts approved',
         approvableDrafts.length === 1
-          ? approvableDrafts[0]?.title ?? 'Draft'
+          ? 'WordPress draft approved'
+          : 'WordPress campaign drafts approved',
+        approvableDrafts.length === 1
+          ? (approvableDrafts[0]?.title ?? 'Draft')
           : `${String(approvableDrafts.length)} channel drafts approved`,
         'text-emerald-500',
         FileCheck2,
       );
-      notify(approvableDrafts.length === 1 ? 'WordPress draft approved.' : 'Selected channel drafts approved.');
+      notify(
+        approvableDrafts.length === 1
+          ? 'WordPress draft approved.'
+          : 'Selected channel drafts approved.',
+      );
     } catch (error) {
       setWordpressError(error instanceof Error ? error.message : 'Could not approve drafts.');
       notify('Could not approve drafts.', 'warning');
@@ -758,12 +768,12 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               drafts={filteredWordPressDrafts}
               error={wordpressError}
               loading={wordpressLoading}
-                onApproveDraft={(draft) => {
-                  void approveWordPressDraft(draft);
-                }}
-                onApproveDrafts={(drafts) => {
-                  void approveWordPressDrafts(drafts);
-                }}
+              onApproveDraft={(draft) => {
+                void approveWordPressDraft(draft);
+              }}
+              onApproveDrafts={(drafts) => {
+                void approveWordPressDrafts(drafts);
+              }}
               onDeleteDraft={(draft) => {
                 void deleteWordPressDraft(draft);
               }}
@@ -896,10 +906,7 @@ function DashboardSidebar({
   return (
     <div className="flex h-full min-h-screen flex-col px-3 py-4">
       <div className="flex items-center gap-3 rounded-md px-2 py-2">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 via-violet-500 to-emerald-400 text-white shadow-lg shadow-blue-950/30">
-          <span className="text-xs font-bold tracking-wide">TMJ</span>
-          <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-card" />
-        </div>
+        <BrandIcon className="h-10 w-10 rounded-xl" priority />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="truncate text-xs text-muted-foreground">Automation OS</p>
@@ -1219,12 +1226,7 @@ function WordPressLibraryPanel({
               <RefreshCw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} />
               Refresh
             </Button>
-            <Button
-              className="h-8 px-2"
-              disabled={busyId !== null}
-              onClick={onSync}
-              size="sm"
-            >
+            <Button className="h-8 px-2" disabled={busyId !== null} onClick={onSync} size="sm">
               <Workflow className="h-4 w-4" />
               Sync WordPress
             </Button>
@@ -1299,7 +1301,9 @@ function WordPressLibraryPanel({
                     size="sm"
                     variant={article.repurposedAt ? 'outline' : 'default'}
                   >
-                    <Sparkles className={cn('h-4 w-4', busyId === article.id ? 'animate-pulse' : '')} />
+                    <Sparkles
+                      className={cn('h-4 w-4', busyId === article.id ? 'animate-pulse' : '')}
+                    />
                     {busyId === article.id ? 'Generating' : 'Repurpose'}
                   </Button>
                   <Button asChild className="h-8 px-2" size="sm" variant="ghost">
@@ -1319,18 +1323,24 @@ function WordPressLibraryPanel({
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Generated Drafts</p>
-              <p className="text-xs text-muted-foreground">Grouped by source article for channel review.</p>
+              <p className="text-xs text-muted-foreground">
+                Grouped by source article for channel review.
+              </p>
             </div>
-            <Badge variant="outline">
-              {String(draftGroups.length)} campaigns
-            </Badge>
+            <Badge variant="outline">{String(draftGroups.length)} campaigns</Badge>
           </div>
           <div className="space-y-2">
             {draftGroups.length ? (
               draftGroups.map((group) => {
-                const approvedCount = group.drafts.filter((draft) => draft.status === 'APPROVED').length;
-                const scheduledCount = group.drafts.filter((draft) => draft.status === 'SCHEDULED').length;
-                const pendingCount = group.drafts.filter((draft) => draft.status === 'DRAFT').length;
+                const approvedCount = group.drafts.filter(
+                  (draft) => draft.status === 'APPROVED',
+                ).length;
+                const scheduledCount = group.drafts.filter(
+                  (draft) => draft.status === 'SCHEDULED',
+                ).length;
+                const pendingCount = group.drafts.filter(
+                  (draft) => draft.status === 'DRAFT',
+                ).length;
 
                 return (
                   <button
@@ -1413,7 +1423,10 @@ function WordPressLibraryPanel({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  disabled={busyId !== null || selectedGroup.drafts.every((draft) => draft.status !== 'DRAFT')}
+                  disabled={
+                    busyId !== null ||
+                    selectedGroup.drafts.every((draft) => draft.status !== 'DRAFT')
+                  }
                   onClick={() => {
                     onApproveDrafts(selectedGroup.drafts);
                   }}
@@ -1543,11 +1556,15 @@ function groupWordPressDrafts(drafts: WordPressDraft[]): WordPressDraftGroup[] {
 
   return Array.from(groups.values()).map((group) => ({
     ...group,
-    drafts: [...group.drafts].sort((a, b) => platformLabel(a.platform).localeCompare(platformLabel(b.platform))),
+    drafts: [...group.drafts].sort((a, b) =>
+      platformLabel(a.platform).localeCompare(platformLabel(b.platform)),
+    ),
   }));
 }
 
-function statusBadgeVariant(status: WordPressDraft['status']): 'outline' | 'success' | 'destructive' {
+function statusBadgeVariant(
+  status: WordPressDraft['status'],
+): 'outline' | 'success' | 'destructive' {
   if (status === 'APPROVED' || status === 'SCHEDULED' || status === 'PUBLISHED') {
     return 'success';
   }
@@ -1592,31 +1609,31 @@ function PlatformHealth({
       <CardContent className="space-y-3 p-4 pt-0">
         {items.length ? (
           items.map((item) => (
-          <button
-            className={cn(
-              'grid w-full grid-cols-[1fr_auto] gap-3 rounded-md border p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]',
-              selectedPlatform === item.platform
-                ? 'border-primary bg-primary/5 dark:bg-primary/10'
-                : '',
-            )}
-            key={item.platform}
-            onClick={() => {
-              onSelect(item);
-            }}
-            type="button"
-          >
-            <div className="flex items-center gap-3">
-              <item.icon className={cn('h-5 w-5', item.color)} />
-              <div>
-                <p className="text-sm font-medium">{item.platform}</p>
-                <p className="text-xs text-muted-foreground">{item.posts} scheduled posts</p>
+            <button
+              className={cn(
+                'grid w-full grid-cols-[1fr_auto] gap-3 rounded-md border p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]',
+                selectedPlatform === item.platform
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                  : '',
+              )}
+              key={item.platform}
+              onClick={() => {
+                onSelect(item);
+              }}
+              type="button"
+            >
+              <div className="flex items-center gap-3">
+                <item.icon className={cn('h-5 w-5', item.color)} />
+                <div>
+                  <p className="text-sm font-medium">{item.platform}</p>
+                  <p className="text-xs text-muted-foreground">{item.posts} scheduled posts</p>
+                </div>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-medium">{item.health}</p>
-              <p className="text-xs text-muted-foreground">health</p>
-            </div>
-          </button>
+              <div className="text-right">
+                <p className="text-sm font-medium">{item.health}</p>
+                <p className="text-xs text-muted-foreground">health</p>
+              </div>
+            </button>
           ))
         ) : (
           <EmptyState label="No platform health records yet." />
@@ -1794,30 +1811,30 @@ function AiInsights({
       <CardContent className="space-y-3 p-4 pt-0">
         {insights.length ? (
           insights.map((insight, index) => (
-          <div
-            className="rounded-md border p-3 text-sm transition-colors hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]"
-            key={insight}
-          >
-            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              {index === 0 ? (
-                <Clock3 className="h-3.5 w-3.5" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              Recommendation
-            </div>
-            <p>{insight}</p>
-            <Button
-              className="mt-3 h-8 px-2"
-              onClick={() => {
-                onApply(insight);
-              }}
-              size="sm"
-              variant="outline"
+            <div
+              className="rounded-md border p-3 text-sm transition-colors hover:bg-muted dark:border-white/10 dark:hover:bg-white/[0.04]"
+              key={insight}
             >
-              Apply insight
-            </Button>
-          </div>
+              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                {index === 0 ? (
+                  <Clock3 className="h-3.5 w-3.5" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                Recommendation
+              </div>
+              <p>{insight}</p>
+              <Button
+                className="mt-3 h-8 px-2"
+                onClick={() => {
+                  onApply(insight);
+                }}
+                size="sm"
+                variant="outline"
+              >
+                Apply insight
+              </Button>
+            </div>
           ))
         ) : (
           <EmptyState label="No AI insight notifications yet." />
@@ -2113,9 +2130,7 @@ function CreateModal({
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Create New</h2>
-            <p className="text-sm text-muted-foreground">
-              Add an item to the publishing workflow.
-            </p>
+            <p className="text-sm text-muted-foreground">Add an item to the publishing workflow.</p>
           </div>
           <Button aria-label="Close create modal" onClick={onClose} size="sm" variant="ghost">
             <X className="h-4 w-4" />

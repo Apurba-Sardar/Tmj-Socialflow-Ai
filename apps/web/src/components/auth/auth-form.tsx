@@ -4,6 +4,7 @@ import { useState, type SyntheticEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -68,9 +69,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   return (
     <Card className="w-full max-w-md border-white/10 bg-background/80 shadow-2xl shadow-black/10 dark:bg-[#09090b]/78">
       <CardHeader className="pb-5">
-        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl sf-gradient-icon">
-          <span className="text-xs font-semibold tracking-wide">TMJ</span>
-        </div>
+        <BrandIcon className="mb-3 h-11 w-11" priority />
         <CardTitle className="text-3xl">{titleForMode(mode)}</CardTitle>
         <CardDescription>{descriptionForMode(mode)}</CardDescription>
       </CardHeader>

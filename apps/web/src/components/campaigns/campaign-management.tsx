@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -96,7 +97,12 @@ interface CampaignDetail extends CampaignListItem {
     postUrl: string | null;
     errorLog: string | null;
   }[];
-  regenerationHistory: { id: string; version: number; reason: string | null; generatedAt: string }[];
+  regenerationHistory: {
+    id: string;
+    version: number;
+    reason: string | null;
+    generatedAt: string;
+  }[];
 }
 
 interface PaginatedCampaigns {
@@ -160,7 +166,8 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
     };
   }, [page, perPage, search, status, platform, sortBy, sortDir]);
 
-  const allVisibleSelected = campaigns.length > 0 && campaigns.every((campaign) => selectedIds.includes(campaign.id));
+  const allVisibleSelected =
+    campaigns.length > 0 && campaigns.every((campaign) => selectedIds.includes(campaign.id));
   const selectedCount = selectedIds.length;
 
   async function loadSummary() {
@@ -200,9 +207,14 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
       setCampaigns(payload.data);
       setTotal(payload.pagination.total);
       setTotalPages(Math.max(payload.pagination.totalPages, 1));
-      setSelectedIds((ids) => ids.filter((id) => payload.data.some((campaign) => campaign.id === id)));
+      setSelectedIds((ids) =>
+        ids.filter((id) => payload.data.some((campaign) => campaign.id === id)),
+      );
 
-      if (selectedCampaign && !payload.data.some((campaign) => campaign.id === selectedCampaign.id)) {
+      if (
+        selectedCampaign &&
+        !payload.data.some((campaign) => campaign.id === selectedCampaign.id)
+      ) {
         setSelectedCampaign(null);
       }
     } catch (error) {
@@ -330,20 +342,30 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
   }
 
   async function refreshAfterMutation(id: string) {
-    await Promise.all([loadCampaigns(), loadSummary(), selectedCampaign?.id === id ? openCampaign(id) : Promise.resolve()]);
+    await Promise.all([
+      loadCampaigns(),
+      loadSummary(),
+      selectedCampaign?.id === id ? openCampaign(id) : Promise.resolve(),
+    ]);
   }
 
   function notify(value: string) {
     setMessage(value);
-    window.setTimeout(() => { setMessage(null); }, 3200);
+    window.setTimeout(() => {
+      setMessage(null);
+    }, 3200);
   }
 
   function toggleAllVisible() {
     if (allVisibleSelected) {
-      setSelectedIds((ids) => ids.filter((id) => !campaigns.some((campaign) => campaign.id === id)));
+      setSelectedIds((ids) =>
+        ids.filter((id) => !campaigns.some((campaign) => campaign.id === id)),
+      );
       return;
     }
-    setSelectedIds((ids) => Array.from(new Set([...ids, ...campaigns.map((campaign) => campaign.id)])));
+    setSelectedIds((ids) =>
+      Array.from(new Set([...ids, ...campaigns.map((campaign) => campaign.id)])),
+    );
   }
 
   function toggleSelected(id: string) {
@@ -370,12 +392,12 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
     <div className="sf-app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 backdrop-blur-2xl dark:border-white/10">
         <div className="mx-auto flex max-w-[96rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl sf-gradient-icon">
-            <Megaphone className="h-5 w-5" />
-          </div>
+          <BrandIcon className="h-10 w-10 rounded-xl" priority />
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Campaign Management</div>
-            <div className="text-xs text-muted-foreground">Reusable AI campaigns, approvals, publishing state, and generated content.</div>
+            <div className="text-xs text-muted-foreground">
+              Reusable AI campaigns, approvals, publishing state, and generated content.
+            </div>
           </div>
           <Button asChild size="sm" variant="outline">
             <Link href="/wordpress-hub">WordPress Hub</Link>
@@ -395,7 +417,10 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
           {summaryCards.map((item) => {
             const Icon = item.icon;
             return (
-              <Card className="sf-card-hover border-border/80 dark:border-white/10" key={item.label}>
+              <Card
+                className="sf-card-hover border-border/80 dark:border-white/10"
+                key={item.label}
+              >
                 <CardContent className="flex items-center justify-between p-4">
                   <div>
                     <div className="text-2xl font-semibold">{formatNumber(item.value)}</div>
@@ -416,7 +441,9 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <CardTitle>Campaign Library</CardTitle>
-                  <CardDescription>Server-side search, filters, sorting, pagination, and bulk actions.</CardDescription>
+                  <CardDescription>
+                    Server-side search, filters, sorting, pagination, and bulk actions.
+                  </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -482,7 +509,9 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                   value={perPage}
                 >
                   {[10, 25, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size} / page</option>
+                    <option key={size} value={size}>
+                      {size} / page
+                    </option>
                   ))}
                 </select>
               </div>
@@ -498,7 +527,9 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                           aria-label="Select visible campaigns"
                           className={cn(
                             'flex h-4 w-4 items-center justify-center rounded border border-border dark:border-white/20',
-                            allVisibleSelected ? 'bg-primary text-primary-foreground' : 'bg-background',
+                            allVisibleSelected
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-background',
                           )}
                           onClick={toggleAllVisible}
                           type="button"
@@ -506,11 +537,29 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                           {allVisibleSelected ? <Check className="h-3 w-3" /> : null}
                         </button>
                       </th>
-                      <SortableHead active={sortBy === 'name'} label="Campaign" onClick={() => { updateSort('name', setSortBy, setSortDir); }} />
-                      <SortableHead active={sortBy === 'status'} label="Status" onClick={() => { updateSort('status', setSortBy, setSortDir); }} />
+                      <SortableHead
+                        active={sortBy === 'name'}
+                        label="Campaign"
+                        onClick={() => {
+                          updateSort('name', setSortBy, setSortDir);
+                        }}
+                      />
+                      <SortableHead
+                        active={sortBy === 'status'}
+                        label="Status"
+                        onClick={() => {
+                          updateSort('status', setSortBy, setSortDir);
+                        }}
+                      />
                       <th className="px-4 py-3">Platforms</th>
                       <th className="px-4 py-3">Publishing</th>
-                      <SortableHead active={sortBy === 'updatedAt'} label="Updated" onClick={() => { updateSort('updatedAt', setSortBy, setSortDir); }} />
+                      <SortableHead
+                        active={sortBy === 'updatedAt'}
+                        label="Updated"
+                        onClick={() => {
+                          updateSort('updatedAt', setSortBy, setSortDir);
+                        }}
+                      />
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -524,24 +573,37 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                       </tr>
                     ) : campaigns.length ? (
                       campaigns.map((campaign) => (
-                        <tr className="border-t border-border transition hover:bg-muted/40 dark:border-white/10 dark:hover:bg-white/[0.03]" key={campaign.id}>
+                        <tr
+                          className="border-t border-border transition hover:bg-muted/40 dark:border-white/10 dark:hover:bg-white/[0.03]"
+                          key={campaign.id}
+                        >
                           <td className="px-4 py-4 align-top">
                             <button
                               aria-label={`Select ${campaign.name}`}
                               className={cn(
                                 'mt-1 flex h-4 w-4 items-center justify-center rounded border border-border dark:border-white/20',
-                                selectedIds.includes(campaign.id) ? 'bg-primary text-primary-foreground' : 'bg-background',
+                                selectedIds.includes(campaign.id)
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-background',
                               )}
-                              onClick={() => { toggleSelected(campaign.id); }}
+                              onClick={() => {
+                                toggleSelected(campaign.id);
+                              }}
                               type="button"
                             >
-                              {selectedIds.includes(campaign.id) ? <Check className="h-3 w-3" /> : null}
+                              {selectedIds.includes(campaign.id) ? (
+                                <Check className="h-3 w-3" />
+                              ) : null}
                             </button>
                           </td>
                           <td className="max-w-xl px-4 py-4 align-top">
                             <div className="flex gap-3">
                               {campaign.article.featuredImageUrl ? (
-                                <img alt="" className="h-14 w-20 rounded-md object-cover" src={campaign.article.featuredImageUrl} />
+                                <img
+                                  alt=""
+                                  className="h-14 w-20 rounded-md object-cover"
+                                  src={campaign.article.featuredImageUrl}
+                                />
                               ) : (
                                 <div className="flex h-14 w-20 items-center justify-center rounded-md bg-muted text-muted-foreground">
                                   <FileText className="h-5 w-5" />
@@ -555,7 +617,9 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                                 >
                                   {campaign.name}
                                 </button>
-                                <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{campaign.article.title}</div>
+                                <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                                  {campaign.article.title}
+                                </div>
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   <Badge variant="secondary">{campaign.aiModel}</Badge>
                                   <Badge variant="outline">{campaign.promptVersion}</Badge>
@@ -569,21 +633,32 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                           <td className="px-4 py-4 align-top">
                             <div className="flex max-w-48 flex-wrap gap-1.5">
                               {campaign.platforms.map((item) => (
-                                <Badge key={item} variant="outline">{titleCase(item)}</Badge>
+                                <Badge key={item} variant="outline">
+                                  {titleCase(item)}
+                                </Badge>
                               ))}
                             </div>
                           </td>
                           <td className="px-4 py-4 align-top">
                             <div>{campaign.generationCount} generated</div>
-                            <div className="text-xs text-muted-foreground">{campaign.publishingHistoryCount} publishing records</div>
-                            <div className="text-xs text-muted-foreground">Next: {formatDateTime(campaign.nextPublishAt)}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {campaign.publishingHistoryCount} publishing records
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Next: {formatDateTime(campaign.nextPublishAt)}
+                            </div>
                           </td>
                           <td className="px-4 py-4 align-top text-muted-foreground">
                             {formatDateTime(campaign.updatedAt)}
                           </td>
                           <td className="px-4 py-4 text-right align-top">
                             <div className="flex justify-end gap-2">
-                              <Button disabled={busy === campaign.id} onClick={() => void openCampaign(campaign.id)} size="sm" variant="outline">
+                              <Button
+                                disabled={busy === campaign.id}
+                                onClick={() => void openCampaign(campaign.id)}
+                                size="sm"
+                                variant="outline"
+                              >
                                 Open
                               </Button>
                               <Button
@@ -614,11 +689,27 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
                   Showing {formatNumber(campaigns.length)} of {formatNumber(total)} campaigns
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button disabled={page <= 1} onClick={() => { setPage((value) => Math.max(value - 1, 1)); }} size="sm" variant="outline">
+                  <Button
+                    disabled={page <= 1}
+                    onClick={() => {
+                      setPage((value) => Math.max(value - 1, 1));
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="min-w-20 text-center text-xs text-muted-foreground">{page} / {totalPages}</span>
-                  <Button disabled={page >= totalPages} onClick={() => { setPage((value) => Math.min(value + 1, totalPages)); }} size="sm" variant="outline">
+                  <span className="min-w-20 text-center text-xs text-muted-foreground">
+                    {page} / {totalPages}
+                  </span>
+                  <Button
+                    disabled={page >= totalPages}
+                    onClick={() => {
+                      setPage((value) => Math.min(value + 1, totalPages));
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -695,7 +786,9 @@ function CampaignDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="line-clamp-2 text-lg">{campaign.name}</CardTitle>
-            <CardDescription className="mt-1">{campaign.article.connection.siteUrl}</CardDescription>
+            <CardDescription className="mt-1">
+              {campaign.article.connection.siteUrl}
+            </CardDescription>
           </div>
           <StatusBadge status={campaign.status} />
         </div>
@@ -709,7 +802,9 @@ function CampaignDetailPanel({
               <Link href={`/wordpress-hub/${campaign.article.id}`}>Source</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <a href={campaign.article.url} rel="noreferrer" target="_blank">WordPress</a>
+              <a href={campaign.article.url} rel="noreferrer" target="_blank">
+                WordPress
+              </a>
             </Button>
           </div>
         </div>
@@ -719,11 +814,19 @@ function CampaignDetailPanel({
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <Input
               id="schedule-for"
-              onChange={(event) => { setScheduleFor(event.target.value); }}
+              onChange={(event) => {
+                setScheduleFor(event.target.value);
+              }}
               type="datetime-local"
               value={scheduleFor}
             />
-            <Button disabled={!canManage || busy === campaign.id} onClick={() => { onSchedule(campaign.id); }} size="sm">
+            <Button
+              disabled={!canManage || busy === campaign.id}
+              onClick={() => {
+                onSchedule(campaign.id);
+              }}
+              size="sm"
+            >
               <CalendarClock className="h-4 w-4" />
               Schedule
             </Button>
@@ -733,16 +836,33 @@ function CampaignDetailPanel({
         <div className="grid gap-3">
           <div className="flex items-center justify-between">
             <div className="font-medium">Generated content</div>
-            <Button disabled={!canManage || busy === campaign.id} onClick={() => { onArchive(campaign.id); }} size="sm" variant="outline">
+            <Button
+              disabled={!canManage || busy === campaign.id}
+              onClick={() => {
+                onArchive(campaign.id);
+              }}
+              size="sm"
+              variant="outline"
+            >
               <Archive className="h-4 w-4" />
               Archive
             </Button>
           </div>
           {campaign.generations.map((generation) => (
-            <div className="rounded-md border border-border p-3 dark:border-white/10" key={generation.id}>
+            <div
+              className="rounded-md border border-border p-3 dark:border-white/10"
+              key={generation.id}
+            >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <Badge variant="secondary">{titleCase(generation.platform)}</Badge>
-                <Button disabled={!canManage} onClick={() => { onBeginEdit(generation); }} size="sm" variant="ghost">
+                <Button
+                  disabled={!canManage}
+                  onClick={() => {
+                    onBeginEdit(generation);
+                  }}
+                  size="sm"
+                  variant="ghost"
+                >
                   <Edit3 className="h-4 w-4" />
                 </Button>
               </div>
@@ -750,12 +870,23 @@ function CampaignDetailPanel({
                 <div className="grid gap-2">
                   <textarea
                     className="min-h-32 rounded-md border border-input bg-background p-3 text-sm dark:border-white/10 dark:bg-white/[0.04]"
-                    onChange={(event) => { onCaptionChange(event.target.value); }}
+                    onChange={(event) => {
+                      onCaptionChange(event.target.value);
+                    }}
                     value={captionDraft}
                   />
-                  <Input onChange={(event) => { onHashtagsChange(event.target.value); }} value={hashtagsDraft} />
+                  <Input
+                    onChange={(event) => {
+                      onHashtagsChange(event.target.value);
+                    }}
+                    value={hashtagsDraft}
+                  />
                   <Button disabled={busy === generation.id} onClick={onSaveGeneration} size="sm">
-                    {busy === generation.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    {busy === generation.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
                     Save
                   </Button>
                 </div>
@@ -764,7 +895,9 @@ function CampaignDetailPanel({
                   <p className="text-sm leading-6">{generation.caption}</p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {generation.hashtags.map((tag) => (
-                      <Badge key={tag} variant="outline">{tag}</Badge>
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
                     ))}
                   </div>
                 </>
@@ -777,15 +910,26 @@ function CampaignDetailPanel({
           <div className="font-medium">Publishing history</div>
           {campaign.publishingHistory.length ? (
             campaign.publishingHistory.map((item) => (
-              <div className="rounded-md border border-border p-3 text-sm dark:border-white/10" key={item.id}>
+              <div
+                className="rounded-md border border-border p-3 text-sm dark:border-white/10"
+                key={item.id}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <span>{titleCase(item.platform)}</span>
                   <Badge variant="outline">{titleCase(item.status)}</Badge>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {item.postUrl ? <a className="text-primary" href={item.postUrl}>Published post</a> : formatDateTime(item.publishedAt ?? item.scheduledFor)}
+                  {item.postUrl ? (
+                    <a className="text-primary" href={item.postUrl}>
+                      Published post
+                    </a>
+                  ) : (
+                    formatDateTime(item.publishedAt ?? item.scheduledFor)
+                  )}
                 </div>
-                {item.errorLog ? <div className="mt-1 text-xs text-destructive">{item.errorLog}</div> : null}
+                {item.errorLog ? (
+                  <div className="mt-1 text-xs text-destructive">{item.errorLog}</div>
+                ) : null}
               </div>
             ))
           ) : (
@@ -811,20 +955,39 @@ function SelectFilter({
   return (
     <select
       className="h-10 rounded-md border border-input bg-background px-3 text-sm dark:border-white/10 dark:bg-white/[0.04]"
-      onChange={(event) => { onChange(event.target.value); }}
+      onChange={(event) => {
+        onChange(event.target.value);
+      }}
       value={value}
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
       ))}
     </select>
   );
 }
 
-function SortableHead({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function SortableHead({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <th className="px-4 py-3">
-      <button className={cn('inline-flex items-center gap-1 hover:text-foreground', active ? 'text-foreground' : '')} onClick={onClick} type="button">
+      <button
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-foreground',
+          active ? 'text-foreground' : '',
+        )}
+        onClick={onClick}
+        type="button"
+      >
         {label}
         <ArrowDownUp className="h-3.5 w-3.5" />
       </button>
@@ -842,7 +1005,11 @@ function StatusBadge({ status }: { status: CampaignStatus }) {
     ARCHIVED: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300',
   };
 
-  return <Badge className={styles[status]} variant="outline">{titleCase(status)}</Badge>;
+  return (
+    <Badge className={styles[status]} variant="outline">
+      {titleCase(status)}
+    </Badge>
+  );
 }
 
 function updateSort(

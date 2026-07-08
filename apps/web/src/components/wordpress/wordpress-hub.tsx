@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,13 +42,7 @@ import type { AuthenticatedUser } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
-type CampaignStatus =
-  | 'NOT_GENERATED'
-  | 'DRAFT'
-  | 'SCHEDULED'
-  | 'PUBLISHED'
-  | 'FAILED'
-  | 'ARCHIVED';
+type CampaignStatus = 'NOT_GENERATED' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'ARCHIVED';
 
 type SortBy = 'modifiedAt' | 'publishedAt' | 'title';
 type SortDir = 'asc' | 'desc';
@@ -149,7 +144,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-  const [googleAnalytics, setGoogleAnalytics] = useState<Record<string, GoogleAnalyticsPostMetric>>({});
+  const [googleAnalytics, setGoogleAnalytics] = useState<Record<string, GoogleAnalyticsPostMetric>>(
+    {},
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
@@ -190,7 +187,8 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   }, []);
 
   const selectedCount = selectedArticles.length;
-  const allVisibleSelected = articles.length > 0 && articles.every((item) => selectedArticles.includes(item.id));
+  const allVisibleSelected =
+    articles.length > 0 && articles.every((item) => selectedArticles.includes(item.id));
   const generatedCount = articles.filter((item) => item.campaignStatus !== 'NOT_GENERATED').length;
   const failedCount = articles.filter((item) => item.campaignStatus === 'FAILED').length;
 
@@ -248,7 +246,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
       setArticles(payload.data);
       setTotal(payload.pagination.total);
       setTotalPages(Math.max(payload.pagination.totalPages, 1));
-      setSelectedArticles((ids) => ids.filter((id) => payload.data.some((article) => article.id === id)));
+      setSelectedArticles((ids) =>
+        ids.filter((id) => payload.data.some((article) => article.id === id)),
+      );
       void loadGoogleAnalytics(payload.data);
     } catch (error) {
       notify(error instanceof Error ? error.message : 'WordPress Hub failed to load.', 'warning');
@@ -271,17 +271,22 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
       const params = new URLSearchParams({
         articleIds: articleIds.join(','),
       });
-      const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts?${params.toString()}`, {
-        cache: 'no-store',
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `${apiBaseUrl}/api/google-analytics/wordpress-posts?${params.toString()}`,
+        {
+          cache: 'no-store',
+          credentials: 'include',
+        },
+      );
       if (!response.ok) {
         throw new Error(await apiErrorMessage(response, 'Google Analytics data is not available.'));
       }
       const payload = (await response.json()) as GoogleAnalyticsPostMetric[];
       setGoogleAnalytics(Object.fromEntries(payload.map((item) => [item.articleId, item])));
     } catch (error) {
-      setAnalyticsError(error instanceof Error ? error.message : 'Google Analytics data is not available.');
+      setAnalyticsError(
+        error instanceof Error ? error.message : 'Google Analytics data is not available.',
+      );
       setGoogleAnalytics({});
     } finally {
       setAnalyticsLoading(false);
@@ -339,7 +344,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
         throw new Error('WordPress sync failed.');
       }
       const result = (await response.json()) as { scannedPosts: number; upsertedPosts: number };
-      notify(`Synced ${String(result.upsertedPosts)} of ${String(result.scannedPosts)} WordPress posts.`);
+      notify(
+        `Synced ${String(result.upsertedPosts)} of ${String(result.scannedPosts)} WordPress posts.`,
+      );
       await Promise.all([loadConnections(), loadArticles()]);
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Unable to sync WordPress posts.', 'warning');
@@ -351,16 +358,19 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   async function generateCampaign(article: HubArticle) {
     setBusyId(article.id);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/wordpress/hub/posts/${article.id}/generate-campaign`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          campaignName: `${article.title} Social Campaign`,
-          promptVersion: 'wordpress-hub-v1',
-          platforms: platformDefaults,
-        }),
-      });
+      const response = await fetch(
+        `${apiBaseUrl}/api/wordpress/hub/posts/${article.id}/generate-campaign`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            campaignName: `${article.title} Social Campaign`,
+            promptVersion: 'wordpress-hub-v1',
+            platforms: platformDefaults,
+          }),
+        },
+      );
       if (!response.ok) {
         throw new Error('Campaign generation failed.');
       }
@@ -429,11 +439,15 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
 
   function toggleAllVisible() {
     if (allVisibleSelected) {
-      setSelectedArticles((ids) => ids.filter((id) => !articles.some((article) => article.id === id)));
+      setSelectedArticles((ids) =>
+        ids.filter((id) => !articles.some((article) => article.id === id)),
+      );
       return;
     }
 
-    setSelectedArticles((ids) => Array.from(new Set([...ids, ...articles.map((article) => article.id)])));
+    setSelectedArticles((ids) =>
+      Array.from(new Set([...ids, ...articles.map((article) => article.id)])),
+    );
   }
 
   function toggleArticle(id: string) {
@@ -499,7 +513,11 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                 size="sm"
                 variant="outline"
               >
-                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
                 Sync
               </Button>
               <LogoutButton />
@@ -524,7 +542,10 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
 
             <section className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="space-y-3">
-                <Badge className="w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" variant="outline">
+                <Badge
+                  className="w-fit border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  variant="outline"
+                >
                   <ShieldCheck className="mr-1 h-3.5 w-3.5" />
                   WordPress content intelligence
                 </Badge>
@@ -533,7 +554,8 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                     WordPress Hub
                   </h1>
                   <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                    Sync source content, generate reusable AI campaigns, and track publishing history across every social platform.
+                    Sync source content, generate reusable AI campaigns, and track publishing
+                    history across every social platform.
                   </p>
                 </div>
               </div>
@@ -550,7 +572,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <CardTitle className="text-lg">Connected sites</CardTitle>
-                      <CardDescription>Multiple WordPress websites can feed one campaign library.</CardDescription>
+                      <CardDescription>
+                        Multiple WordPress websites can feed one campaign library.
+                      </CardDescription>
                     </div>
                     <Button
                       disabled={!isAdmin || connecting}
@@ -559,7 +583,11 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                       }}
                       size="sm"
                     >
-                      {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {connecting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
                       Connect
                     </Button>
                   </div>
@@ -592,7 +620,10 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                     <Input
                       id="wp-password"
                       onChange={(event) => {
-                        setConnectForm((form) => ({ ...form, applicationPassword: event.target.value }));
+                        setConnectForm((form) => ({
+                          ...form,
+                          applicationPassword: event.target.value,
+                        }));
                       }}
                       placeholder="xxxx xxxx xxxx xxxx"
                       type="password"
@@ -619,7 +650,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                           <div className="text-xs text-muted-foreground">{connection.username}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-semibold">{formatNumber(connection._count.articles)}</div>
+                          <div className="text-sm font-semibold">
+                            {formatNumber(connection._count.articles)}
+                          </div>
                           <div className="text-xs text-muted-foreground">posts</div>
                         </div>
                       </div>
@@ -638,7 +671,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div>
                     <CardTitle className="text-lg">Posts library</CardTitle>
-                    <CardDescription>Search, sort, filter, generate, archive, and inspect synced WordPress content.</CardDescription>
+                    <CardDescription>
+                      Search, sort, filter, generate, archive, and inspect synced WordPress content.
+                    </CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -648,7 +683,11 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                       }}
                       size="sm"
                     >
-                      {bulkBusy === 'generate' ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
+                      {bulkBusy === 'generate' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <WandSparkles className="h-4 w-4" />
+                      )}
                       Generate selected
                     </Button>
                     <Button
@@ -659,7 +698,11 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                       size="sm"
                       variant="outline"
                     >
-                      {bulkBusy === 'archive' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                      {bulkBusy === 'archive' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
                       Archive
                     </Button>
                     <Button
@@ -670,7 +713,11 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                       size="sm"
                       variant="destructive"
                     >
-                      {bulkBusy === 'remove' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      {bulkBusy === 'remove' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                       Remove
                     </Button>
                   </div>
@@ -801,8 +848,12 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
                   <BarChart3 className="h-4 w-4" />
-                  {analyticsLoading ? 'Loading lifetime views for visible posts...' : 'Google Analytics: lifetime total views per WordPress URL.'}
-                  {analyticsError ? <span className="text-amber-600 dark:text-amber-300">{analyticsError}</span> : null}
+                  {analyticsLoading
+                    ? 'Loading lifetime views for visible posts...'
+                    : 'Google Analytics: lifetime total views per WordPress URL.'}
+                  {analyticsError ? (
+                    <span className="text-amber-600 dark:text-amber-300">{analyticsError}</span>
+                  ) : null}
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -815,7 +866,9 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                             aria-label="Select visible posts"
                             className={cn(
                               'flex h-4 w-4 items-center justify-center rounded border border-border dark:border-white/20',
-                              allVisibleSelected ? 'bg-primary text-primary-foreground' : 'bg-background',
+                              allVisibleSelected
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-background',
                             )}
                             onClick={toggleAllVisible}
                             type="button"
@@ -990,44 +1043,65 @@ function HubSidebar({
   return (
     <div className="flex h-full flex-col p-3">
       <div className="flex items-center gap-3 px-2 py-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-emerald-400 text-white shadow-lg shadow-sky-500/20">
-          <span className="text-xs font-bold tracking-wide">TMJ</span>
-        </div>
+        <BrandIcon className="h-10 w-10 rounded-xl" priority />
         <div>
           <div className="font-semibold leading-tight">TMJ SocialFlow AI</div>
           <div className="text-xs text-muted-foreground">WordPress Hub</div>
         </div>
       </div>
       <nav className="mt-4 grid gap-1 text-sm">
-        <Link className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground" href="/dashboard">
+        <Link
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          href="/dashboard"
+        >
           <Globe2 className="h-4 w-4" />
           Dashboard
         </Link>
-        <Link className="flex items-center gap-3 rounded-md bg-primary px-3 py-2 text-primary-foreground shadow-sm" href="/wordpress-hub">
+        <Link
+          className="flex items-center gap-3 rounded-md bg-primary px-3 py-2 text-primary-foreground shadow-sm"
+          href="/wordpress-hub"
+        >
           <FileText className="h-4 w-4" />
           WordPress Hub
         </Link>
-        <Link className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground" href="/admin/channels">
+        <Link
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          href="/admin/channels"
+        >
           <RadioTower className="h-4 w-4" />
           Channels
         </Link>
       </nav>
       <Separator className="my-4" />
       <div className="grid gap-2 px-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Sites</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Sites
+        </div>
         {connections.slice(0, 5).map((connection) => (
           <div className="flex min-w-0 items-center gap-2 text-sm" key={connection.id}>
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span className="truncate">{connection.siteUrl.replace(/^https?:\/\//, '')}</span>
           </div>
         ))}
-        {!connections.length ? <div className="text-sm text-muted-foreground">No sites connected.</div> : null}
+        {!connections.length ? (
+          <div className="text-sm text-muted-foreground">No sites connected.</div>
+        ) : null}
       </div>
       <div className="mt-auto rounded-lg border border-border bg-background/70 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
         <div className="font-medium">{user.email}</div>
         <div className="text-xs text-muted-foreground">Super Admin</div>
-        <Button className="mt-3 w-full" disabled={syncing} onClick={onSync} size="sm" variant="outline">
-          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        <Button
+          className="mt-3 w-full"
+          disabled={syncing}
+          onClick={onSync}
+          size="sm"
+          variant="outline"
+        >
+          {syncing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Sync now
         </Button>
       </div>
@@ -1085,7 +1159,10 @@ function HubRow({
             </div>
           )}
           <div className="min-w-0">
-            <Link className="line-clamp-2 font-medium hover:text-primary" href={`/wordpress-hub/${article.id}`}>
+            <Link
+              className="line-clamp-2 font-medium hover:text-primary"
+              href={`/wordpress-hub/${article.id}`}
+            >
               {article.title}
             </Link>
             <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{article.excerpt}</div>
@@ -1094,7 +1171,11 @@ function HubRow({
               <Badge className="max-w-64 truncate font-mono text-[11px]" variant="outline">
                 /{article.slug}
               </Badge>
-              {article.connection ? <Badge variant="outline">{article.connection.siteUrl.replace(/^https?:\/\//, '')}</Badge> : null}
+              {article.connection ? (
+                <Badge variant="outline">
+                  {article.connection.siteUrl.replace(/^https?:\/\//, '')}
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1102,10 +1183,18 @@ function HubRow({
       <td className="px-4 py-4 align-top">
         <div className="flex max-w-56 flex-wrap gap-1.5">
           {article.categoryNames.slice(0, 2).map((item) => (
-            <Badge key={item} variant="secondary">{item}</Badge>
+            <Badge key={item} variant="secondary">
+              {item}
+            </Badge>
           ))}
           {article.tagNames.slice(0, 2).map((item) => (
-            <Badge className="border-sky-500/30 text-sky-700 dark:text-sky-300" key={item} variant="outline">{item}</Badge>
+            <Badge
+              className="border-sky-500/30 text-sky-700 dark:text-sky-300"
+              key={item}
+              variant="outline"
+            >
+              {item}
+            </Badge>
           ))}
         </div>
       </td>
@@ -1120,7 +1209,9 @@ function HubRow({
       </td>
       <td className="px-4 py-4 align-top text-sm">
         <div>{formatDate(article.publishedAt)}</div>
-        <div className="text-xs text-muted-foreground">Modified {formatDate(article.modifiedAt)}</div>
+        <div className="text-xs text-muted-foreground">
+          Modified {formatDate(article.modifiedAt)}
+        </div>
       </td>
       <td className="px-4 py-4 align-top">
         <div className="text-sm">{article.campaignCount} campaigns</div>
@@ -1211,10 +1302,19 @@ function MobileArticleCard({
               <Link href={`/wordpress-hub/${article.id}`}>Open</Link>
             </Button>
             <Button disabled={busy} onClick={onGenerate} size="sm">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
               Generate
             </Button>
-            <Button disabled={busy || !canRemove} onClick={onRemove} size="sm" variant="destructive">
+            <Button
+              disabled={busy || !canRemove}
+              onClick={onRemove}
+              size="sm"
+              variant="destructive"
+            >
               <Trash2 className="h-4 w-4" />
               Remove
             </Button>
@@ -1237,7 +1337,10 @@ function StatusBadge({ status }: { status: CampaignStatus }) {
 
   return (
     <Badge className={styles[status]} variant="outline">
-      {status.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())}
+      {status
+        .replaceAll('_', ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, (letter) => letter.toUpperCase())}
     </Badge>
   );
 }
@@ -1362,7 +1465,10 @@ function SortableHead({
   return (
     <th className="px-4 py-3 text-left">
       <button
-        className={cn('inline-flex items-center gap-1 transition hover:text-foreground', active ? 'text-foreground' : '')}
+        className={cn(
+          'inline-flex items-center gap-1 transition hover:text-foreground',
+          active ? 'text-foreground' : '',
+        )}
         onClick={onClick}
         type="button"
       >
@@ -1398,9 +1504,11 @@ function formatDate(value: string | null) {
     return 'Not set';
   }
 
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
 }
 
 function slugify(value: string) {

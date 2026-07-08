@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 
 import { LogoutButton } from '@/components/auth/logout-button';
+import { BrandIcon } from '@/components/brand/brand-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -143,7 +144,12 @@ const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Channels', href: '/admin/channels', icon: RadioTower },
 ];
 
-const fallbackPlatform: PlatformOption = { platform: 'FACEBOOK', label: 'Facebook', icon: MessageSquareText, tone: 'text-blue-500' };
+const fallbackPlatform: PlatformOption = {
+  platform: 'FACEBOOK',
+  label: 'Facebook',
+  icon: MessageSquareText,
+  tone: 'text-blue-500',
+};
 const platformOptions: PlatformOption[] = [
   fallbackPlatform,
   { platform: 'INSTAGRAM', label: 'Instagram', icon: Camera, tone: 'text-pink-500' },
@@ -240,11 +246,15 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   }, [posts, search, selectedPlatform]);
 
   const selectedDayPosts = filteredPosts
-    .filter((post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === selectedDate)
+    .filter(
+      (post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === selectedDate,
+    )
     .sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
 
   const scheduledCount = posts.filter((post) => post.status === 'SCHEDULED').length;
-  const needsReviewCount = posts.filter((post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED').length;
+  const needsReviewCount = posts.filter(
+    (post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED',
+  ).length;
   const publishedCount = posts.filter((post) => post.status === 'PUBLISHED').length;
   const visibleDrafts = useMemo(() => {
     const cleanSearch = draftSearch.trim().toLowerCase();
@@ -261,7 +271,9 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       return available && platformMatch && searchMatch;
     });
   }, [draftFilter, draftSearch, drafts]);
-  const unscheduledDraftCount = drafts.filter((draft) => !draft.scheduledFor && draft.status !== 'PUBLISHED' && draft.status !== 'REJECTED').length;
+  const unscheduledDraftCount = drafts.filter(
+    (draft) => !draft.scheduledFor && draft.status !== 'PUBLISHED' && draft.status !== 'REJECTED',
+  ).length;
   const scheduledDraftCount = drafts.filter((draft) => draft.scheduledFor).length;
   const dailySlotsUsed = selectedDayPosts.length;
 
@@ -350,7 +362,9 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   async function scheduleGeneratedDraft(draftId: string, date: string, hour: number, minute = 0) {
     setSchedulingDraftId(draftId);
     try {
-      const scheduledFor = new Date(`${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`);
+      const scheduledFor = new Date(
+        `${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`,
+      );
       const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draftId}/schedule`, {
         method: 'PATCH',
         credentials: 'include',
@@ -526,7 +540,11 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                     void createScheduledPost();
                   }}
                 />
-                <DayWorkload date={selectedDate} posts={selectedDayPosts} draftCount={dailySlotsUsed} />
+                <DayWorkload
+                  date={selectedDate}
+                  posts={selectedDayPosts}
+                  draftCount={dailySlotsUsed}
+                />
                 <DayAgenda date={selectedDate} posts={selectedDayPosts} />
                 <ChannelHealth posts={posts} />
                 <ReviewQueue posts={posts} />
@@ -545,9 +563,7 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
   return (
     <div className="flex h-full min-h-screen flex-col px-4 py-5">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20">
-          <span className="text-xs font-bold tracking-wide">TMJ</span>
-        </div>
+        <BrandIcon className="h-10 w-10 rounded-xl" priority />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="text-xs text-muted-foreground">Publishing planner</p>
@@ -604,13 +620,19 @@ function PlannerHero({
     <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
       <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-center">
         <div className="min-w-0">
-          <Badge className="mb-3 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300" variant="outline">
+          <Badge
+            className="mb-3 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+            variant="outline"
+          >
             <CalendarClock className="mr-1 h-3.5 w-3.5" />
             Meta-style publishing planner
           </Badge>
-          <h2 className="text-2xl font-semibold tracking-normal">{formatDateLabel(selectedDate, view)}</h2>
+          <h2 className="text-2xl font-semibold tracking-normal">
+            {formatDateLabel(selectedDate, view)}
+          </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Drag generated drafts onto the calendar, balance channels, and plan each day from one workspace.
+            Drag generated drafts onto the calendar, balance channels, and plan each day from one
+            workspace.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
@@ -654,7 +676,15 @@ function PlannerHero({
   );
 }
 
-function SummaryPill({ label, value, tone }: { label: string; value: number; tone?: 'success' | 'warning' }) {
+function SummaryPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: 'success' | 'warning';
+}) {
   return (
     <div className="min-w-24 rounded-lg border border-border bg-background/70 px-3 py-2 text-center dark:border-white/10 dark:bg-white/[0.03]">
       <div
@@ -768,7 +798,9 @@ function ViewSwitcher({
         <button
           className={cn(
             'h-8 rounded-md px-3 text-sm font-medium capitalize transition',
-            view === item ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            view === item
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
           )}
           key={item}
           onClick={() => {
@@ -943,12 +975,15 @@ function DraftInbox({
               }}
               type="button"
             >
-              <item.icon className={cn('h-4 w-4', draftFilter === item.platform ? '' : item.tone)} />
+              <item.icon
+                className={cn('h-4 w-4', draftFilter === item.platform ? '' : item.tone)}
+              />
             </button>
           ))}
         </div>
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
-          Showing draft and scheduled generated content. Drop any item onto a time slot to schedule or move it.
+          Showing draft and scheduled generated content. Drop any item onto a time slot to schedule
+          or move it.
         </div>
         <div className="grid max-h-[46rem] gap-3 overflow-auto pr-1">
           {loading ? (
@@ -993,7 +1028,8 @@ function GeneratedDraftCard({
   onDragEnd: () => void;
   onSchedule: (hour: number) => void;
 }) {
-  const config = platformOptions.find((item) => item.platform === draft.platform) ?? fallbackPlatform;
+  const config =
+    platformOptions.find((item) => item.platform === draft.platform) ?? fallbackPlatform;
   const Icon = config.icon;
 
   return (
@@ -1027,7 +1063,9 @@ function GeneratedDraftCard({
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {draft.hashtags.slice(0, 3).map((tag) => (
-          <Badge key={tag} variant="outline">{tag.startsWith('#') ? tag : `#${tag}`}</Badge>
+          <Badge key={tag} variant="outline">
+            {tag.startsWith('#') ? tag : `#${tag}`}
+          </Badge>
         ))}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
@@ -1047,7 +1085,11 @@ function GeneratedDraftCard({
             size="sm"
             variant="outline"
           >
-            {scheduling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+            {scheduling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-3.5 w-3.5" />
+            )}
             {formatHour(hour)}
           </Button>
         ))}
@@ -1075,7 +1117,12 @@ function WeekPlanner({
 }) {
   return (
     <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
-      <div className="hidden border-b border-border bg-muted/40 dark:border-white/10 dark:bg-white/[0.03] lg:grid" style={{ gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))` }}>
+      <div
+        className="hidden border-b border-border bg-muted/40 dark:border-white/10 dark:bg-white/[0.03] lg:grid"
+        style={{
+          gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))`,
+        }}
+      >
         <div className="p-3 text-xs font-medium text-muted-foreground">Time</div>
         {visibleDates.map((date, index) => (
           <button
@@ -1103,9 +1150,13 @@ function WeekPlanner({
             <div
               className="grid min-h-28 border-b border-border dark:border-white/10"
               key={hour}
-              style={{ gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))` }}
+              style={{
+                gridTemplateColumns: `4.75rem repeat(${String(visibleDates.length)}, minmax(9.5rem, 1fr))`,
+              }}
             >
-              <div className="border-r border-border p-3 text-xs text-muted-foreground dark:border-white/10">{formatHour(hour)}</div>
+              <div className="border-r border-border p-3 text-xs text-muted-foreground dark:border-white/10">
+                {formatHour(hour)}
+              </div>
               {visibleDates.map((date) => {
                 const slotPosts = postsForSlot(posts, date, hour);
                 return (
@@ -1256,7 +1307,11 @@ function MonthPlanner({
                 {dayPosts.slice(0, 3).map((post) => (
                   <MonthPostPill key={post.id} post={post} />
                 ))}
-                {dayPosts.length > 3 ? <div className="text-xs text-muted-foreground">+{String(dayPosts.length - 3)} more</div> : null}
+                {dayPosts.length > 3 ? (
+                  <div className="text-xs text-muted-foreground">
+                    +{String(dayPosts.length - 3)} more
+                  </div>
+                ) : null}
               </div>
             </button>
           );
@@ -1267,7 +1322,9 @@ function MonthPlanner({
 }
 
 function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
-  const sortedPosts = [...posts].sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
+  const sortedPosts = [...posts].sort(
+    (a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor),
+  );
 
   return (
     <Card className="border-border/80 bg-card/95 dark:border-white/10">
@@ -1286,7 +1343,15 @@ function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
   );
 }
 
-function DayWorkload({ date, posts, draftCount }: { date: string; posts: ScheduledPost[]; draftCount: number }) {
+function DayWorkload({
+  date,
+  posts,
+  draftCount,
+}: {
+  date: string;
+  posts: ScheduledPost[];
+  draftCount: number;
+}) {
   const byPlatform = platformOptions.map((item) => ({
     ...item,
     count: posts.filter((post) => post.platform === item.platform).length,
@@ -1309,11 +1374,15 @@ function DayWorkload({ date, posts, draftCount }: { date: string; posts: Schedul
           <MiniMetric label="Channels" value={byPlatform.filter((item) => item.count > 0).length} />
         </div>
         <div>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Best open windows</div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Best open windows
+          </div>
           <div className="flex flex-wrap gap-2">
             {suggestedHours.length ? (
               suggestedHours.map((hour) => (
-                <Badge key={hour} variant="outline">{formatHour(hour)}</Badge>
+                <Badge key={hour} variant="outline">
+                  {formatHour(hour)}
+                </Badge>
               ))
             ) : (
               <span className="text-sm text-muted-foreground">This day is tightly packed.</span>
@@ -1356,7 +1425,11 @@ function DayAgenda({ date, posts }: { date: string; posts: ScheduledPost[] }) {
         <CardDescription>{shortDate(date)} publishing plan.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {posts.length ? posts.map((post) => <PostCard compact key={post.id} post={post} />) : <EmptyState label="No posts scheduled for this day." />}
+        {posts.length ? (
+          posts.map((post) => <PostCard compact key={post.id} post={post} />)
+        ) : (
+          <EmptyState label="No posts scheduled for this day." />
+        )}
       </CardContent>
     </Card>
   );
@@ -1381,7 +1454,10 @@ function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
                   <span className="font-medium">{count}</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${String(Math.min(count * 12, 100))}%` }} />
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${String(Math.min(count * 12, 100))}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -1393,7 +1469,9 @@ function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
 }
 
 function ReviewQueue({ posts }: { posts: ScheduledPost[] }) {
-  const reviewPosts = posts.filter((post) => post.status === 'FAILED' || post.status === 'PENDING_APPROVAL');
+  const reviewPosts = posts.filter(
+    (post) => post.status === 'FAILED' || post.status === 'PENDING_APPROVAL',
+  );
 
   return (
     <Card className="border-border/80 bg-card/95 dark:border-white/10">
@@ -1405,14 +1483,19 @@ function ReviewQueue({ posts }: { posts: ScheduledPost[] }) {
         <CardDescription>Failed or approval-pending scheduled posts.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {reviewPosts.length ? reviewPosts.slice(0, 4).map((post) => <PostCard compact key={post.id} post={post} />) : <EmptyState label="No posts need attention." />}
+        {reviewPosts.length ? (
+          reviewPosts.slice(0, 4).map((post) => <PostCard compact key={post.id} post={post} />)
+        ) : (
+          <EmptyState label="No posts need attention." />
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: boolean }) {
-  const config = platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
+  const config =
+    platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
   const Icon = config.icon;
 
   return (
@@ -1423,10 +1506,14 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className={cn('line-clamp-2 font-semibold', compact ? 'text-sm' : 'text-base')}>{post.title}</h3>
+            <h3 className={cn('line-clamp-2 font-semibold', compact ? 'text-sm' : 'text-base')}>
+              {post.title}
+            </h3>
             <StatusBadge status={post.status} />
           </div>
-          {post.caption && !compact ? <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.caption}</p> : null}
+          {post.caption && !compact ? (
+            <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.caption}</p>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatDateTime(post.scheduledFor)}</span>
             <span>{post.channel}</span>
@@ -1436,7 +1523,9 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
           {post.tags.length && !compact ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {post.tags.slice(0, 4).map((tag) => (
-                <Badge key={tag} variant="outline">{tag.startsWith('#') ? tag : `#${tag}`}</Badge>
+                <Badge key={tag} variant="outline">
+                  {tag.startsWith('#') ? tag : `#${tag}`}
+                </Badge>
               ))}
             </div>
           ) : null}
@@ -1447,7 +1536,8 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
 }
 
 function MonthPostPill({ post }: { post: ScheduledPost }) {
-  const config = platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
+  const config =
+    platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
   const Icon = config.icon;
 
   return (
@@ -1480,7 +1570,9 @@ function StatusBadge({ status }: { status: PublishStatus }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </span>
       {children}
     </label>
   );
@@ -1549,7 +1641,9 @@ function toDateInputValue(date: Date): string {
 }
 
 function shortDate(dateValue: string): string {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(parseLocalDate(dateValue));
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(
+    parseLocalDate(dateValue),
+  );
 }
 
 function weekdayLabel(dateValue: string): string {
@@ -1562,7 +1656,9 @@ function formatDateLabel(dateValue: string, view: CalendarView): string {
     return `${shortDate(start)} - ${shortDate(addDays(start, 6))}`;
   }
 
-  return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(parseLocalDate(dateValue));
+  return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(
+    parseLocalDate(dateValue),
+  );
 }
 
 function formatHour(hour: number): string {
@@ -1605,7 +1701,10 @@ function dateTimeValue(value: string | null): number {
 }
 
 function titleCase(value: string): string {
-  return value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return value
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function postFromApi(post: ApiPost): ScheduledPost {
