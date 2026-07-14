@@ -384,6 +384,7 @@ export class SocialChannelsService {
   async publish(id: string, dto: PublishToChannelDto, user: AuthenticatedUser) {
     const account = await this.ensureVisible(id, user);
     const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+    const publishDto = await this.hydratePublishPayload(dto, account.platform);
 
     if (!accessToken) {
       throw new BadRequestException(
@@ -414,19 +415,20 @@ export class SocialChannelsService {
         userId: user.id,
         platform: account.platform,
         platformAccount: account.displayName,
-        title: dto.title,
-        caption: dto.caption,
-        hashtags: dto.hashtags ?? [],
+        title: publishDto.title,
+        caption: publishDto.caption,
+        hashtags: publishDto.hashtags ?? [],
         status: PublishJobStatus.PROCESSING,
         metadata: {
           channelAccountId: account.id,
-          mediaUrl: dto.mediaUrl,
+          draftId: publishDto.draftId,
+          mediaUrl: publishDto.mediaUrl,
         },
       },
     });
 
     try {
-      const result = await this.publishToProvider(account, accessToken, dto);
+      const result = await this.publishToProvider(account, accessToken, publishDto);
       const updatedJob = await this.prisma.publishJob.update({
         where: { id: job.id },
         data: {
@@ -436,7 +438,8 @@ export class SocialChannelsService {
           attempts: { increment: 1 },
           metadata: {
             channelAccountId: account.id,
-            mediaUrl: dto.mediaUrl,
+            draftId: publishDto.draftId,
+            mediaUrl: publishDto.mediaUrl,
             providerResponse: result.providerResponse as Prisma.InputJsonValue,
           },
           logs: {
@@ -492,6 +495,32 @@ export class SocialChannelsService {
     await this.ensureVisible(id, user);
     await this.prisma.socialChannelAccount.delete({ where: { id } });
     return { deleted: true };
+  }
+
+  private async hydratePublishPayload(
+    dto: PublishToChannelDto,
+    platform: SocialPlatform,
+  ): Promise<PublishToChannelDto> {
+    if (dto.mediaUrl || !dto.draftId) {
+      return dto;
+    }
+
+    const draft = await this.prisma.socialDraft.findUnique({
+      where: { id: dto.draftId },
+      select: { mediaUrl: true, platform: true },
+    });
+
+    if (!draft?.mediaUrl || draft.platform !== platform) {
+      return dto;
+    }
+
+    return {
+      draftId: dto.draftId,
+      title: dto.title,
+      caption: dto.caption,
+      hashtags: dto.hashtags,
+      mediaUrl: draft.mediaUrl,
+    };
   }
 
   private async findFacebookPageCredential(
@@ -656,13 +685,23 @@ export class SocialChannelsService {
 
       case SocialPlatform.FACEBOOK: {
         const pageId = requiredExternalId(account.externalAccountId, 'Facebook Page ID');
-        const endpoint = dto.mediaUrl
-          ? `https://graph.facebook.com/v20.0/${pageId}/photos`
-          : `https://graph.facebook.com/v20.0/${pageId}/feed`;
-        const body = new URLSearchParams({
-          access_token: accessToken,
-          ...(dto.mediaUrl ? { url: dto.mediaUrl, caption } : { message: caption }),
-        });
+        const facebookMedia = facebookMediaUpload(dto.mediaUrl);
+        const endpoint =
+          dto.mediaUrl || facebookMedia
+            ? `https://graph.facebook.com/v20.0/${pageId}/photos`
+            : `https://graph.facebook.com/v20.0/${pageId}/feed`;
+        const body =
+          facebookMedia ??
+          new URLSearchParams({
+            access_token: accessToken,
+            ...(dto.mediaUrl ? { url: dto.mediaUrl, caption } : { message: caption }),
+          });
+
+        if (facebookMedia) {
+          facebookMedia.set('access_token', accessToken);
+          facebookMedia.set('caption', caption);
+        }
+
         const payload = await this.providerJson<Record<string, unknown>>(
           await fetch(endpoint, { method: 'POST', body }),
           'Facebook publish failed.',
@@ -1003,6 +1042,47 @@ function requiredExternalId(value: string | null, label: string): string {
   }
 
   return clean;
+}
+
+function facebookMediaUpload(mediaUrl?: string): FormData | null {
+  const parsed = parseImageDataUrl(mediaUrl);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const body = new FormData();
+  const extension = parsed.mimeType === 'image/png' ? 'png' : 'jpg';
+  body.set(
+    'source',
+    new Blob([parsed.bytes], { type: parsed.mimeType }),
+    `socialflow-post.${extension}`,
+  );
+  return body;
+}
+
+function parseImageDataUrl(value?: string): { bytes: ArrayBuffer; mimeType: string } | null {
+  if (!value?.startsWith('data:image/')) {
+    return null;
+  }
+
+  const match = /^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/i.exec(value);
+
+  if (!match?.[1] || !match[2]) {
+    throw new BadRequestException('Generated image is not a valid publishable data URL.');
+  }
+
+  const mimeType = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
+  const bytes = Buffer.from(match[2], 'base64');
+
+  if (!bytes.length) {
+    throw new BadRequestException('Generated image is empty.');
+  }
+
+  const arrayBuffer = new ArrayBuffer(bytes.length);
+  new Uint8Array(arrayBuffer).set(bytes);
+
+  return { bytes: arrayBuffer, mimeType };
 }
 
 function parseJson(value: string): unknown {

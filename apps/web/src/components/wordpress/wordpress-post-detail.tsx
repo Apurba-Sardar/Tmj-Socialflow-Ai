@@ -342,12 +342,16 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
     setBusyDraftId(draft.id);
     try {
       const mediaUrl = safePublishMediaUrl(draft.mediaUrl);
-      const skippedMedia = Boolean(draft.mediaUrl && !mediaUrl);
+      const willUseStoredDraftMedia = Boolean(
+        draft.mediaUrl && !mediaUrl && draft.platform === 'FACEBOOK',
+      );
+      const skippedMedia = Boolean(draft.mediaUrl && !mediaUrl && !willUseStoredDraftMedia);
       const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          draftId: draft.id,
           title: draft.title,
           caption: draft.body,
           hashtags: draft.hashtags,

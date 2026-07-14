@@ -1,5 +1,14 @@
 import { SocialChannelAuthType, SocialChannelStatus, SocialPlatform } from '@prisma/client';
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateSocialChannelDto {
   @IsEnum(SocialPlatform)
@@ -100,6 +109,10 @@ export class OAuthCallbackDto {
 }
 
 export class PublishToChannelDto {
+  @IsOptional()
+  @IsString()
+  draftId?: string;
+
   @IsString()
   @MinLength(1)
   title!: string;
