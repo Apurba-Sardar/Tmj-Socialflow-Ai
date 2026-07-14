@@ -129,7 +129,7 @@ const campaignStatuses: { value: CampaignStatus | 'ALL'; label: string }[] = [
   { value: 'ARCHIVED', label: 'Archived' },
 ];
 
-const platformDefaults = ['PINTEREST', 'INSTAGRAM', 'LINKEDIN', 'X'];
+const platformDefaults = ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'];
 
 export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();

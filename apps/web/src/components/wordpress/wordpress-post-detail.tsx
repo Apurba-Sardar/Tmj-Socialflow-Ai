@@ -149,12 +149,7 @@ const tabs: { label: DetailTab; icon: typeof FileText }[] = [
   { label: 'Analytics', icon: BarChart3 },
 ];
 
-export function WordPressPostDetail({
-  articleId,
-}: {
-  articleId: string;
-  user: AuthenticatedUser;
-}) {
+export function WordPressPostDetail({ articleId }: { articleId: string; user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
   const [article, setArticle] = useState<WordPressDetailArticle | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
@@ -185,7 +180,9 @@ export function WordPressPostDetail({
       }
       const payload = (await response.json()) as WordPressDetailArticle;
       setArticle(payload);
-      setSelectedDraftIds((ids) => ids.filter((id) => payload.socialDrafts.some((draft) => draft.id === id)));
+      setSelectedDraftIds((ids) =>
+        ids.filter((id) => payload.socialDrafts.some((draft) => draft.id === id)),
+      );
       void loadGoogleAnalytics();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load WordPress post.');
@@ -198,17 +195,22 @@ export function WordPressPostDetail({
     setGoogleAnalyticsLoading(true);
     setGoogleAnalyticsError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/google-analytics/wordpress-posts/${articleId}`, {
-        cache: 'no-store',
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `${apiBaseUrl}/api/google-analytics/wordpress-posts/${articleId}`,
+        {
+          cache: 'no-store',
+          credentials: 'include',
+        },
+      );
       if (!response.ok) {
         throw new Error(await apiErrorMessage(response, 'Google Analytics data is not available.'));
       }
       const payload = (await response.json()) as GoogleAnalyticsPostMetric[];
       setGoogleAnalytics(payload[0] ?? null);
     } catch (error) {
-      setGoogleAnalyticsError(error instanceof Error ? error.message : 'Google Analytics data is not available.');
+      setGoogleAnalyticsError(
+        error instanceof Error ? error.message : 'Google Analytics data is not available.',
+      );
       setGoogleAnalytics(null);
     } finally {
       setGoogleAnalyticsLoading(false);
@@ -218,16 +220,19 @@ export function WordPressPostDetail({
   async function generateCampaign() {
     setGenerating(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/wordpress/hub/posts/${articleId}/generate-campaign`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          campaignName: article ? `${article.title} Social Campaign` : undefined,
-          promptVersion: 'wordpress-hub-v1',
-          platforms: ['PINTEREST', 'INSTAGRAM', 'LINKEDIN', 'X'],
-        }),
-      });
+      const response = await fetch(
+        `${apiBaseUrl}/api/wordpress/hub/posts/${articleId}/generate-campaign`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            campaignName: article ? `${article.title} Social Campaign` : undefined,
+            promptVersion: 'wordpress-hub-v1',
+            platforms: ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'],
+          }),
+        },
+      );
       if (!response.ok) {
         throw new Error('Campaign generation failed.');
       }
@@ -249,7 +254,9 @@ export function WordPressPostDetail({
       return;
     }
 
-    setBusyDraftId(approvableDrafts.length === 1 ? approvableDrafts[0]?.id ?? 'approve' : 'approve-selected');
+    setBusyDraftId(
+      approvableDrafts.length === 1 ? (approvableDrafts[0]?.id ?? 'approve') : 'approve-selected',
+    );
     try {
       await Promise.all(
         approvableDrafts.map(async (draft) => {
@@ -346,7 +353,9 @@ export function WordPressPostDetail({
           </Button>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">WordPress post detail</div>
-            <div className="truncate text-xs text-muted-foreground">{article?.connection.siteUrl ?? 'Loading source'}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {article?.connection.siteUrl ?? 'Loading source'}
+            </div>
           </div>
           <Button aria-label="Toggle theme" onClick={toggleTheme} size="sm" variant="outline">
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -358,7 +367,11 @@ export function WordPressPostDetail({
             }}
             size="sm"
           >
-            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {generating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
             Generate AI Campaign
           </Button>
         </div>
@@ -438,7 +451,9 @@ export function WordPressPostDetail({
                   void approveDrafts([draft]);
                 }}
                 onApproveSelected={() => {
-                  void approveDrafts(socialDrafts.filter((draft) => selectedDraftIds.includes(draft.id)));
+                  void approveDrafts(
+                    socialDrafts.filter((draft) => selectedDraftIds.includes(draft.id)),
+                  );
                 }}
                 onDeleteDraft={(draft) => {
                   void deleteDraft(draft);
@@ -458,8 +473,12 @@ export function WordPressPostDetail({
                 }}
               />
             ) : null}
-            {activeTab === 'Media Assets' ? <MediaAssetsTab article={article} drafts={socialDrafts} generations={generations} /> : null}
-            {activeTab === 'Publishing History' ? <PublishingHistoryTab items={publishingHistory} /> : null}
+            {activeTab === 'Media Assets' ? (
+              <MediaAssetsTab article={article} drafts={socialDrafts} generations={generations} />
+            ) : null}
+            {activeTab === 'Publishing History' ? (
+              <PublishingHistoryTab items={publishingHistory} />
+            ) : null}
             {activeTab === 'AI History' ? <AiHistoryTab items={regenerationHistory} /> : null}
             {activeTab === 'Analytics' ? (
               <AnalyticsTab
@@ -508,10 +527,14 @@ function OverviewTab({ article }: { article: WordPressDetailArticle }) {
         <CardContent className="grid gap-4">
           <div className="flex flex-wrap gap-2">
             {article.categoryNames.map((item) => (
-              <Badge key={item} variant="secondary">{item}</Badge>
+              <Badge key={item} variant="secondary">
+                {item}
+              </Badge>
             ))}
             {article.tagNames.map((item) => (
-              <Badge key={item} variant="outline">{item}</Badge>
+              <Badge key={item} variant="outline">
+                {item}
+              </Badge>
             ))}
           </div>
           <p className="max-h-80 overflow-auto rounded-md border border-border bg-background/70 p-4 text-sm leading-6 text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
@@ -613,45 +636,55 @@ function GeneratedContentTab({
                 type="button"
               >
                 <div className="flex items-center gap-2">
-                  {selected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-muted-foreground" />}
+                  {selected ? (
+                    <CheckSquare className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Square className="h-4 w-4 text-muted-foreground" />
+                  )}
                   <span className="text-sm font-medium">Select draft</span>
                 </div>
-                <Badge variant={draft.status === 'DRAFT' || draft.status === 'REJECTED' ? 'outline' : 'success'}>
+                <Badge
+                  variant={
+                    draft.status === 'DRAFT' || draft.status === 'REJECTED' ? 'outline' : 'success'
+                  }
+                >
                   {titleCase(draft.status)}
                 </Badge>
               </button>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3">
                   <CardTitle className="text-base">{titleCase(draft.platform)}</CardTitle>
                   <Badge variant="outline">{formatDate(draft.createdAt)}</Badge>
-            </div>
+                </div>
                 <CardDescription>{draft.title}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+              </CardHeader>
+              <CardContent className="grid gap-3">
                 {draft.mediaUrl ? (
-              <div className="overflow-hidden rounded-xl border border-border bg-background/70 dark:border-white/10 dark:bg-white/[0.03]">
-                <img
+                  <div className="overflow-hidden rounded-xl border border-border bg-background/70 dark:border-white/10 dark:bg-white/[0.03]">
+                    <img
                       alt={`${titleCase(draft.platform)} generated campaign visual`}
-                  className={cn(
-                    'w-full object-cover',
+                      className={cn(
+                        'w-full object-cover',
                         draft.platform === 'PINTEREST' ? 'aspect-[2/3]' : 'aspect-video',
-                  )}
+                      )}
                       src={draft.mediaUrl}
-                />
-              </div>
-            ) : (
-              <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-border bg-background/70 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
-                Visual will be generated with the next campaign run.
-              </div>
-            )}
-            <p className="rounded-md border border-border bg-background/70 p-3 text-sm leading-6 dark:border-white/10 dark:bg-white/[0.03]">
+                    />
+                  </div>
+                ) : (
+                  <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-border bg-background/70 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
+                    Visual will be generated with the next campaign run.
+                  </div>
+                )}
+                <p className="rounded-md border border-border bg-background/70 p-3 text-sm leading-6 dark:border-white/10 dark:bg-white/[0.03]">
                   {draft.body}
-            </p>
-            <div className="flex flex-wrap gap-2">
+                </p>
+                <div className="flex flex-wrap gap-2">
                   {draft.hashtags.map((tag) => (
-                <Badge key={tag} variant="secondary">{tag}</Badge>
-              ))}
-            </div>
+                    <Badge key={tag} variant="secondary">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button
                     className="h-8 px-2"
@@ -662,18 +695,30 @@ function GeneratedContentTab({
                     size="sm"
                     variant="outline"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileCheck2 className="h-4 w-4" />
+                    )}
                     Approve
                   </Button>
                   <Button
                     className="h-8 px-2"
-                    disabled={busyDraftId !== null || draft.status === 'SCHEDULED' || draft.status === 'PUBLISHED'}
+                    disabled={
+                      busyDraftId !== null ||
+                      draft.status === 'SCHEDULED' ||
+                      draft.status === 'PUBLISHED'
+                    }
                     onClick={() => {
                       onScheduleDraft(draft);
                     }}
                     size="sm"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CalendarDays className="h-4 w-4" />
+                    )}
                     Schedule
                   </Button>
                   <Button
@@ -685,12 +730,16 @@ function GeneratedContentTab({
                     size="sm"
                     variant="outline"
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                     Delete
                   </Button>
                 </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
@@ -725,7 +774,11 @@ function MediaAssetsTab({
 
   drafts.forEach((draft) => {
     if (draft.mediaUrl) {
-      images.push({ id: draft.id, url: draft.mediaUrl, label: `${titleCase(draft.platform)} draft image` });
+      images.push({
+        id: draft.id,
+        url: draft.mediaUrl,
+        label: `${titleCase(draft.platform)} draft image`,
+      });
     }
   });
 
@@ -736,7 +789,10 @@ function MediaAssetsTab({
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {images.map((image) => (
-        <div className="sf-card overflow-hidden rounded-xl border border-border bg-card dark:border-white/10" key={image.id}>
+        <div
+          className="sf-card overflow-hidden rounded-xl border border-border bg-card dark:border-white/10"
+          key={image.id}
+        >
           <img alt={image.label} className="aspect-video w-full object-cover" src={image.url} />
           <div className="p-3 text-sm font-medium">{image.label}</div>
         </div>
@@ -769,9 +825,21 @@ function PublishingHistoryTab({ items }: { items: WordPressPublishingHistory[] }
               <tr className="border-t border-border dark:border-white/10" key={item.id}>
                 <td className="px-4 py-3">{titleCase(item.platform)}</td>
                 <td className="px-4 py-3">{item.platformAccount}</td>
-                <td className="px-4 py-3"><Badge variant="outline">{titleCase(item.status)}</Badge></td>
-                <td className="px-4 py-3">{formatDateTime(item.publishedAt ?? item.scheduledFor ?? item.createdAt)}</td>
-                <td className="px-4 py-3">{item.postUrl ? <a className="text-primary" href={item.postUrl}>Open</a> : 'Not published'}</td>
+                <td className="px-4 py-3">
+                  <Badge variant="outline">{titleCase(item.status)}</Badge>
+                </td>
+                <td className="px-4 py-3">
+                  {formatDateTime(item.publishedAt ?? item.scheduledFor ?? item.createdAt)}
+                </td>
+                <td className="px-4 py-3">
+                  {item.postUrl ? (
+                    <a className="text-primary" href={item.postUrl}>
+                      Open
+                    </a>
+                  ) : (
+                    'Not published'
+                  )}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{item.errorLog ?? 'None'}</td>
               </tr>
             ))}
@@ -795,10 +863,16 @@ function AiHistoryTab({ items }: { items: WordPressRegenerationHistory[] }) {
             <Badge variant="secondary">Version {item.version}</Badge>
             <div>
               <div className="font-medium">{item.reason ?? 'Campaign regenerated'}</div>
-              <div className="text-sm text-muted-foreground">{item.promptVersion} - {item.aiModel}</div>
-              {item.prompt ? <div className="mt-1 text-xs text-muted-foreground">{item.prompt}</div> : null}
+              <div className="text-sm text-muted-foreground">
+                {item.promptVersion} - {item.aiModel}
+              </div>
+              {item.prompt ? (
+                <div className="mt-1 text-xs text-muted-foreground">{item.prompt}</div>
+              ) : null}
             </div>
-            <div className="text-sm text-muted-foreground sm:text-right">{formatDateTime(item.generatedAt)}</div>
+            <div className="text-sm text-muted-foreground sm:text-right">
+              {formatDateTime(item.generatedAt)}
+            </div>
           </CardContent>
         </Card>
       ))}
@@ -850,7 +924,10 @@ function AnalyticsTab({
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <AnalyticsMetric label="Lifetime total views" value={googleAnalytics?.pageViews ?? 0} />
+              <AnalyticsMetric
+                label="Lifetime total views"
+                value={googleAnalytics?.pageViews ?? 0}
+              />
             </div>
           )}
         </CardContent>
@@ -878,7 +955,9 @@ function AnalyticsTab({
 function AnalyticsMetric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-border bg-background/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-      <div className="text-2xl font-semibold">{typeof value === 'number' ? formatNumber(value) : value}</div>
+      <div className="text-2xl font-semibold">
+        {typeof value === 'number' ? formatNumber(value) : value}
+      </div>
       <div className="text-sm text-muted-foreground">{label}</div>
     </div>
   );
@@ -916,9 +995,11 @@ function formatDate(value: string | null) {
     return 'Not set';
   }
 
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
 }
 
 function formatDateTime(value: string | null) {
