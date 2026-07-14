@@ -361,10 +361,14 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
       const payload = (await response.json().catch(() => null)) as {
         published?: boolean;
         error?: string;
+        message?: string | string[];
       } | null;
 
       if (!response.ok || payload?.published === false) {
-        throw new Error(payload?.error ?? 'Unable to publish draft.');
+        const message = Array.isArray(payload?.message)
+          ? payload.message.join(' ')
+          : payload?.message;
+        throw new Error(payload?.error ?? message ?? 'Unable to publish draft.');
       }
 
       setMessage(

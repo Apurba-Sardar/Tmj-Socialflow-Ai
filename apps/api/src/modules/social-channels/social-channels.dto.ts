@@ -5,7 +5,6 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -122,7 +121,7 @@ export class PublishToChannelDto {
   caption!: string;
 
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  @IsString()
   mediaUrl?: string;
 
   @IsOptional()
