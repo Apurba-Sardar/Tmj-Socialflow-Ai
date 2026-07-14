@@ -1,6 +1,11 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 
-import { BadRequestException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import {
   Prisma,
   PublishJobStatus,
@@ -12,7 +17,12 @@ import {
 
 import type { AuthenticatedUser } from '../auth/types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { CreateSocialChannelDto, OAuthCallbackDto, PublishToChannelDto, UpdateSocialChannelDto } from './social-channels.dto.js';
+import type {
+  CreateSocialChannelDto,
+  OAuthCallbackDto,
+  PublishToChannelDto,
+  UpdateSocialChannelDto,
+} from './social-channels.dto.js';
 
 const supportedPlatforms = [
   {
@@ -33,7 +43,13 @@ const supportedPlatforms = [
     platform: SocialPlatform.PINTEREST,
     label: 'Pinterest',
     authType: SocialChannelAuthType.OAUTH,
-    requiredScopes: ['boards:read', 'boards:write', 'pins:read', 'pins:write', 'user_accounts:read'],
+    requiredScopes: [
+      'boards:read',
+      'boards:write',
+      'pins:read',
+      'pins:write',
+      'user_accounts:read',
+    ],
     setupHint: 'Connect a Pinterest developer app and choose the board used for publishing.',
   },
   {
@@ -122,28 +138,53 @@ export class SocialChannelsService {
     const organizationId = await this.defaultOrganizationId(state.userId);
     const supported = supportedPlatforms.find((item) => item.platform === platform);
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined;
+    const facebookPage =
+      platform === SocialPlatform.FACEBOOK && token.access_token
+        ? await this.findFacebookPageCredential(token.access_token, process.env.FACEBOOK_PAGE_ID)
+        : null;
+    const accessToken = facebookPage?.accessToken ?? token.access_token;
 
     const account = await this.prisma.socialChannelAccount.create({
       data: {
         organizationId,
         connectedById: state.userId,
         platform,
-        displayName: `${supported?.label ?? platform} OAuth account`,
-        handle: token.screen_name ?? undefined,
-        externalAccountId: token.user_id ?? token.account_id ?? undefined,
+        displayName: facebookPage?.name ?? `${supported?.label ?? platform} OAuth account`,
+        handle: facebookPage?.id ?? token.screen_name ?? undefined,
+        externalAccountId: facebookPage?.id ?? token.user_id ?? token.account_id ?? undefined,
         accountType: platformAccountType(platform),
         authType: SocialChannelAuthType.OAUTH,
-        scopes: typeof token.scope === 'string' ? token.scope.split(/[,\s]+/).filter(Boolean) : config.scopes,
-        accessTokenCiphertext: this.encodeSecret(token.access_token),
+        scopes:
+          typeof token.scope === 'string'
+            ? token.scope.split(/[,\s]+/).filter(Boolean)
+            : config.scopes,
+        accessTokenCiphertext: this.encodeSecret(accessToken),
         refreshTokenCiphertext: this.encodeSecret(token.refresh_token),
         tokenExpiresAt: expiresAt,
-        status: token.access_token ? SocialChannelStatus.CONNECTED : SocialChannelStatus.ACTION_REQUIRED,
+        status:
+          token.access_token && (platform !== SocialPlatform.FACEBOOK || facebookPage)
+            ? SocialChannelStatus.CONNECTED
+            : SocialChannelStatus.ACTION_REQUIRED,
         lastHealthCheckAt: new Date(),
+        lastError:
+          platform === SocialPlatform.FACEBOOK && !facebookPage
+            ? 'No Facebook Page access token was found. Add a Page ID and reconnect or run Check.'
+            : null,
         metadata: {
           setupSource: 'oauth',
           tokenType: token.token_type,
           provider: platform,
-          note: 'Set externalAccountId to the Page, board, organization, or IG business account ID required for publishing.',
+          ...(facebookPage
+            ? {
+                facebookPageId: facebookPage.id,
+                facebookPageName: facebookPage.name,
+                facebookPageTasks: facebookPage.tasks,
+              }
+            : {}),
+          note:
+            platform === SocialPlatform.FACEBOOK
+              ? 'Facebook publishing uses the selected Page access token.'
+              : 'Set externalAccountId to the Page, board, organization, or IG business account ID required for publishing.',
         },
       },
     });
@@ -159,9 +200,15 @@ export class SocialChannelsService {
     const where = await this.visibleWhere(user);
     const [total, connected, actionRequired, expired, byPlatform] = await Promise.all([
       this.prisma.socialChannelAccount.count({ where }),
-      this.prisma.socialChannelAccount.count({ where: { ...where, status: SocialChannelStatus.CONNECTED } }),
-      this.prisma.socialChannelAccount.count({ where: { ...where, status: SocialChannelStatus.ACTION_REQUIRED } }),
-      this.prisma.socialChannelAccount.count({ where: { ...where, status: SocialChannelStatus.EXPIRED } }),
+      this.prisma.socialChannelAccount.count({
+        where: { ...where, status: SocialChannelStatus.CONNECTED },
+      }),
+      this.prisma.socialChannelAccount.count({
+        where: { ...where, status: SocialChannelStatus.ACTION_REQUIRED },
+      }),
+      this.prisma.socialChannelAccount.count({
+        where: { ...where, status: SocialChannelStatus.EXPIRED },
+      }),
       this.prisma.socialChannelAccount.groupBy({
         by: ['platform'],
         where,
@@ -227,19 +274,50 @@ export class SocialChannelsService {
   }
 
   async update(id: string, dto: UpdateSocialChannelDto, user: AuthenticatedUser) {
-    await this.ensureVisible(id, user);
+    const account = await this.ensureVisible(id, user);
 
     const data: Prisma.SocialChannelAccountUpdateInput = {
       ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim() } : {}),
       ...(dto.handle !== undefined ? { handle: this.optionalTrim(dto.handle) } : {}),
-      ...(dto.externalAccountId !== undefined ? { externalAccountId: this.optionalTrim(dto.externalAccountId) } : {}),
+      ...(dto.externalAccountId !== undefined
+        ? { externalAccountId: this.optionalTrim(dto.externalAccountId) }
+        : {}),
       ...(dto.accountType !== undefined ? { accountType: this.optionalTrim(dto.accountType) } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
       ...(dto.scopes !== undefined ? { scopes: dto.scopes } : {}),
-      ...(dto.accessToken !== undefined ? { accessTokenCiphertext: this.encodeSecret(dto.accessToken) } : {}),
-      ...(dto.refreshToken !== undefined ? { refreshTokenCiphertext: this.encodeSecret(dto.refreshToken) } : {}),
+      ...(dto.accessToken !== undefined
+        ? { accessTokenCiphertext: this.encodeSecret(dto.accessToken) }
+        : {}),
+      ...(dto.refreshToken !== undefined
+        ? { refreshTokenCiphertext: this.encodeSecret(dto.refreshToken) }
+        : {}),
       ...(dto.tokenExpiresAt !== undefined ? { tokenExpiresAt: new Date(dto.tokenExpiresAt) } : {}),
     };
+
+    if (account.platform === SocialPlatform.FACEBOOK && dto.externalAccountId !== undefined) {
+      const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+      const pageId = this.optionalTrim(dto.externalAccountId);
+      const facebookPage =
+        accessToken && pageId ? await this.findFacebookPageCredential(accessToken, pageId) : null;
+
+      if (facebookPage) {
+        data.accessTokenCiphertext = this.encodeSecret(facebookPage.accessToken);
+        data.displayName = facebookPage.name;
+        data.handle = facebookPage.id;
+        data.externalAccountId = facebookPage.id;
+        data.status = SocialChannelStatus.CONNECTED;
+        data.lastError = null;
+        data.lastHealthCheckAt = new Date();
+        data.metadata = {
+          setupSource: 'admin-panel',
+          provider: SocialPlatform.FACEBOOK,
+          facebookPageId: facebookPage.id,
+          facebookPageName: facebookPage.name,
+          facebookPageTasks: facebookPage.tasks,
+          note: 'Facebook publishing uses the selected Page access token.',
+        };
+      }
+    }
 
     return this.prisma.socialChannelAccount.update({
       where: { id },
@@ -252,17 +330,48 @@ export class SocialChannelsService {
     const expired = account.tokenExpiresAt ? account.tokenExpiresAt.getTime() < Date.now() : false;
     const hasToken = Boolean(account.accessTokenCiphertext);
 
+    const data: Prisma.SocialChannelAccountUpdateInput = {
+      lastHealthCheckAt: new Date(),
+      status: expired
+        ? SocialChannelStatus.EXPIRED
+        : hasToken || account.authType === SocialChannelAuthType.OAUTH
+          ? SocialChannelStatus.CONNECTED
+          : SocialChannelStatus.ACTION_REQUIRED,
+      lastError: expired ? 'Access token has expired. Reconnect this channel.' : null,
+    };
+
+    if (
+      !expired &&
+      hasToken &&
+      account.platform === SocialPlatform.FACEBOOK &&
+      account.externalAccountId
+    ) {
+      const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+      const facebookPage = accessToken
+        ? await this.findFacebookPageCredential(accessToken, account.externalAccountId)
+        : null;
+
+      if (facebookPage) {
+        data.accessTokenCiphertext = this.encodeSecret(facebookPage.accessToken);
+        data.displayName = facebookPage.name;
+        data.handle = facebookPage.id;
+        data.externalAccountId = facebookPage.id;
+        data.status = SocialChannelStatus.CONNECTED;
+        data.lastError = null;
+        data.metadata = {
+          setupSource: 'health-check',
+          provider: SocialPlatform.FACEBOOK,
+          facebookPageId: facebookPage.id,
+          facebookPageName: facebookPage.name,
+          facebookPageTasks: facebookPage.tasks,
+          note: 'Facebook publishing uses the selected Page access token.',
+        };
+      }
+    }
+
     return this.prisma.socialChannelAccount.update({
       where: { id },
-      data: {
-        lastHealthCheckAt: new Date(),
-        status: expired
-          ? SocialChannelStatus.EXPIRED
-          : hasToken || account.authType === SocialChannelAuthType.OAUTH
-            ? SocialChannelStatus.CONNECTED
-            : SocialChannelStatus.ACTION_REQUIRED,
-        lastError: expired ? 'Access token has expired. Reconnect this channel.' : null,
-      },
+      data,
     });
   }
 
@@ -271,7 +380,9 @@ export class SocialChannelsService {
     const accessToken = this.decodeSecret(account.accessTokenCiphertext);
 
     if (!accessToken) {
-      throw new BadRequestException('This channel has no access token. Connect it with OAuth or manual token setup.');
+      throw new BadRequestException(
+        'This channel has no access token. Connect it with OAuth or manual token setup.',
+      );
     }
 
     if (account.tokenExpiresAt && account.tokenExpiresAt.getTime() < Date.now()) {
@@ -285,7 +396,7 @@ export class SocialChannelsService {
       throw new BadRequestException('Access token has expired. Reconnect this channel.');
     }
 
-    const organizationId = account.organizationId ?? await this.defaultOrganizationId(user.id);
+    const organizationId = account.organizationId ?? (await this.defaultOrganizationId(user.id));
 
     if (!organizationId) {
       throw new UnprocessableEntityException('User is not assigned to an organization.');
@@ -377,7 +488,45 @@ export class SocialChannelsService {
     return { deleted: true };
   }
 
-  private async exchangeCode(config: ProviderConfig, code: string, verifier: string): Promise<TokenResponse> {
+  private async findFacebookPageCredential(
+    userAccessToken: string,
+    requestedPageId?: string | null,
+  ): Promise<FacebookPageCredential | null> {
+    const pageId = requestedPageId?.trim();
+
+    try {
+      const payload = await this.providerJson<FacebookAccountsResponse>(
+        await fetch(
+          `https://graph.facebook.com/v20.0/me/accounts?${new URLSearchParams({
+            fields: 'id,name,access_token,tasks',
+            access_token: userAccessToken,
+          }).toString()}`,
+        ),
+        'Unable to load Facebook Pages for this account.',
+      );
+      const pages = payload.data ?? [];
+      const page = pageId ? pages.find((item) => item.id === pageId) : pages[0];
+
+      if (!page?.id || !page.name || !page.access_token) {
+        return null;
+      }
+
+      return {
+        id: page.id,
+        name: page.name,
+        accessToken: page.access_token,
+        tasks: page.tasks ?? [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async exchangeCode(
+    config: ProviderConfig,
+    code: string,
+    verifier: string,
+  ): Promise<TokenResponse> {
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
@@ -426,7 +575,10 @@ export class SocialChannelsService {
           'X publish failed.',
         );
         const id = nestedString(payload, ['data', 'id']);
-        return { postUrl: id ? `https://x.com/i/web/status/${id}` : null, providerResponse: payload };
+        return {
+          postUrl: id ? `https://x.com/i/web/status/${id}` : null,
+          providerResponse: payload,
+        };
       }
 
       case SocialPlatform.LINKEDIN: {
@@ -482,7 +634,10 @@ export class SocialChannelsService {
           'Pinterest publish failed.',
         );
         const id = stringValue(payload.id);
-        return { postUrl: id ? `https://www.pinterest.com/pin/${id}/` : null, providerResponse: payload };
+        return {
+          postUrl: id ? `https://www.pinterest.com/pin/${id}/` : null,
+          providerResponse: payload,
+        };
       }
 
       case SocialPlatform.FACEBOOK: {
@@ -503,7 +658,10 @@ export class SocialChannelsService {
       }
 
       case SocialPlatform.INSTAGRAM: {
-        const instagramBusinessId = requiredExternalId(account.externalAccountId, 'Instagram Business account ID');
+        const instagramBusinessId = requiredExternalId(
+          account.externalAccountId,
+          'Instagram Business account ID',
+        );
 
         if (!dto.mediaUrl) {
           throw new BadRequestException('Instagram publishing requires a public image URL.');
@@ -537,7 +695,10 @@ export class SocialChannelsService {
           'Instagram publish failed.',
         );
         const id = stringValue(publishPayload.id);
-        return { postUrl: id ? `https://www.instagram.com/p/${id}/` : null, providerResponse: publishPayload };
+        return {
+          postUrl: id ? `https://www.instagram.com/p/${id}/` : null,
+          providerResponse: publishPayload,
+        };
       }
     }
   }
@@ -557,7 +718,9 @@ export class SocialChannelsService {
     const config = this.providerConfig(platform);
 
     if (!config) {
-      throw new BadRequestException(`OAuth is not configured for ${platform}. Add provider client ID/secret env values.`);
+      throw new BadRequestException(
+        `OAuth is not configured for ${platform}. Add provider client ID/secret env values.`,
+      );
     }
 
     return config;
@@ -575,13 +738,17 @@ export class SocialChannelsService {
 
   private verifyState(state: string): OAuthStatePayload {
     const [body, signature] = state.split('.');
-    const expected = body ? createHmac('sha256', this.stateSecret()).update(body).digest('base64url') : '';
+    const expected = body
+      ? createHmac('sha256', this.stateSecret()).update(body).digest('base64url')
+      : '';
 
     if (!body || !signature || signature !== expected) {
       throw new BadRequestException('Invalid OAuth state.');
     }
 
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as OAuthStatePayload;
+    const payload = JSON.parse(
+      Buffer.from(body, 'base64url').toString('utf8'),
+    ) as OAuthStatePayload;
 
     if (Date.now() - payload.createdAt > 10 * 60 * 1000) {
       throw new BadRequestException('OAuth state expired. Start the connection again.');
@@ -591,7 +758,11 @@ export class SocialChannelsService {
   }
 
   private stateSecret(): string {
-    return process.env.JWT_ACCESS_SECRET ?? process.env.JWT_REFRESH_SECRET ?? 'socialflow-local-oauth-state';
+    return (
+      process.env.JWT_ACCESS_SECRET ??
+      process.env.JWT_REFRESH_SECRET ??
+      'socialflow-local-oauth-state'
+    );
   }
 
   private async ensureVisible(id: string, user: AuthenticatedUser) {
@@ -609,7 +780,9 @@ export class SocialChannelsService {
     return account;
   }
 
-  private async visibleWhere(user: AuthenticatedUser): Promise<Prisma.SocialChannelAccountWhereInput> {
+  private async visibleWhere(
+    user: AuthenticatedUser,
+  ): Promise<Prisma.SocialChannelAccountWhereInput> {
     const organizationId = await this.defaultOrganizationId(user.id);
     return organizationId
       ? {
@@ -685,9 +858,28 @@ interface TokenResponse {
   account_id?: string;
 }
 
+interface FacebookPageCredential {
+  id: string;
+  name: string;
+  accessToken: string;
+  tasks: string[];
+}
+
+interface FacebookAccountsResponse {
+  data?: {
+    access_token?: string;
+    id?: string;
+    name?: string;
+    tasks?: string[];
+  }[];
+}
+
 function providerConfig(platform: SocialPlatform): ProviderConfig | null {
-  const apiBaseUrl = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? '4000'}`;
-  const redirectUri = process.env[`${platform}_REDIRECT_URI`] ?? `${apiBaseUrl}/api/social-channels/oauth/${platform}/callback`;
+  const apiBaseUrl =
+    process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? '4000'}`;
+  const redirectUri =
+    process.env[`${platform}_REDIRECT_URI`] ??
+    `${apiBaseUrl}/api/social-channels/oauth/${platform}/callback`;
   const supported = supportedPlatforms.find((item) => item.platform === platform);
 
   if (!supported) {
@@ -758,7 +950,9 @@ function providerConfig(platform: SocialPlatform): ProviderConfig | null {
         scopes: [...supported.requiredScopes],
         scopeSeparator: ' ',
         pkce: true,
-        basicAuthToken: clientSecret ? Buffer.from(`${clientId}:${clientSecret}`).toString('base64') : undefined,
+        basicAuthToken: clientSecret
+          ? Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+          : undefined,
       }
     : null;
 }
@@ -789,7 +983,9 @@ function requiredExternalId(value: string | null, label: string): string {
   const clean = value?.trim();
 
   if (!clean) {
-    throw new BadRequestException(`${label} is required. Add it as the channel Account ID in Admin > Channels.`);
+    throw new BadRequestException(
+      `${label} is required. Add it as the channel Account ID in Admin > Channels.`,
+    );
   }
 
   return clean;
@@ -847,11 +1043,16 @@ function stringValue(value: unknown): string | null {
 
 function nextStep(platform: SocialPlatform): string {
   const steps: Record<SocialPlatform, string> = {
-    [SocialPlatform.FACEBOOK]: 'Set Account ID to the Facebook Page ID and use a Page access token with pages_manage_posts.',
-    [SocialPlatform.INSTAGRAM]: 'Set Account ID to the Instagram Business account ID connected to your Facebook Page.',
-    [SocialPlatform.PINTEREST]: 'Set Account ID to the Pinterest board ID used for publishing pins.',
-    [SocialPlatform.LINKEDIN]: 'Set Account ID to the LinkedIn author URN, such as urn:li:person:... or urn:li:organization:...',
-    [SocialPlatform.X]: 'No account ID is required for basic text publishing. Media upload support can be added after X app approval.',
+    [SocialPlatform.FACEBOOK]:
+      'Set Account ID to the Facebook Page ID and use a Page access token with pages_manage_posts.',
+    [SocialPlatform.INSTAGRAM]:
+      'Set Account ID to the Instagram Business account ID connected to your Facebook Page.',
+    [SocialPlatform.PINTEREST]:
+      'Set Account ID to the Pinterest board ID used for publishing pins.',
+    [SocialPlatform.LINKEDIN]:
+      'Set Account ID to the LinkedIn author URN, such as urn:li:person:... or urn:li:organization:...',
+    [SocialPlatform.X]:
+      'No account ID is required for basic text publishing. Media upload support can be added after X app approval.',
   };
 
   return steps[platform];
