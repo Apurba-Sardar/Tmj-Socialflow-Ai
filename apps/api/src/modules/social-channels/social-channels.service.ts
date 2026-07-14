@@ -159,7 +159,9 @@ export class SocialChannelsService {
             ? token.scope.split(/[,\s]+/).filter(Boolean)
             : config.scopes,
         accessTokenCiphertext: this.encodeSecret(accessToken),
-        refreshTokenCiphertext: this.encodeSecret(token.refresh_token),
+        refreshTokenCiphertext: this.encodeSecret(
+          platform === SocialPlatform.FACEBOOK ? token.access_token : token.refresh_token,
+        ),
         tokenExpiresAt: expiresAt,
         status:
           token.access_token && (platform !== SocialPlatform.FACEBOOK || facebookPage)
@@ -295,7 +297,9 @@ export class SocialChannelsService {
     };
 
     if (account.platform === SocialPlatform.FACEBOOK && dto.externalAccountId !== undefined) {
-      const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+      const accessToken =
+        this.decodeSecret(account.refreshTokenCiphertext) ??
+        this.decodeSecret(account.accessTokenCiphertext);
       const pageId = this.optionalTrim(dto.externalAccountId);
       const facebookPage =
         accessToken && pageId ? await this.findFacebookPageCredential(accessToken, pageId) : null;
@@ -346,7 +350,9 @@ export class SocialChannelsService {
       account.platform === SocialPlatform.FACEBOOK &&
       account.externalAccountId
     ) {
-      const accessToken = this.decodeSecret(account.accessTokenCiphertext);
+      const accessToken =
+        this.decodeSecret(account.refreshTokenCiphertext) ??
+        this.decodeSecret(account.accessTokenCiphertext);
       const facebookPage = accessToken
         ? await this.findFacebookPageCredential(accessToken, account.externalAccountId)
         : null;
@@ -508,6 +514,11 @@ export class SocialChannelsService {
       const page = pageId ? pages.find((item) => item.id === pageId) : pages[0];
 
       if (!page?.id || !page.name || !page.access_token) {
+        if (pageId) {
+          throw new BadRequestException(
+            `Facebook Page ${pageId} was not returned by /me/accounts. Reconnect Facebook and make sure this Page is selected with pages_read_engagement and pages_manage_posts.`,
+          );
+        }
         return null;
       }
 
@@ -517,7 +528,10 @@ export class SocialChannelsService {
         accessToken: page.access_token,
         tasks: page.tasks ?? [],
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       return null;
     }
   }
