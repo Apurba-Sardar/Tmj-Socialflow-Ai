@@ -341,6 +341,8 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
 
     setBusyDraftId(draft.id);
     try {
+      const mediaUrl = safePublishMediaUrl(draft.mediaUrl);
+      const skippedMedia = Boolean(draft.mediaUrl && !mediaUrl);
       const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
         method: 'POST',
         credentials: 'include',
@@ -349,7 +351,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
           title: draft.title,
           caption: draft.body,
           hashtags: draft.hashtags,
-          mediaUrl: draft.mediaUrl ?? undefined,
+          ...(mediaUrl ? { mediaUrl } : {}),
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -361,7 +363,11 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         throw new Error(payload?.error ?? 'Unable to publish draft.');
       }
 
-      setMessage(`${titleCase(draft.platform)} post published now.`);
+      setMessage(
+        `${titleCase(draft.platform)} post published now${
+          skippedMedia ? ' without image because the image is not hosted as a public URL yet.' : '.'
+        }`,
+      );
       await loadArticle();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to publish draft.');
@@ -1112,6 +1118,19 @@ function titleCase(value: string) {
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+function safePublishMediaUrl(value: string | null) {
+  if (!value || value.length > 2000) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 async function apiErrorMessage(response: Response, fallback: string): Promise<string> {
