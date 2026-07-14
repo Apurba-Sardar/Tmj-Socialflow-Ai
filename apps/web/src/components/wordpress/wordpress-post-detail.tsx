@@ -140,6 +140,14 @@ interface WordPressDetailArticle {
 
 type WordPressSocialDraft = WordPressDetailArticle['socialDrafts'][number];
 
+interface SocialChannelAccount {
+  id: string;
+  platform: string;
+  displayName: string;
+  status: 'CONNECTED' | 'ACTION_REQUIRED' | 'DISCONNECTED' | 'EXPIRED';
+  externalAccountId: string | null;
+}
+
 const tabs: { label: DetailTab; icon: typeof FileText }[] = [
   { label: 'Overview', icon: FileText },
   { label: 'Generated Content', icon: Sparkles },
@@ -160,12 +168,14 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
   const [googleAnalytics, setGoogleAnalytics] = useState<GoogleAnalyticsPostMetric | null>(null);
   const [googleAnalyticsLoading, setGoogleAnalyticsLoading] = useState(false);
   const [googleAnalyticsError, setGoogleAnalyticsError] = useState<string | null>(null);
+  const [channels, setChannels] = useState<SocialChannelAccount[]>([]);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDarkMode(document.documentElement.classList.contains('dark'));
     void loadArticle();
+    void loadChannels();
   }, [articleId]);
 
   async function loadArticle() {
@@ -214,6 +224,21 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
       setGoogleAnalytics(null);
     } finally {
       setGoogleAnalyticsLoading(false);
+    }
+  }
+
+  async function loadChannels() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/social-channels`, {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        setChannels((await response.json()) as SocialChannelAccount[]);
+      }
+    } catch {
+      setChannels([]);
     }
   }
 
@@ -299,6 +324,47 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
       await loadArticle();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to schedule draft.');
+    } finally {
+      setBusyDraftId(null);
+    }
+  }
+
+  async function publishDraftNow(draft: WordPressSocialDraft) {
+    const channel = channels.find(
+      (item) => item.platform === draft.platform && item.status === 'CONNECTED',
+    );
+
+    if (!channel) {
+      setMessage(`Connect an active ${titleCase(draft.platform)} channel before posting.`);
+      return;
+    }
+
+    setBusyDraftId(draft.id);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draft.title,
+          caption: draft.body,
+          hashtags: draft.hashtags,
+          mediaUrl: draft.mediaUrl ?? undefined,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        published?: boolean;
+        error?: string;
+      } | null;
+
+      if (!response.ok || payload?.published === false) {
+        throw new Error(payload?.error ?? 'Unable to publish draft.');
+      }
+
+      setMessage(`${titleCase(draft.platform)} post published now.`);
+      await loadArticle();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to publish draft.');
     } finally {
       setBusyDraftId(null);
     }
@@ -458,6 +524,9 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
                 onDeleteDraft={(draft) => {
                   void deleteDraft(draft);
                 }}
+                onPublishNow={(draft) => {
+                  void publishDraftNow(draft);
+                }}
                 onScheduleDraft={(draft) => {
                   void scheduleDraft(draft);
                 }}
@@ -554,6 +623,7 @@ function GeneratedContentTab({
   onApproveDraft,
   onApproveSelected,
   onDeleteDraft,
+  onPublishNow,
   onScheduleDraft,
   onToggleAll,
   onToggleDraft,
@@ -565,6 +635,7 @@ function GeneratedContentTab({
   onApproveDraft: (draft: WordPressSocialDraft) => void;
   onApproveSelected: () => void;
   onDeleteDraft: (draft: WordPressSocialDraft) => void;
+  onPublishNow: (draft: WordPressSocialDraft) => void;
   onScheduleDraft: (draft: WordPressSocialDraft) => void;
   onToggleAll: () => void;
   onToggleDraft: (draftId: string) => void;
@@ -704,6 +775,21 @@ function GeneratedContentTab({
                   </Button>
                   <Button
                     className="h-8 px-2"
+                    disabled={busyDraftId !== null || draft.status === 'PUBLISHED'}
+                    onClick={() => {
+                      onPublishNow(draft);
+                    }}
+                    size="sm"
+                  >
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    Post now
+                  </Button>
+                  <Button
+                    className="h-8 px-2"
                     disabled={
                       busyDraftId !== null ||
                       draft.status === 'SCHEDULED' ||
@@ -719,7 +805,7 @@ function GeneratedContentTab({
                     ) : (
                       <CalendarDays className="h-4 w-4" />
                     )}
-                    Schedule
+                    Schedule tomorrow
                   </Button>
                   <Button
                     className="h-8 px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
