@@ -29,8 +29,14 @@ const supportedPlatforms = [
     platform: SocialPlatform.FACEBOOK,
     label: 'Facebook Pages',
     authType: SocialChannelAuthType.OAUTH,
-    requiredScopes: ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'],
-    setupHint: 'Connect a Meta app and select one or more Facebook Pages.',
+    requiredScopes: [
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_manage_posts',
+      'pages_manage_engagement',
+    ],
+    setupHint:
+      'Connect a Meta app and select one or more Facebook Pages. First-link comments require pages_manage_engagement.',
   },
   {
     platform: SocialPlatform.INSTAGRAM,
@@ -798,10 +804,11 @@ export class SocialChannelsService {
         sourceUrl: cleanUrl,
       };
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Facebook first comment failed.';
       return {
         status: 'failed',
         sourceUrl: cleanUrl,
-        error: error instanceof Error ? error.message : 'Facebook first comment failed.',
+        error: `${message} Reconnect Facebook with pages_manage_engagement approved/enabled for the Page.`,
       };
     }
   }

@@ -362,6 +362,14 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         published?: boolean;
         error?: string;
         message?: string | string[];
+        result?: {
+          providerResponse?: {
+            firstComment?: {
+              status?: string;
+              error?: string;
+            };
+          };
+        };
       } | null;
 
       if (!response.ok || payload?.published === false) {
@@ -371,9 +379,14 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         throw new Error(payload?.error ?? message ?? 'Unable to publish draft.');
       }
 
+      const commentResult = payload?.result?.providerResponse?.firstComment;
       setMessage(
         `${titleCase(draft.platform)} post published now${
           skippedMedia ? ' without image because the image is not hosted as a public URL yet.' : '.'
+        }${
+          commentResult?.status === 'failed'
+            ? ` Source link comment failed: ${commentResult.error ?? 'Reconnect Facebook with pages_manage_engagement.'}`
+            : ''
         }`,
       );
       await loadArticle();
