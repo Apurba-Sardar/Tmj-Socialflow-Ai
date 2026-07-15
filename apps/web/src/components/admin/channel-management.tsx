@@ -1612,13 +1612,13 @@ function appendUniqueLine(current: string, next: string): string {
 function premiumImagePromptFor(platform: Platform): string {
   const channelDirection: Record<Platform, string> = {
     PINTEREST:
-      'Vertical 2:3 Pinterest-ready image asset, save-worthy educational composition, one clear hero concept, light premium editorial illustration or polished collage, airy spacing.',
+      'Vertical 2:3 Pinterest-ready image asset, save-worthy quote card, text-over-photo poster, magazine-style educational cover, premium editorial collage, realistic lifestyle image, or refined illustration. Vary the format based on the article.',
     INSTAGRAM:
-      'Square Instagram-ready image asset, premium lifestyle/editorial composition, centered subject, warm visual emotion, refined color harmony, instantly understandable in a feed.',
+      'Square Instagram-ready image asset, premium lifestyle photo, emotional concept art, refined quote card, soft editorial collage, magazine-style mental-health visual, or polished illustration. Avoid repeated cartoon scenes.',
     FACEBOOK:
-      'Square or landscape Facebook-ready image asset, friendly educational visual, approachable lifestyle context when appropriate, broad-audience clarity, warm and trustworthy tone.',
+      'Square or landscape Facebook-ready Mind Family style image: shareable quote/text poster, realistic family or mental-health photo poster, editorial collage, dramatic but tasteful concept art, magazine-style educational graphic, or warm lifestyle visual.',
     LINKEDIN:
-      'Landscape LinkedIn-ready image asset, credible professional editorial visual, research/strategy mood, clean workspace or abstract concept, muted premium palette.',
+      'Landscape LinkedIn-ready image asset, credible professional editorial visual, refined quote card, research/strategy mood, clean workspace, abstract concept art, or muted premium magazine cover.',
     X: 'Wide X-ready preview image asset, simple high-contrast editorial composition, one bold idea, minimal detail, readable as a small link preview.',
   };
 
@@ -1632,13 +1632,13 @@ function premiumImagePromptFor(platform: Platform): string {
     '',
     `Channel direction: ${channelDirection[platform]}`,
     '',
-    'Use a visual idea that is directly connected to the article content. Do not create a generic wellness, office, or marketing background.',
+    'Use a visual idea that is directly connected to the article content. Do not create a generic wellness, office, cartoon family, or marketing background.',
     'The image should work alongside the separate SocialFlow caption: {{captionTitle}} / {{captionBody}}',
-    'Do not write the caption or article title into the image.',
+    'Short readable text is allowed when it improves the post, such as a concise quote, 3-8 word hook, or article-inspired headline. Keep text large, minimal, correctly spelled, and visually designed. Do not paste the full caption or hashtags into the image.',
     '',
     'Topic safety guidance: {{topicGuidance}}',
     '',
-    'No platform label, no social network label, no UI, no logos, no watermark, no readable text.',
+    'No platform label, no social network label, no UI, no logos, no watermark, no tiny unreadable text, no misspelled text, no dense paragraphs.',
   ].join('\n');
 }
 
@@ -1659,6 +1659,7 @@ function platformStyleNotes(platform: Platform): string {
     shape[platform],
     'Output must be a clean image asset only; caption, title, hashtags, and CTA remain outside the image.',
     'Prefer premium editorial quality over cartoon-like or template-like visuals.',
+    'Use varied formats across posts: quote card, text-over-photo poster, realistic editorial photo, symbolic concept art, magazine cover, premium collage, or refined illustration.',
     'Avoid repeated generic parent-child, office, leaf, notebook, or abstract background scenes unless they are specifically relevant to the article.',
   ].join('\n');
 }

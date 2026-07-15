@@ -84,7 +84,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             <Field label="Display name" name="displayName" autoComplete="name" required={false} />
           ) : null}
           {mode !== 'reset-password' && mode !== 'verify-email' ? (
-            <Field label="User ID" name="email" autoComplete="username" placeholder="superadmin" />
+            <Field
+              label="User ID"
+              name="email"
+              autoComplete="username"
+              placeholder="Enter your user ID"
+            />
           ) : null}
           {mode === 'login' || mode === 'register' || mode === 'reset-password' ? (
             <Field
@@ -94,7 +99,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               minLength={mode === 'login' ? undefined : 12}
               hint={mode === 'login' ? undefined : 'Use at least 12 characters.'}
-              placeholder={mode === 'login' ? 'TMJ@500' : undefined}
+              placeholder={mode === 'login' ? 'Enter your password' : undefined}
             />
           ) : null}
           {error ? (

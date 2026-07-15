@@ -22,50 +22,64 @@ interface RenderPromptInput {
   captionBody?: string;
 }
 
-const defaultPromptTemplates: Record<SocialPlatform, { name: string; description: string; template: string; negativePrompt: string; styleNotes: string }> = {
+const defaultPromptTemplates: Record<
+  SocialPlatform,
+  {
+    name: string;
+    description: string;
+    template: string;
+    negativePrompt: string;
+    styleNotes: string;
+  }
+> = {
   [SocialPlatform.PINTEREST]: {
-    name: 'Pinterest educational pin image',
-    description: 'Tall save-worthy editorial visual for Pinterest pins.',
+    name: 'Pinterest mixed editorial pin image',
+    description:
+      'Tall save-worthy pins with varied quote, poster, photo, collage, and editorial formats.',
     template:
-      'Create a tall vertical Pinterest-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: premium save-worthy educational visual, light editorial illustration or polished collage, pastel palette, useful magazine or pin-board feel, one clear hero concept, airy white space, no dark backgrounds. The image must support the separate caption in SocialFlow, not repeat it inside the image.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first, no software branding, no platform label.',
+      'Create a tall vertical Pinterest-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: choose the strongest postable format for this article, not a repeated cartoon template. Use one of these formats when appropriate: emotional text-over-photo poster, elegant quote card, magazine-style educational cover, editorial collage, realistic lifestyle photograph with tasteful overlay space, abstract mental-health concept art, or clean illustrated explainer. Make it feel like a Mind Family social post people would save and share.\n\nText treatment: short readable text is allowed only when it improves the asset, such as a concise quote, 3-6 word hook, or article-inspired headline. Keep text large, minimal, correctly spelled, and visually designed. Do not paste the full caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first, no software branding, no platform label.',
     negativePrompt:
-      'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid clutter, dark backgrounds, generic stock-photo styling, medical procedures, and unrelated decoration.',
-    styleNotes: 'Vertical 2:3, warm pastel editorial, one simple idea.',
+      'No platform label, social network name, UI, app logo, watermark, fake website chrome, tiny unreadable text, misspelled text, dense paragraphs, clutter, generic stock-photo styling, medical procedures, violent or fear-based imagery, or unrelated decoration.',
+    styleNotes:
+      'Vertical 2:3. Vary the format across posts: quote card, emotional photo poster, editorial collage, magazine cover, concept art, or clean explainer. Avoid defaulting to childish cartoons.',
   },
   [SocialPlatform.INSTAGRAM]: {
-    name: 'Instagram premium feed image',
-    description: 'Square editorial lifestyle visual for Instagram feed posts.',
+    name: 'Instagram mixed premium feed image',
+    description:
+      'Square feed images with realistic, quote-card, editorial, and concept-art variety.',
     template:
-      'Create a square Instagram-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: premium lifestyle/editorial visual, centered subject, balanced composition, soft gradients or paper texture, visually engaging at feed size, minimal and warm, no clutter. The image must pair with the separate caption in SocialFlow, not contain caption text.\n\nTopic safety guidance: {{topicGuidance}}\n\nMake it polished enough to publish on a brand account. No platform label.',
+      'Create a square Instagram-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: choose a premium feed format that fits the article: realistic lifestyle photo, emotional portrait-style concept, quote-card graphic, soft editorial collage, magazine-style mental-health visual, or refined illustration. Avoid repetitive cartoon parent-child scenes. The image should look like a finished Mind Family post, visually strong at feed size, warm, human, and shareable.\n\nText treatment: short readable text is allowed when useful, such as a concise quote or 3-7 word hook. Keep it large, clean, correctly spelled, and designed as part of the image. Do not paste the full caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nMake it polished enough to publish on a brand account. No platform label.',
     negativePrompt:
-      'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid childish cartoon styling, busy infographic layouts, medical procedures, and sensational imagery.',
-    styleNotes: 'Square 1:1, warm premium editorial illustration.',
+      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, cheap template look, childish cartoon styling, busy infographic layouts, medical procedures, or sensational imagery.',
+    styleNotes:
+      'Square 1:1. Use varied premium formats: realistic lifestyle, quote card, editorial collage, emotional concept art, or refined illustration.',
   },
   [SocialPlatform.FACEBOOK]: {
-    name: 'Facebook friendly educational image',
-    description: 'Friendly square/landscape image for broad Facebook audiences.',
+    name: 'Facebook Mind Family post image',
+    description: 'Shareable Facebook images in the style of Mind Family posts.',
     template:
-      'Create a friendly Facebook-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: approachable lifestyle/editorial visual, warm and clear educational asset, suitable for a broad audience, no clutter. Use one clear concept that works with the separate post caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo platform label, no caption text inside the image.',
+      'Create a Facebook-ready Mind Family style image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: create a postable social image like a manually designed Facebook page asset, not a generic cartoon scene. Select the best format for the content: realistic family/mental-health photo poster, dramatic but tasteful concept art, quote card on paper/neutral background, magazine-style educational graphic, editorial collage, illustrated psychology metaphor, or warm lifestyle image with a designed text area. Make it unique to this article and emotionally clear.\n\nText treatment: short readable text is allowed and often preferred for Facebook, such as a concise quote, article-inspired headline, or 3-8 word hook. Keep text large, clean, correctly spelled, and visually designed. Do not include the full caption or hashtags.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo Facebook label, no SocialFlow branding, no app UI.',
     negativePrompt:
-      'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid fear-based imagery, clinical drama, and unrelated generic objects.',
-    styleNotes: 'Square/landscape, warm, approachable, easy to understand.',
+      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, cheap meme template, repeated generic cartoon families, clinical drama, gore, fearmongering, or unrelated generic objects.',
+    styleNotes:
+      'Square/landscape. Match Mind Family page style: quote cards, text-over-photo posters, emotional concept art, magazine-style mental-health graphics, and premium educational visuals.',
   },
   [SocialPlatform.LINKEDIN]: {
     name: 'LinkedIn professional research image',
     description: 'Professional editorial image for business and health education feeds.',
     template:
-      'Create a professional LinkedIn-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: credible editorial research visual, clean desk or abstract science composition, muted premium palette, polished business/health education feel, no childish cartoon styling. The visual should support the separate professional caption and not include any text.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo platform label.',
+      'Create a professional LinkedIn-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: credible editorial research visual, clean desk or abstract science composition, muted premium palette, polished business/health education feel, no childish cartoon styling. Choose a varied professional format: research desk photo, editorial concept, refined quote card, abstract data-free metaphor, or premium magazine-style cover.\n\nText treatment: short readable text is allowed only when it gives the image a professional cover/quote-card feel. Keep it minimal, correctly spelled, and not like a dense slide.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo platform label.',
     negativePrompt:
-      'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid childish cartoons, sensational health claims, medical procedures, and clutter.',
+      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, childish cartoons, sensational health claims, medical procedures, or clutter.',
     styleNotes: 'Professional, muted premium palette, credible research mood.',
   },
   [SocialPlatform.X]: {
     name: 'X high-contrast preview image',
     description: 'Wide simple visual designed to read well in X previews.',
     template:
-      'Create a wide landscape X-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: simple high-contrast editorial composition, one clear idea, readable at small preview size, minimal background detail, no infographic clutter. It must work with the separate post caption and not include any readable text.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo X/Twitter label.',
+      'Create a wide landscape X-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: simple high-contrast editorial composition, one clear idea, readable at small preview size, minimal background detail, no infographic clutter. Use a varied format such as text-over-photo poster, bold quote card, realistic editorial image, surreal concept art, or simple premium collage.\n\nText treatment: short readable text is allowed when it improves preview impact, but keep it very brief and correctly spelled.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo X/Twitter label.',
     negativePrompt:
-      'No readable text, words, letters, numbers, logos, watermarks, UI, captions, labels, signs, charts, posters, document text, or typographic marks. Avoid tiny details, busy layouts, medical procedures, and body-transformation imagery.',
+      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, busy layouts, medical procedures, or body-transformation imagery.',
     styleNotes: 'Wide 16:9, high-contrast, simple preview-safe composition.',
   },
 };
@@ -160,21 +174,36 @@ export class PromptTemplatesService {
   }
 
   async preview(dto: PreviewPromptTemplateDto, user: AuthenticatedUser) {
-    const rendered = await this.renderImagePrompt({
-      platform: dto.platform,
-      article: {
-        title: nonEmpty(dto.title?.trim(), 'Example WordPress article'),
-        excerpt: nonEmpty(dto.excerpt?.trim(), 'A concise article summary used for image direction.'),
-        contentText: nonEmptyOrNull(dto.content?.trim()),
-        url: 'https://example.com/article',
-        categoryNames: this.parseCsv(dto.categories),
+    const rendered = await this.renderImagePrompt(
+      {
+        platform: dto.platform,
+        article: {
+          title: nonEmpty(dto.title?.trim(), 'Example WordPress article'),
+          excerpt: nonEmpty(
+            dto.excerpt?.trim(),
+            'A concise article summary used for image direction.',
+          ),
+          contentText: nonEmptyOrNull(dto.content?.trim()),
+          url: 'https://example.com/article',
+          categoryNames: this.parseCsv(dto.categories),
+        },
       },
-    }, user.id, this.purpose(dto.purpose));
+      user.id,
+      this.purpose(dto.purpose),
+    );
 
-    return { prompt: rendered.prompt, promptVersion: rendered.promptVersion, templateId: rendered.templateId };
+    return {
+      prompt: rendered.prompt,
+      promptVersion: rendered.promptVersion,
+      templateId: rendered.templateId,
+    };
   }
 
-  async renderImagePrompt(input: RenderPromptInput, userId?: string, purpose = PROMPT_PURPOSE_IMAGE) {
+  async renderImagePrompt(
+    input: RenderPromptInput,
+    userId?: string,
+    purpose = PROMPT_PURPOSE_IMAGE,
+  ) {
     const organizationId = userId ? await this.defaultOrganizationId(userId) : null;
     await this.ensureDefaults(organizationId, userId);
 
@@ -216,7 +245,9 @@ export class PromptTemplatesService {
         this.productionCreativeBrief(input.platform),
         renderedStyleNotes ? `Style notes: ${renderedStyleNotes}` : '',
         renderedNegative ? `Negative prompt: ${renderedNegative}` : '',
-      ].filter(Boolean).join('\n\n'),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       promptVersion: `admin-${input.platform.toLowerCase()}-${String(template?.version ?? 1)}`,
       templateId: template?.id ?? null,
     };
@@ -224,19 +255,19 @@ export class PromptTemplatesService {
 
   private productionCreativeBrief(platform: SocialPlatform): string {
     const base =
-      'Production quality requirements: create a premium, postable social media asset directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. The image must work alongside the separate caption in the app. Do not add any headline, caption, platform label, social network name, UI, logo, watermark, words, letters, numbers, signs, or readable text inside the image. No Instagram/Pinterest/Facebook/LinkedIn/X label should appear on the image.';
+      'Production quality requirements: create a premium, postable social media asset directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. Do not default to a cartoon illustration. Vary the creative format based on the article: realistic lifestyle/photo poster, emotional concept art, refined quote card, magazine-style educational cover, editorial collage, symbolic mental-health artwork, or clean premium illustration. Short readable text is allowed when it makes the asset more postable, such as a concise quote, 3-8 word hook, or article-inspired headline; keep it large, minimal, correctly spelled, and visually designed. Do not paste the full caption or hashtags. Never add platform labels, social network names, app UI, SocialFlow branding, logos, watermarks, tiny unreadable text, or dense paragraphs.';
 
     const channel = {
       [SocialPlatform.PINTEREST]:
-        'Pinterest specifics: vertical 2:3 save-worthy educational pin composition, clear hero concept, soft editorial illustration or premium collage, helpful reference-board mood, airy spacing.',
+        'Pinterest specifics: vertical 2:3 save-worthy composition, clear hero concept, quote-card or educational poster feel, premium collage or realistic/editorial visual, helpful reference-board mood, airy spacing.',
       [SocialPlatform.INSTAGRAM]:
-        'Instagram specifics: square premium lifestyle/editorial composition, warm subject-led scene, balanced center of interest, elegant color harmony, instantly understandable in feed.',
+        'Instagram specifics: square premium feed composition, warm subject-led scene or designed quote card, emotional clarity, elegant color harmony, instantly understandable in feed.',
       [SocialPlatform.FACEBOOK]:
-        'Facebook specifics: friendly square or landscape educational visual, approachable human/lifestyle context when safe, broad-audience clarity, warm optimistic tone.',
+        'Facebook specifics: Mind Family style square or landscape post image, broad-audience clarity, shareable quote/text poster when useful, realistic family/mental-health visual when safe, warm but not childish.',
       [SocialPlatform.LINKEDIN]:
-        'LinkedIn specifics: credible professional editorial visual, research/strategy feel, clean workspace or abstract concept scene, muted premium palette, business-health education polish.',
+        'LinkedIn specifics: credible professional editorial visual, research/strategy feel, clean workspace, abstract concept scene, refined quote card, muted premium palette, business-health education polish.',
       [SocialPlatform.X]:
-        'X specifics: wide landscape preview image, high-contrast simple composition, one bold idea, very readable at small preview size, minimal detail.',
+        'X specifics: wide landscape preview image, high-contrast simple composition, one bold idea, optional very short hook text, very readable at small preview size, minimal detail.',
     }[platform];
 
     return `${base}\n${channel}`;
@@ -251,7 +282,7 @@ export class PromptTemplatesService {
           purpose: PROMPT_PURPOSE_IMAGE,
           active: true,
         },
-        select: { id: true },
+        select: { id: true, name: true, template: true, styleNotes: true },
       });
 
       if (!existing) {
@@ -269,8 +300,43 @@ export class PromptTemplatesService {
             updatedById: userId,
           },
         });
+      } else if (this.shouldUpgradeLegacyDefault(existing)) {
+        await this.prisma.promptTemplate.update({
+          where: { id: existing.id },
+          data: {
+            name: template.name,
+            description: template.description,
+            template: template.template,
+            negativePrompt: template.negativePrompt,
+            styleNotes: template.styleNotes,
+            updatedById: userId,
+            version: { increment: 1 },
+          },
+        });
       }
     }
+  }
+
+  private shouldUpgradeLegacyDefault(template: {
+    name: string;
+    template: string;
+    styleNotes: string | null;
+  }) {
+    const legacyNames = new Set([
+      'Pinterest educational pin image',
+      'Instagram premium feed image',
+      'Facebook friendly educational image',
+      'LinkedIn professional research image',
+      'X high-contrast preview image',
+    ]);
+    const legacyText = `${template.template} ${template.styleNotes ?? ''}`.toLowerCase();
+
+    return (
+      legacyNames.has(template.name) ||
+      legacyText.includes('no readable text') ||
+      legacyText.includes('not contain caption text') ||
+      legacyText.includes('warm premium editorial illustration')
+    );
   }
 
   private visibleWhere(organizationId: string | null): Prisma.PromptTemplateWhereInput {
@@ -317,13 +383,19 @@ export class PromptTemplatesService {
   }
 
   private replaceTokens(template: string, replacements: Record<string, string>): string {
-    return template.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_match, key: string) => replacements[key] ?? '');
+    return template.replace(
+      /\{\{([a-zA-Z0-9_]+)\}\}/g,
+      (_match, key: string) => replacements[key] ?? '',
+    );
   }
 
   private topicVisualGuidance(article: PromptArticleContext): string {
-    const topic = `${article.title} ${article.excerpt} ${article.contentText ?? ''} ${article.categoryNames.join(' ')}`.toLowerCase();
+    const topic =
+      `${article.title} ${article.excerpt} ${article.contentText ?? ''} ${article.categoryNames.join(' ')}`.toLowerCase();
 
-    if (/(peptide|semaglutide|tesamorelin|aod|fat loss|weight loss|metabolism|obesity)/i.test(topic)) {
+    if (
+      /(peptide|semaglutide|tesamorelin|aod|fat loss|weight loss|metabolism|obesity)/i.test(topic)
+    ) {
       return [
         'Use abstract molecular structures, amino-acid chain motifs, microscope lens, clean lab glassware without labels, blank research notebook, healthy balanced plate, leaves, soft science-and-wellness symbols.',
         'Do not show weighing scales, stomach/body silhouettes, measuring tape, before-after imagery, injections, needles, syringes, vials, pills, drug packaging, doctors treating patients, medical procedures, or dramatic clinical scenes.',
@@ -333,12 +405,13 @@ export class PromptTemplatesService {
 
     if (/(parent|child|family|dad|mom|baby|toddler|school|foster)/i.test(topic)) {
       return [
-        'Use warm family-safe illustration, books, toys, home routines, parent-child activity, gentle educational scenes, playful soft colors.',
-        'Avoid distressed children, unsafe situations, medical scenes, or identifiable real people.',
+        'Use family-safe visuals, but vary the format: realistic home/lifestyle photo poster, thoughtful parent-child editorial scene, quote card on paper or neutral background, psychology metaphor, magazine-style parenting graphic, or refined illustration.',
+        'For sensitive mental-health or family-stress topics, use supportive, non-exploitative imagery: thoughtful faces, soft lighting, symbolic fog/brain/heart/home motifs, calm interiors, or abstract emotional concepts.',
+        'Avoid repetitive cartoon families, distressed children, unsafe situations, medical scenes, identifiable real people, or sensational fear imagery.',
       ].join(' ');
     }
 
-    return 'Use symbolic editorial illustration based on the article theme, with clean objects, soft texture, and a useful educational content feel. Avoid generic stock-photo compositions and unrelated decorative elements.';
+    return 'Use a varied editorial format based on the article theme: realistic photo poster, refined quote card, premium collage, symbolic concept art, magazine cover, or clean educational graphic. Avoid generic stock-photo compositions, repeated cartoon scenes, and unrelated decorative elements.';
   }
 
   private truncate(value: string, max: number): string {
