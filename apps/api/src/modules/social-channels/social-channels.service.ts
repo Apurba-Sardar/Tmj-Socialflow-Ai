@@ -423,6 +423,7 @@ export class SocialChannelsService {
           channelAccountId: account.id,
           draftId: publishDto.draftId,
           mediaUrl: publishDto.mediaUrl,
+          sourceUrl: publishDto.sourceUrl,
         },
       },
     });
@@ -440,6 +441,7 @@ export class SocialChannelsService {
             channelAccountId: account.id,
             draftId: publishDto.draftId,
             mediaUrl: publishDto.mediaUrl,
+            sourceUrl: publishDto.sourceUrl,
             providerResponse: result.providerResponse as Prisma.InputJsonValue,
           },
           logs: {
@@ -501,16 +503,16 @@ export class SocialChannelsService {
     dto: PublishToChannelDto,
     platform: SocialPlatform,
   ): Promise<PublishToChannelDto> {
-    if (dto.mediaUrl || !dto.draftId) {
+    if ((dto.mediaUrl && dto.sourceUrl) || !dto.draftId) {
       return dto;
     }
 
     const draft = await this.prisma.socialDraft.findUnique({
       where: { id: dto.draftId },
-      select: { mediaUrl: true, platform: true },
+      select: { mediaUrl: true, platform: true, sourceUrl: true },
     });
 
-    if (!draft?.mediaUrl || draft.platform !== platform) {
+    if (draft?.platform !== platform) {
       return dto;
     }
 
@@ -519,7 +521,8 @@ export class SocialChannelsService {
       title: dto.title,
       caption: dto.caption,
       hashtags: dto.hashtags,
-      mediaUrl: draft.mediaUrl,
+      mediaUrl: dto.mediaUrl ?? draft.mediaUrl ?? undefined,
+      sourceUrl: dto.sourceUrl ?? draft.sourceUrl,
     };
   }
 
@@ -707,7 +710,17 @@ export class SocialChannelsService {
           'Facebook publish failed.',
         );
         const id = stringValue(payload.post_id) ?? stringValue(payload.id);
-        return { postUrl: id ? `https://www.facebook.com/${id}` : null, providerResponse: payload };
+        const comment = id
+          ? await this.commentOnFacebookPost(id, accessToken, dto.sourceUrl)
+          : null;
+
+        return {
+          postUrl: id ? `https://www.facebook.com/${id}` : null,
+          providerResponse: {
+            ...payload,
+            ...(comment ? { firstComment: comment } : {}),
+          },
+        };
       }
 
       case SocialPlatform.INSTAGRAM: {
@@ -753,6 +766,43 @@ export class SocialChannelsService {
           providerResponse: publishPayload,
         };
       }
+    }
+  }
+
+  private async commentOnFacebookPost(
+    postId: string,
+    accessToken: string,
+    sourceUrl?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const cleanUrl = sourceUrl?.trim();
+
+    if (!cleanUrl) {
+      return null;
+    }
+
+    try {
+      const payload = await this.providerJson<Record<string, unknown>>(
+        await fetch(`https://graph.facebook.com/v20.0/${postId}/comments`, {
+          method: 'POST',
+          body: new URLSearchParams({
+            access_token: accessToken,
+            message: `Read more: ${cleanUrl}`,
+          }),
+        }),
+        'Facebook first comment failed.',
+      );
+
+      return {
+        status: 'posted',
+        id: stringValue(payload.id),
+        sourceUrl: cleanUrl,
+      };
+    } catch (error) {
+      return {
+        status: 'failed',
+        sourceUrl: cleanUrl,
+        error: error instanceof Error ? error.message : 'Facebook first comment failed.',
+      };
     }
   }
 

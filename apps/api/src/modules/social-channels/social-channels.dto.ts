@@ -125,6 +125,10 @@ export class PublishToChannelDto {
   mediaUrl?: string;
 
   @IsOptional()
+  @IsString()
+  sourceUrl?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   hashtags?: string[];
