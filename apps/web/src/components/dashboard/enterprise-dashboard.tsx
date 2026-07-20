@@ -212,16 +212,6 @@ interface WordPressDraftGroup {
   drafts: WordPressDraft[];
 }
 
-interface PaginatedResponse<T> {
-  data: T[];
-  pagination: {
-    total: number;
-    totalPages: number;
-    page: number;
-    perPage: number;
-  };
-}
-
 const defaultPlatformKpi: PlatformKpi = {
   platform: 'Instagram',
   icon: Video,
@@ -239,8 +229,8 @@ const navigation: { label: string; href: string; icon: LucideIcon; count?: strin
   { label: 'WordPress Hub', href: '/wordpress-hub', icon: FileText },
   { label: 'Content', href: '/media-library', icon: Library },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
-  { label: 'Queue', href: '/dashboard#queue', icon: Workflow, count: '24' },
-  { label: 'Approvals', href: '/dashboard#approvals', icon: FileCheck2, count: '31' },
+  { label: 'Queue', href: '/dashboard#queue', icon: Workflow },
+  { label: 'Approvals', href: '/dashboard#approvals', icon: FileCheck2 },
   { label: 'Analytics', href: '/dashboard#analytics', icon: BarChart3 },
   { label: 'AI Studio', href: '/dashboard#ai', icon: WandSparkles },
   { label: 'Channels', href: '/admin/channels', icon: RadioTower },
@@ -271,19 +261,11 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [topPosts, setTopPosts] = useState<TopPost[]>([]);
   const [insights, setInsights] = useState<string[]>([]);
-  const [platformKpis, setPlatformKpis] = useState<PlatformKpi[]>([]);
   const [platformHealth, setPlatformHealth] = useState<PlatformKpi[]>([]);
   const [dashboardMetrics, setDashboardMetrics] = useState<Metric[]>([]);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [wordpressArticles, setWordpressArticles] = useState<WordPressArticle[]>([]);
-  const [wordpressDrafts, setWordpressDrafts] = useState<WordPressDraft[]>([]);
-  const [wordpressTotal, setWordpressTotal] = useState(0);
-  const [wordpressLoading, setWordpressLoading] = useState(true);
-  const [wordpressError, setWordpressError] = useState<string | null>(null);
-  const [wordpressBusyId, setWordpressBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem('socialflow-theme');
@@ -317,7 +299,6 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
 
   useEffect(() => {
     void refreshDashboardData();
-    void refreshWordPressData();
   }, []);
 
   const pendingApprovals = approvals.filter((item) => item.status === 'Pending').length;
@@ -337,25 +318,11 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
     item.title,
     item.detail,
   ]);
-  const filteredTopPosts = filterBySearch(topPosts, searchQuery, (item) => [
-    item.title,
-    item.platform,
-  ]);
-  const filteredWordPressArticles = filterBySearch(wordpressArticles, searchQuery, (item) => [
-    item.title,
-    item.excerpt,
-    item.authorName ?? '',
-    ...item.categoryNames,
-  ]);
-  const filteredWordPressDrafts = filterBySearch(wordpressDrafts, searchQuery, (item) => [
-    item.title,
-    item.platform,
-    item.status,
-    item.article?.title ?? '',
-  ]);
   const displayedActivity = showActivityAll ? filteredActivity : filteredActivity.slice(0, 4);
   const displayedQueue = showQueueAll ? queueItems : queueItems.slice(0, 4);
   const metrics = dashboardMetrics;
+  const primaryMetrics = metrics.slice(0, 4);
+  const todayScheduleCount = scheduleItems.filter((item) => item.view === 'Today').length;
 
   const sidebar = useMemo(
     () => <DashboardSidebar user={user} pendingApprovals={pendingApprovals} />,
@@ -380,42 +347,6 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
     setToast({ message, tone });
   }
 
-  async function refreshWordPressData() {
-    setWordpressLoading(true);
-    setWordpressError(null);
-
-    try {
-      const [libraryResponse, draftsResponse] = await Promise.all([
-        fetch(`${getApiBaseUrl()}/api/wordpress/library?perPage=6&page=1`, {
-          cache: 'no-store',
-          credentials: 'include',
-        }),
-        fetch(`${getApiBaseUrl()}/api/wordpress/drafts?perPage=100&page=1`, {
-          cache: 'no-store',
-          credentials: 'include',
-        }),
-      ]);
-
-      if (!libraryResponse.ok) {
-        throw new Error('WordPress library is not available yet.');
-      }
-
-      if (!draftsResponse.ok) {
-        throw new Error('WordPress drafts are not available yet.');
-      }
-
-      const library = (await libraryResponse.json()) as PaginatedResponse<WordPressArticle>;
-      const drafts = (await draftsResponse.json()) as PaginatedResponse<WordPressDraft>;
-      setWordpressArticles(library.data);
-      setWordpressDrafts(drafts.data);
-      setWordpressTotal(library.pagination.total);
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not load WordPress data.');
-    } finally {
-      setWordpressLoading(false);
-    }
-  }
-
   async function refreshDashboardData() {
     setDashboardError(null);
 
@@ -436,193 +367,13 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
       setApprovals(overview.approvals);
       setActivity(overview.activity.map(activityFromPayload));
       setInsights(overview.notifications.map((item) => item.body ?? item.title));
-      setPlatformKpis(overview.platformKpis.map(platformKpiFromPayload));
       setPlatformHealth(overview.platformHealth.map(platformHealthFromPayload));
-      setTopPosts(overview.topPosts);
       setSelectedPlatform((current) => {
-        const next = overview.platformKpis.map(platformKpiFromPayload)[0];
+        const next = overview.platformHealth.map(platformHealthFromPayload)[0];
         return current.posts === 0 && next ? next : current;
       });
     } catch (error) {
       setDashboardError(error instanceof Error ? error.message : 'Could not load dashboard data.');
-    }
-  }
-
-  async function syncWordPress() {
-    setWordpressBusyId('sync');
-    setWordpressError(null);
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/sync`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          perPage: 100,
-          maxPages: 100,
-          status: 'any',
-          postTypes: ['posts', 'articles', 'news', 'quotes', 'best-quotes'],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('WordPress sync failed.');
-      }
-
-      const result = (await response.json()) as { upsertedPosts: number; failedPosts: number };
-      await refreshWordPressData();
-      pushActivity(
-        'WordPress library synced',
-        `${String(result.upsertedPosts)} posts saved, ${String(result.failedPosts)} failed`,
-        'text-emerald-500',
-        CheckCircle2,
-      );
-      notify('WordPress posts synced into the content library.');
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'WordPress sync failed.');
-      notify('WordPress sync failed.', 'warning');
-    } finally {
-      setWordpressBusyId(null);
-    }
-  }
-
-  async function repurposeWordPressArticle(article: WordPressArticle) {
-    setWordpressBusyId(article.id);
-    setWordpressError(null);
-
-    try {
-      const response = await fetch(
-        `${getApiBaseUrl()}/api/wordpress/library/${article.id}/repurpose`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            platforms: ['PINTEREST', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'X'],
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error('Could not generate social drafts.');
-      }
-
-      await refreshWordPressData();
-      pushActivity('WordPress article repurposed', article.title, 'text-violet-500', Sparkles);
-      notify('Social drafts generated from WordPress content.');
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not repurpose article.');
-      notify('Could not generate drafts.', 'warning');
-    } finally {
-      setWordpressBusyId(null);
-    }
-  }
-
-  async function approveWordPressDraft(draft: WordPressDraft) {
-    await approveWordPressDrafts([draft]);
-  }
-
-  async function approveWordPressDrafts(drafts: WordPressDraft[]) {
-    const approvableDrafts = drafts.filter((draft) => draft.status === 'DRAFT');
-
-    if (!approvableDrafts.length) {
-      notify('Selected drafts are already approved.', 'info');
-      return;
-    }
-
-    setWordpressBusyId(
-      approvableDrafts.length === 1 ? (approvableDrafts[0]?.id ?? 'drafts') : 'drafts-bulk-approve',
-    );
-
-    try {
-      await Promise.all(
-        approvableDrafts.map(async (draft) => {
-          const response = await fetch(
-            `${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/approve`,
-            {
-              method: 'PATCH',
-              credentials: 'include',
-            },
-          );
-
-          if (!response.ok) {
-            throw new Error(`Could not approve ${platformLabel(draft.platform)} draft.`);
-          }
-        }),
-      );
-
-      await refreshWordPressData();
-      pushActivity(
-        approvableDrafts.length === 1
-          ? 'WordPress draft approved'
-          : 'WordPress campaign drafts approved',
-        approvableDrafts.length === 1
-          ? (approvableDrafts[0]?.title ?? 'Draft')
-          : `${String(approvableDrafts.length)} channel drafts approved`,
-        'text-emerald-500',
-        FileCheck2,
-      );
-      notify(
-        approvableDrafts.length === 1
-          ? 'WordPress draft approved.'
-          : 'Selected channel drafts approved.',
-      );
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not approve drafts.');
-      notify('Could not approve drafts.', 'warning');
-    } finally {
-      setWordpressBusyId(null);
-    }
-  }
-
-  async function scheduleWordPressDraft(draft: WordPressDraft) {
-    setWordpressBusyId(draft.id);
-
-    try {
-      const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}/schedule`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduledFor }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Could not schedule draft.');
-      }
-
-      await refreshWordPressData();
-      pushActivity('WordPress draft scheduled', draft.title, 'text-blue-500', CalendarDays);
-      notify('WordPress draft scheduled for tomorrow.');
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not schedule draft.');
-      notify('Could not schedule draft.', 'warning');
-    } finally {
-      setWordpressBusyId(null);
-    }
-  }
-
-  async function deleteWordPressDraft(draft: WordPressDraft) {
-    setWordpressBusyId(draft.id);
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/wordpress/drafts/${draft.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Could not delete draft.');
-      }
-
-      await refreshWordPressData();
-      pushActivity('WordPress draft deleted', draft.title, 'text-rose-500', Trash2);
-      notify('Draft deleted.', 'info');
-    } catch (error) {
-      setWordpressError(error instanceof Error ? error.message : 'Could not delete draft.');
-      notify('Could not delete draft.', 'warning');
-    } finally {
-      setWordpressBusyId(null);
     }
   }
 
@@ -734,8 +485,13 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               notify(`Switched to ${nextDarkMode ? 'dark' : 'light'} mode.`, 'info');
             }}
           />
-          <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-4 overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8">
-            <Hero user={user} />
+          <main className="mx-auto flex w-full max-w-[86rem] flex-col gap-5 overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
+            <Hero
+              pendingApprovals={pendingApprovals}
+              retryingCount={retryingCount}
+              todayScheduleCount={todayScheduleCount}
+              user={user}
+            />
             {dashboardError ? (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100">
                 {dashboardError}
@@ -746,10 +502,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                 count={
                   filteredSchedule.length +
                   filteredApprovals.length +
-                  filteredActivity.length +
-                  filteredTopPosts.length +
-                  filteredWordPressArticles.length +
-                  filteredWordPressDrafts.length
+                  filteredActivity.length
                 }
                 onClear={() => {
                   setSearchQuery('');
@@ -758,51 +511,11 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               />
             ) : null}
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {metrics.map((metric) => (
+              {primaryMetrics.map((metric) => (
                 <MetricCard key={metric.label} metric={metric} />
               ))}
             </section>
-            <WordPressLibraryPanel
-              articles={filteredWordPressArticles}
-              busyId={wordpressBusyId}
-              drafts={filteredWordPressDrafts}
-              error={wordpressError}
-              loading={wordpressLoading}
-              onApproveDraft={(draft) => {
-                void approveWordPressDraft(draft);
-              }}
-              onApproveDrafts={(drafts) => {
-                void approveWordPressDrafts(drafts);
-              }}
-              onDeleteDraft={(draft) => {
-                void deleteWordPressDraft(draft);
-              }}
-              onRefresh={() => {
-                void refreshWordPressData();
-              }}
-              onRepurpose={(article) => {
-                void repurposeWordPressArticle(article);
-              }}
-              onScheduleDraft={(draft) => {
-                void scheduleWordPressDraft(draft);
-              }}
-              onSync={() => {
-                void syncWordPress();
-              }}
-              total={wordpressTotal}
-            />
-            <section className="grid gap-4 xl:grid-cols-[1.1fr_1.35fr_0.9fr]">
-              <div className="grid gap-4">
-                <PlatformHealth
-                  items={platformHealth}
-                  selectedPlatform={selectedPlatform.platform}
-                  onSelect={(platform) => {
-                    setSelectedPlatform(platform);
-                    notify(`${platform.platform} health panel selected.`, 'info');
-                  }}
-                />
-                <TopPosts posts={filteredTopPosts} onOpenReport={notify} />
-              </div>
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.75fr)]">
               <TodaySchedule
                 items={filteredSchedule}
                 scheduleView={scheduleView}
@@ -825,6 +538,11 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                 onViewChange={setScheduleView}
               />
               <div className="grid gap-4">
+                <ApprovalQueue
+                  approvals={filteredApprovals}
+                  pendingCount={pendingApprovals}
+                  onUpdate={updateApproval}
+                />
                 <PublishingQueue
                   items={displayedQueue}
                   showAll={showQueueAll}
@@ -832,6 +550,26 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                   onRetry={retryFailedPosts}
                   onToggleAll={() => {
                     setShowQueueAll((value) => !value);
+                  }}
+                />
+              </div>
+            </section>
+            <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <RecentActivity
+                items={displayedActivity}
+                showAll={showActivityAll}
+                totalItems={filteredActivity.length}
+                onToggleAll={() => {
+                  setShowActivityAll((value) => !value);
+                }}
+              />
+              <div className="grid gap-4">
+                <PlatformHealth
+                  items={platformHealth}
+                  selectedPlatform={selectedPlatform.platform}
+                  onSelect={(platform) => {
+                    setSelectedPlatform(platform);
+                    notify(`${platform.platform} health panel selected.`, 'info');
                   }}
                 />
                 <AiInsights
@@ -843,29 +581,6 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
                 />
               </div>
             </section>
-            <section className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-              <ApprovalQueue
-                approvals={filteredApprovals}
-                pendingCount={pendingApprovals}
-                onUpdate={updateApproval}
-              />
-              <RecentActivity
-                items={displayedActivity}
-                showAll={showActivityAll}
-                totalItems={filteredActivity.length}
-                onToggleAll={() => {
-                  setShowActivityAll((value) => !value);
-                }}
-              />
-            </section>
-            <PlatformKpis
-              items={platformKpis}
-              selectedPlatform={selectedPlatform.platform}
-              onSelect={(platform) => {
-                setSelectedPlatform(platform);
-                notify(`${platform.platform} KPI card opened.`, 'info');
-              }}
-            />
           </main>
         </div>
       </div>
@@ -917,7 +632,10 @@ function DashboardSidebar({
           const active =
             pathname === item.href ||
             (pathname === '/dashboard' && item.href.startsWith('/dashboard#'));
-          const count = item.label === 'Approvals' ? String(pendingApprovals) : item.count;
+          const count =
+            item.label === 'Approvals' && pendingApprovals > 0
+              ? String(pendingApprovals)
+              : item.count;
 
           return (
             <Link
@@ -1084,25 +802,38 @@ function DashboardHeader({
   );
 }
 
-function Hero({ user }: { user: AuthenticatedUser }) {
+function Hero({
+  pendingApprovals,
+  retryingCount,
+  todayScheduleCount,
+  user,
+}: {
+  pendingApprovals: number;
+  retryingCount: number;
+  todayScheduleCount: number;
+  user: AuthenticatedUser;
+}) {
   return (
-    <section className="flex flex-col gap-4 py-2 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-200">
-          <RadioTower className="h-3.5 w-3.5" />
-          All publishing systems operational
+    <section className="rounded-lg border bg-card/70 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-200">
+            <RadioTower className="h-3.5 w-3.5" />
+            All publishing systems operational
+          </div>
+          <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
+            Today&apos;s publishing overview
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Welcome back, {displayNameForUser(user)}. Review what is scheduled, approve what is
+            ready, and catch publishing issues from one place.
+          </p>
         </div>
-        <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
-          Welcome back, {displayNameForUser(user)}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Command center for scheduled content, approvals, AI recommendations, and platform health.
-        </p>
-      </div>
-      <div className="grid grid-cols-3 gap-2 rounded-md border bg-card/80 p-2 text-center dark:border-white/10 dark:bg-white/[0.04]">
-        <MiniStat label="On time" value="99.2%" />
-        <MiniStat label="Reach" value="1.4M" />
-        <MiniStat label="Saved" value="22h" />
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <MiniStat label="Today" value={String(todayScheduleCount)} />
+          <MiniStat label="Pending" value={String(pendingApprovals)} />
+          <MiniStat label="Retrying" value={String(retryingCount)} />
+        </div>
       </div>
     </section>
   );
@@ -2070,6 +1801,14 @@ function PlatformKpis({
     </section>
   );
 }
+
+const retainedDashboardPanels = [
+  WordPressLibraryPanel,
+  TopPosts,
+  PlatformKpis,
+  platformKpiFromPayload,
+];
+void retainedDashboardPanels;
 
 function NotificationsPanel({
   approvals,
