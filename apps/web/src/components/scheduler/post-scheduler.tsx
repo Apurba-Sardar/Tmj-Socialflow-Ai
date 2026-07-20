@@ -68,6 +68,16 @@ interface ScheduledPost {
   publishedAt: string | null;
   status: PublishStatus;
   tags: string[];
+  metadata?: Record<string, unknown> | null;
+  logs: PublishLog[];
+  createdAt: string;
+}
+
+interface PublishLog {
+  id: string;
+  level: 'INFO' | 'WARNING' | 'ERROR';
+  message: string;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -83,6 +93,8 @@ interface ApiPost {
   publishedAt: string | null;
   status: PublishStatus;
   tags: string[];
+  metadata?: Record<string, unknown> | null;
+  logs?: PublishLog[];
   createdAt: string;
 }
 
@@ -175,6 +187,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const [loading, setLoading] = useState(true);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [autoPlanning, setAutoPlanning] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [schedulingDraftId, setSchedulingDraftId] = useState<string | null>(null);
   const [draggedDraftId, setDraggedDraftId] = useState<string | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -255,6 +269,9 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const needsReviewCount = posts.filter(
     (post) => post.status === 'PENDING_APPROVAL' || post.status === 'FAILED',
   ).length;
+  const pendingApprovalIds = filteredPosts
+    .filter((post) => post.source === 'publish-job' && post.status === 'PENDING_APPROVAL')
+    .map((post) => post.id);
   const publishedCount = posts.filter((post) => post.status === 'PUBLISHED').length;
   const visibleDrafts = useMemo(() => {
     const cleanSearch = draftSearch.trim().toLowerCase();
@@ -356,6 +373,89 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       notify(error instanceof Error ? error.message : 'Post scheduling failed.', 'warning');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function createAiDailyPlan() {
+    setAutoPlanning(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/auto-plan`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate, count: 5 }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        planned?: number;
+        message?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ?? payload?.error ?? 'AI daily plan could not be created.',
+        );
+      }
+
+      notify(`AI planned ${String(payload?.planned ?? 0)} posts for final approval.`, 'success');
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'AI auto-scheduling failed.', 'warning');
+    } finally {
+      setAutoPlanning(false);
+    }
+  }
+
+  async function approveScheduledPost(id: string) {
+    setApprovingId(id);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/posts/${id}/approve`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Post could not be approved.');
+      }
+
+      notify('Post approved and scheduled.', 'success');
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Approval failed.', 'warning');
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  async function approveVisiblePendingPosts() {
+    if (!pendingApprovalIds.length) {
+      notify('No pending AI-planned posts are visible.', 'warning');
+      return;
+    }
+
+    setApprovingId('bulk');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/posts/approve`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: pendingApprovalIds }),
+      });
+      const payload = (await response.json().catch(() => null)) as { approved?: number } | null;
+
+      if (!response.ok) {
+        throw new Error('Posts could not be approved.');
+      }
+
+      notify(
+        `Approved ${String(payload?.approved ?? pendingApprovalIds.length)} scheduled posts.`,
+        'success',
+      );
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Bulk approval failed.', 'warning');
+    } finally {
+      setApprovingId(null);
     }
   }
 
@@ -463,14 +563,22 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
             <section className="space-y-3">
               <PlannerHero
+                autoPlanning={autoPlanning}
                 draftCount={unscheduledDraftCount}
                 scheduledDraftCount={scheduledDraftCount}
                 needsReviewCount={needsReviewCount}
+                pendingApprovalCount={pendingApprovalIds.length}
                 publishedCount={publishedCount}
                 scheduledCount={scheduledCount}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
                 view={view}
+                onApprovePending={() => {
+                  void approveVisiblePendingPosts();
+                }}
+                onAutoPlan={() => {
+                  void createAiDailyPlan();
+                }}
               />
               <PlannerFilters
                 onRefresh={() => {
@@ -517,7 +625,13 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                     }}
                   />
                 ) : view === 'list' ? (
-                  <ListPlanner posts={filteredPosts} />
+                  <ListPlanner
+                    approvingId={approvingId}
+                    posts={filteredPosts}
+                    onApprove={(id) => {
+                      void approveScheduledPost(id);
+                    }}
+                  />
                 ) : (
                   <WeekPlanner
                     draggedDraftId={draggedDraftId}
@@ -547,7 +661,13 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 />
                 <DayAgenda date={selectedDate} posts={selectedDayPosts} />
                 <ChannelHealth posts={posts} />
-                <ReviewQueue posts={posts} />
+                <ReviewQueue
+                  approvingId={approvingId}
+                  posts={posts}
+                  onApprove={(id) => {
+                    void approveScheduledPost(id);
+                  }}
+                />
               </aside>
             </section>
           </main>
@@ -602,8 +722,12 @@ function PlannerHero({
   draftCount,
   scheduledDraftCount,
   needsReviewCount,
+  pendingApprovalCount,
   publishedCount,
+  autoPlanning,
   setSelectedDate,
+  onApprovePending,
+  onAutoPlan,
 }: {
   selectedDate: string;
   view: CalendarView;
@@ -611,65 +735,110 @@ function PlannerHero({
   draftCount: number;
   scheduledDraftCount: number;
   needsReviewCount: number;
+  pendingApprovalCount: number;
   publishedCount: number;
+  autoPlanning: boolean;
   setSelectedDate: (date: string) => void;
+  onApprovePending: () => void;
+  onAutoPlan: () => void;
 }) {
   const step = view === 'month' ? 30 : 7;
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
-      <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-center">
-        <div className="min-w-0">
+    <Card className="overflow-hidden border-border/80 bg-card/95 shadow-sm dark:border-white/10">
+      <CardContent className="grid gap-5 p-4 lg:grid-cols-[minmax(18rem,1fr)_minmax(22rem,34rem)] lg:items-stretch">
+        <div className="min-w-0 rounded-xl border border-border bg-background/60 p-4 dark:border-white/10 dark:bg-white/[0.025]">
           <Badge
             className="mb-3 border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
             variant="outline"
           >
             <CalendarClock className="mr-1 h-3.5 w-3.5" />
-            Meta-style publishing planner
+            AI-assisted publishing planner
           </Badge>
           <h2 className="text-2xl font-semibold tracking-normal">
             {formatDateLabel(selectedDate, view)}
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Drag generated drafts onto the calendar, balance channels, and plan each day from one
-            workspace.
+            Generate five unique WordPress-based posts, spread them across connected channels, and
+            review every scheduled item before it goes live.
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <SummaryPill label="Scheduled" value={scheduledCount} />
+            <SummaryPill label="Draft inbox" value={draftCount} />
+            <SummaryPill label="Drafts planned" value={scheduledDraftCount} tone="success" />
+            <SummaryPill label="Review" value={needsReviewCount} tone="warning" />
+            <SummaryPill label="Published" value={publishedCount} tone="success" />
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-          <SummaryPill label="Scheduled" value={scheduledCount} />
-          <SummaryPill label="Draft inbox" value={draftCount} />
-          <SummaryPill label="Drafts planned" value={scheduledDraftCount} tone="success" />
-          <SummaryPill label="Review" value={needsReviewCount} tone="warning" />
-          <SummaryPill label="Published" value={publishedCount} tone="success" />
-          <Button
-            aria-label="Previous period"
-            onClick={() => {
-              setSelectedDate(addDays(selectedDate, -step));
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Input
-            aria-label="Selected date"
-            className="h-9 w-40"
-            onChange={(event) => {
-              setSelectedDate(event.target.value);
-            }}
-            type="date"
-            value={selectedDate}
-          />
-          <Button
-            aria-label="Next period"
-            onClick={() => {
-              setSelectedDate(addDays(selectedDate, step));
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="grid gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 dark:border-primary/25 dark:bg-primary/10">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Daily AI planner</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Creates post copy, assigns random time slots, and holds everything for approval.
+              </p>
+            </div>
+            <Badge
+              className={cn(
+                pendingApprovalCount
+                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+              )}
+              variant="outline"
+            >
+              {pendingApprovalCount ? `${String(pendingApprovalCount)} pending` : 'Clear'}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button className="h-11" disabled={autoPlanning} onClick={onAutoPlan}>
+              {autoPlanning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Plan 5 posts
+            </Button>
+            <Button
+              className="h-11"
+              disabled={!pendingApprovalCount || autoPlanning}
+              onClick={onApprovePending}
+              variant="outline"
+            >
+              <Send className="h-4 w-4" />
+              Approve all
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              aria-label="Previous period"
+              onClick={() => {
+                setSelectedDate(addDays(selectedDate, -step));
+              }}
+              size="sm"
+              variant="outline"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              aria-label="Selected date"
+              className="h-9 min-w-0 flex-1"
+              onChange={(event) => {
+                setSelectedDate(event.target.value);
+              }}
+              type="date"
+              value={selectedDate}
+            />
+            <Button
+              aria-label="Next period"
+              onClick={() => {
+                setSelectedDate(addDays(selectedDate, step));
+              }}
+              size="sm"
+              variant="outline"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -686,7 +855,7 @@ function SummaryPill({
   tone?: 'success' | 'warning';
 }) {
   return (
-    <div className="min-w-24 rounded-lg border border-border bg-background/70 px-3 py-2 text-center dark:border-white/10 dark:bg-white/[0.03]">
+    <div className="min-w-24 rounded-lg border border-border bg-background/80 px-3 py-2 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
       <div
         className={cn(
           'text-lg font-semibold',
@@ -1321,7 +1490,15 @@ function MonthPlanner({
   );
 }
 
-function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
+function ListPlanner({
+  posts,
+  approvingId,
+  onApprove,
+}: {
+  posts: ScheduledPost[];
+  approvingId: string | null;
+  onApprove: (id: string) => void;
+}) {
   const sortedPosts = [...posts].sort(
     (a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor),
   );
@@ -1334,7 +1511,16 @@ function ListPlanner({ posts }: { posts: ScheduledPost[] }) {
       </CardHeader>
       <CardContent className="grid gap-3">
         {sortedPosts.length ? (
-          sortedPosts.map((post) => <PostCard key={post.id} post={post} />)
+          sortedPosts.map((post) => (
+            <PostCard
+              approving={approvingId === post.id || approvingId === 'bulk'}
+              key={post.id}
+              post={post}
+              onApprove={() => {
+                onApprove(post.id);
+              }}
+            />
+          ))
         ) : (
           <EmptyState label="No scheduled posts match the current filters." />
         )}
@@ -1468,40 +1654,95 @@ function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
   );
 }
 
-function ReviewQueue({ posts }: { posts: ScheduledPost[] }) {
+function ReviewQueue({
+  posts,
+  approvingId,
+  onApprove,
+}: {
+  posts: ScheduledPost[];
+  approvingId: string | null;
+  onApprove: (id: string) => void;
+}) {
   const reviewPosts = posts.filter(
     (post) => post.status === 'FAILED' || post.status === 'PENDING_APPROVAL',
   );
+  const pendingCount = reviewPosts.filter((post) => post.status === 'PENDING_APPROVAL').length;
 
   return (
     <Card className="border-border/80 bg-card/95 dark:border-white/10">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="h-4 w-4" />
-          Needs attention
-        </CardTitle>
-        <CardDescription>Failed or approval-pending scheduled posts.</CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4" />
+              Approval queue
+            </CardTitle>
+            <CardDescription>AI-planned and failed posts that need review.</CardDescription>
+          </div>
+          <Badge
+            className={cn(
+              pendingCount
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+            )}
+            variant="outline"
+          >
+            {String(pendingCount)}
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-3">
         {reviewPosts.length ? (
-          reviewPosts.slice(0, 4).map((post) => <PostCard compact key={post.id} post={post} />)
+          reviewPosts.slice(0, 4).map((post) => (
+            <PostCard
+              approving={approvingId === post.id || approvingId === 'bulk'}
+              key={post.id}
+              post={post}
+              onApprove={() => {
+                onApprove(post.id);
+              }}
+            />
+          ))
         ) : (
-          <EmptyState label="No posts need attention." />
+          <EmptyState label="No posts need approval." />
         )}
       </CardContent>
     </Card>
   );
 }
 
-function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: boolean }) {
+function PostCard({
+  post,
+  compact = false,
+  approving = false,
+  onApprove,
+}: {
+  post: ScheduledPost;
+  compact?: boolean;
+  approving?: boolean;
+  onApprove?: () => void;
+}) {
   const config =
     platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
   const Icon = config.icon;
+  const automated = post.metadata?.automation === 'daily-ai-auto-scheduler';
 
   return (
-    <article className="rounded-lg border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.035]">
+    <article
+      className={cn(
+        'rounded-lg border bg-background/80 p-3 shadow-sm transition hover:border-primary/40 dark:bg-white/[0.035]',
+        post.status === 'PENDING_APPROVAL'
+          ? 'border-amber-500/35 ring-1 ring-amber-500/10 dark:border-amber-400/30'
+          : 'border-border dark:border-white/10',
+      )}
+    >
       <div className="flex gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-white/[0.06]">
+        <div
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-white/[0.06]',
+            post.status === 'PENDING_APPROVAL' ? 'bg-amber-500/10 dark:bg-amber-400/10' : '',
+          )}
+        >
           <Icon className={cn('h-5 w-5', config.tone)} />
         </div>
         <div className="min-w-0 flex-1">
@@ -1511,6 +1752,15 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
             </h3>
             <StatusBadge status={post.status} />
           </div>
+          {automated ? (
+            <Badge
+              className="mt-2 border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300"
+              variant="outline"
+            >
+              <Wand2 className="mr-1 h-3 w-3" />
+              AI planned
+            </Badge>
+          ) : null}
           {post.caption && !compact ? (
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.caption}</p>
           ) : null}
@@ -1527,6 +1777,45 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
                   {tag.startsWith('#') ? tag : `#${tag}`}
                 </Badge>
               ))}
+            </div>
+          ) : null}
+          {!compact && post.logs.length ? (
+            <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3 text-xs dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="font-medium text-foreground">Automation log</span>
+                <span className="text-muted-foreground">
+                  {formatDateTime(post.logs[0]?.createdAt ?? null)}
+                </span>
+              </div>
+              <div className="grid gap-1.5">
+                {post.logs.slice(0, 2).map((log) => (
+                  <div className="flex gap-2 text-muted-foreground" key={log.id}>
+                    <span
+                      className={cn(
+                        'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
+                        log.level === 'ERROR'
+                          ? 'bg-rose-500'
+                          : log.level === 'WARNING'
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500',
+                      )}
+                    />
+                    <span className="line-clamp-2">{log.message}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {post.status === 'PENDING_APPROVAL' && onApprove ? (
+            <div className="mt-3">
+              <Button disabled={approving} onClick={onApprove} size="sm">
+                {approving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CalendarClock className="h-3.5 w-3.5" />
+                )}
+                Final approval
+              </Button>
             </div>
           ) : null}
         </div>
@@ -1720,6 +2009,8 @@ function postFromApi(post: ApiPost): ScheduledPost {
     publishedAt: post.publishedAt,
     status: post.status,
     tags: post.tags,
+    metadata: post.metadata ?? null,
+    logs: post.logs ?? [],
     createdAt: post.createdAt,
   };
 }

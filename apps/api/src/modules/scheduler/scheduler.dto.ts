@@ -1,4 +1,13 @@
-import { IsDateString, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { SocialPlatform } from '@prisma/client';
 
 export class CreatePublishJobDto {
@@ -15,4 +24,15 @@ export class CreatePublishJobDto {
   @IsOptional()
   @IsString()
   caption?: string;
+}
+
+export class AutoScheduleDailyDto {
+  @IsDateString()
+  date!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  count?: number;
 }
