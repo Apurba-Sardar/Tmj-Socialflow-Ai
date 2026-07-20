@@ -3,7 +3,11 @@ import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/co
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/types.js';
-import { AutoScheduleDailyDto, CreatePublishJobDto } from './scheduler.dto.js';
+import {
+  AutoScheduleDailyDto,
+  CreatePublishJobDto,
+  UpdatePublishJobScheduleDto,
+} from './scheduler.dto.js';
 import { SchedulerService } from './scheduler.service.js';
 
 @Controller('scheduler')
@@ -29,6 +33,15 @@ export class SchedulerController {
   @Patch('posts/:id/approve')
   async approvePost(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.schedulerService.approvePost(user, id);
+  }
+
+  @Patch('posts/:id/schedule')
+  async updatePostSchedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePublishJobScheduleDto,
+  ) {
+    return this.schedulerService.updatePostSchedule(user, id, dto);
   }
 
   @Patch('posts/approve')

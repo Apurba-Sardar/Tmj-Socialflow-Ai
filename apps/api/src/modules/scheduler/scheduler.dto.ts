@@ -36,3 +36,8 @@ export class AutoScheduleDailyDto {
   @Max(12)
   count?: number;
 }
+
+export class UpdatePublishJobScheduleDto {
+  @IsDateString()
+  scheduledFor!: string;
+}

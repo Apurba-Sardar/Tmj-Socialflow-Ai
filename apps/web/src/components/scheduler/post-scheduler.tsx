@@ -13,7 +13,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Clock3,
+  ExternalLink,
   FileText,
   ImageIcon,
   LayoutDashboard,
@@ -22,6 +22,7 @@ import {
   Menu,
   MessageSquareText,
   Moon,
+  Pencil,
   Plus,
   RadioTower,
   RefreshCw,
@@ -29,6 +30,7 @@ import {
   Send,
   Sun,
   Wand2,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -136,6 +138,14 @@ interface DraftForm {
   time: string;
 }
 
+interface ChannelAccount {
+  id: string;
+  platform: Platform;
+  status: 'CONNECTED' | 'ACTION_REQUIRED' | 'DISCONNECTED' | 'EXPIRED';
+  displayName: string;
+  externalAccountId: string | null;
+}
+
 interface Toast {
   message: string;
   tone: 'success' | 'warning';
@@ -179,7 +189,9 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const [view, setView] = useState<CalendarView>('week');
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [drafts, setDrafts] = useState<GeneratedDraft[]>([]);
+  const [channels, setChannels] = useState<ChannelAccount[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [draftSearch, setDraftSearch] = useState('');
@@ -190,6 +202,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const [autoPlanning, setAutoPlanning] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [schedulingDraftId, setSchedulingDraftId] = useState<string | null>(null);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [draggedDraftId, setDraggedDraftId] = useState<string | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
@@ -198,6 +212,10 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
     title: '',
     caption: '',
     platform: 'FACEBOOK',
+    date: selectedDate,
+    time: '09:00',
+  });
+  const [timeEditor, setTimeEditor] = useState({
     date: selectedDate,
     time: '09:00',
   });
@@ -264,6 +282,20 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       (post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === selectedDate,
     )
     .sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
+  const selectedPost = posts.find((post) => post.id === selectedPostId) ?? selectedDayPosts[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedPost?.scheduledFor) {
+      setTimeEditor((current) => ({ ...current, date: selectedDate }));
+      return;
+    }
+
+    const scheduledAt = new Date(selectedPost.scheduledFor);
+    setTimeEditor({
+      date: toDateInputValue(scheduledAt),
+      time: toTimeInputValue(scheduledAt),
+    });
+  }, [selectedDate, selectedPost]);
 
   const scheduledCount = posts.filter((post) => post.status === 'SCHEDULED').length;
   const needsReviewCount = posts.filter(
@@ -295,7 +327,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const dailySlotsUsed = selectedDayPosts.length;
 
   async function loadCalendarData() {
-    await Promise.all([loadPosts(), loadDrafts()]);
+    await Promise.all([loadPosts(), loadDrafts(), loadChannels()]);
   }
 
   async function loadPosts() {
@@ -338,6 +370,23 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       notify(error instanceof Error ? error.message : 'Draft inbox failed to load.', 'warning');
     } finally {
       setLoadingDrafts(false);
+    }
+  }
+
+  async function loadChannels() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/social-channels`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error('Connected channels could not be loaded.');
+      }
+
+      setChannels((await response.json()) as ChannelAccount[]);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Channel lookup failed.', 'warning');
     }
   }
 
@@ -486,12 +535,101 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
     }
   }
 
+  async function updateScheduledTime(post: ScheduledPost, date: string, time: string) {
+    setReschedulingId(post.id);
+
+    try {
+      const scheduledFor = new Date(`${date}T${time}:00`);
+      const endpoint =
+        post.source === 'draft'
+          ? `${apiBaseUrl}/api/wordpress/drafts/${post.id}/schedule`
+          : `${apiBaseUrl}/api/scheduler/posts/${post.id}/schedule`;
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledFor: scheduledFor.toISOString() }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Scheduled time could not be updated.');
+      }
+
+      notify('Scheduled time updated.', 'success');
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not update scheduled time.', 'warning');
+    } finally {
+      setReschedulingId(null);
+    }
+  }
+
+  async function publishPostNow(post: ScheduledPost) {
+    const channelId = metadataString(post.metadata, 'channelAccountId');
+    const channel =
+      channels.find((item) => item.id === channelId && item.status === 'CONNECTED') ??
+      channels.find((item) => item.platform === post.platform && item.status === 'CONNECTED');
+
+    if (!channel) {
+      notify(`Connect an active ${titleCase(post.platform)} channel before posting.`, 'warning');
+      return;
+    }
+
+    if (!post.caption?.trim()) {
+      notify('This post needs a caption before it can be posted.', 'warning');
+      return;
+    }
+
+    setPublishingId(post.id);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: metadataString(post.metadata, 'draftId') ?? (post.source === 'draft' ? post.id : undefined),
+          title: post.title,
+          caption: post.caption,
+          hashtags: post.tags,
+          mediaUrl: metadataString(post.metadata, 'mediaUrl') ?? undefined,
+          sourceUrl: metadataString(post.metadata, 'sourceUrl') ?? undefined,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        published?: boolean;
+        error?: string;
+        message?: string | string[];
+      } | null;
+
+      if (!response.ok || payload?.published === false) {
+        const message = Array.isArray(payload?.message)
+          ? payload.message.join(' ')
+          : payload?.message;
+        throw new Error(payload?.error ?? message ?? 'Post could not be published.');
+      }
+
+      notify(`${titleCase(post.platform)} posted now.`, 'success');
+      await loadCalendarData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Post now failed.', 'warning');
+    } finally {
+      setPublishingId(null);
+    }
+  }
+
   function scheduleDraggedDraft(date: string, hour: number) {
     if (!draggedDraftId) {
       return;
     }
 
     void scheduleGeneratedDraft(draggedDraftId, date, hour);
+  }
+
+  function selectPost(post: ScheduledPost) {
+    setSelectedPostId(post.id);
+    setSelectedDate(
+      post.scheduledFor ? toDateInputValue(new Date(post.scheduledFor)) : selectedDate,
+    );
   }
 
   function notify(message: string, tone: Toast['tone']) {
@@ -547,7 +685,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
             </div>
           </header>
 
-          <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-4 px-4 py-4 sm:px-6 xl:px-8">
+          <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-4 px-4 py-4 sm:px-6 xl:px-8">
             {toast ? (
               <div
                 className={cn(
@@ -591,7 +729,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
               />
             </section>
 
-            <section className="grid items-start gap-4 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+            <section className="grid items-start gap-4 xl:grid-cols-[19rem_minmax(0,1fr)_24rem]">
               <DraftInbox
                 drafts={visibleDrafts}
                 draftFilter={draftFilter}
@@ -617,9 +755,11 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                   <MonthPlanner
                     draggedDraftId={draggedDraftId}
                     posts={filteredPosts}
+                    selectedPostId={selectedPost?.id ?? null}
                     selectedDate={selectedDate}
                     visibleDates={visibleDates}
                     onSelectDate={setSelectedDate}
+                    onSelectPost={selectPost}
                     onDropDraft={(date) => {
                       scheduleDraggedDraft(date, 9);
                     }}
@@ -628,24 +768,51 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                   <ListPlanner
                     approvingId={approvingId}
                     posts={filteredPosts}
+                    publishingId={publishingId}
+                    reschedulingId={reschedulingId}
+                    selectedPostId={selectedPost?.id ?? null}
                     onApprove={(id) => {
                       void approveScheduledPost(id);
                     }}
+                    onPostNow={(post) => {
+                      void publishPostNow(post);
+                    }}
+                    onSelectPost={selectPost}
                   />
                 ) : (
                   <WeekPlanner
                     draggedDraftId={draggedDraftId}
                     loading={loading}
                     posts={filteredPosts}
+                    selectedPostId={selectedPost?.id ?? null}
                     selectedDate={selectedDate}
                     visibleDates={visibleDates}
                     onSelectDate={setSelectedDate}
+                    onSelectPost={selectPost}
                     onDropDraft={scheduleDraggedDraft}
                   />
                 )}
               </div>
 
-              <aside className="grid gap-5">
+              <aside className="grid gap-4 xl:sticky xl:top-24">
+                <SelectedPostPanel
+                  approving={selectedPost ? approvingId === selectedPost.id || approvingId === 'bulk' : false}
+                  channels={channels}
+                  post={selectedPost}
+                  publishing={selectedPost ? publishingId === selectedPost.id : false}
+                  rescheduling={selectedPost ? reschedulingId === selectedPost.id : false}
+                  timeEditor={timeEditor}
+                  setTimeEditor={setTimeEditor}
+                  onApprove={(post) => {
+                    void approveScheduledPost(post.id);
+                  }}
+                  onPostNow={(post) => {
+                    void publishPostNow(post);
+                  }}
+                  onSaveTime={(post) => {
+                    void updateScheduledTime(post, timeEditor.date, timeEditor.time);
+                  }}
+                />
                 <CreatePostPanel
                   creating={creating}
                   form={form}
@@ -654,20 +821,21 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                     void createScheduledPost();
                   }}
                 />
+                <ReviewQueue
+                  approvingId={approvingId}
+                  posts={posts}
+                  selectedPostId={selectedPost?.id ?? null}
+                  onApprove={(id) => {
+                    void approveScheduledPost(id);
+                  }}
+                  onSelectPost={selectPost}
+                />
                 <DayWorkload
                   date={selectedDate}
                   posts={selectedDayPosts}
                   draftCount={dailySlotsUsed}
                 />
-                <DayAgenda date={selectedDate} posts={selectedDayPosts} />
                 <ChannelHealth posts={posts} />
-                <ReviewQueue
-                  approvingId={approvingId}
-                  posts={posts}
-                  onApprove={(id) => {
-                    void approveScheduledPost(id);
-                  }}
-                />
               </aside>
             </section>
           </main>
@@ -1068,6 +1236,150 @@ function CreatePostPanel({
   );
 }
 
+function SelectedPostPanel({
+  post,
+  channels,
+  timeEditor,
+  approving,
+  publishing,
+  rescheduling,
+  setTimeEditor,
+  onApprove,
+  onPostNow,
+  onSaveTime,
+}: {
+  post: ScheduledPost | null;
+  channels: ChannelAccount[];
+  timeEditor: { date: string; time: string };
+  approving: boolean;
+  publishing: boolean;
+  rescheduling: boolean;
+  setTimeEditor: (updater: (value: { date: string; time: string }) => { date: string; time: string }) => void;
+  onApprove: (post: ScheduledPost) => void;
+  onPostNow: (post: ScheduledPost) => void;
+  onSaveTime: (post: ScheduledPost) => void;
+}) {
+  const connectedChannel = post
+    ? channels.find((item) => item.platform === post.platform && item.status === 'CONNECTED')
+    : null;
+  const sourceUrl = post ? metadataString(post.metadata, 'sourceUrl') : null;
+
+  return (
+    <Card className="border-border/80 bg-card/95 shadow-sm dark:border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Pencil className="h-4 w-4" />
+          Selected post
+        </CardTitle>
+        <CardDescription>Change time, approve, or publish immediately.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {post ? (
+          <>
+            <div className="rounded-xl border border-border bg-background/70 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Badge variant="secondary">{titleCase(post.platform)}</Badge>
+                  <h3 className="mt-2 line-clamp-2 text-sm font-semibold">{post.title}</h3>
+                </div>
+                <StatusBadge status={post.status} />
+              </div>
+              {post.caption ? (
+                <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                  {post.caption}
+                </p>
+              ) : null}
+              {sourceUrl ? (
+                <a
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  href={sourceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Source article
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Date">
+                <Input
+                  onChange={(event) => {
+                    setTimeEditor((value) => ({ ...value, date: event.target.value }));
+                  }}
+                  type="date"
+                  value={timeEditor.date}
+                />
+              </Field>
+              <Field label="Time">
+                <Input
+                  onChange={(event) => {
+                    setTimeEditor((value) => ({ ...value, time: event.target.value }));
+                  }}
+                  type="time"
+                  value={timeEditor.time}
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                disabled={rescheduling}
+                onClick={() => {
+                  onSaveTime(post);
+                }}
+                variant="outline"
+              >
+                {rescheduling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CalendarClock className="h-4 w-4" />
+                )}
+                Save time
+              </Button>
+              <Button
+                disabled={publishing || !connectedChannel}
+                onClick={() => {
+                  onPostNow(post);
+                }}
+              >
+                {publishing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                Post now
+              </Button>
+            </div>
+            {post.status === 'PENDING_APPROVAL' ? (
+              <Button
+                disabled={approving}
+                onClick={() => {
+                  onApprove(post);
+                }}
+                variant="outline"
+              >
+                {approving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Final approval
+              </Button>
+            ) : null}
+            {!connectedChannel ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                Connect an active {titleCase(post.platform)} channel before using quick post.
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <EmptyState label="Select a calendar item to manage it." />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DraftInbox({
   drafts,
   loading,
@@ -1273,7 +1585,9 @@ function WeekPlanner({
   posts,
   loading,
   draggedDraftId,
+  selectedPostId,
   onSelectDate,
+  onSelectPost,
   onDropDraft,
 }: {
   visibleDates: string[];
@@ -1281,7 +1595,9 @@ function WeekPlanner({
   posts: ScheduledPost[];
   loading: boolean;
   draggedDraftId: string | null;
+  selectedPostId: string | null;
   onSelectDate: (date: string) => void;
+  onSelectPost: (post: ScheduledPost) => void;
   onDropDraft: (date: string, hour: number) => void;
 }) {
   return (
@@ -1352,7 +1668,15 @@ function WeekPlanner({
                       </div>
                     ) : null}
                     {slotPosts.map((post) => (
-                      <PostCard compact key={post.id} post={post} />
+                      <PostCard
+                        compact
+                        key={post.id}
+                        post={post}
+                        selected={selectedPostId === post.id}
+                        onSelect={() => {
+                          onSelectPost(post);
+                        }}
+                      />
                     ))}
                   </div>
                 );
@@ -1366,7 +1690,7 @@ function WeekPlanner({
         {visibleDates.map((date) => {
           const dayPosts = postsForDate(posts, date);
           return (
-            <button
+            <div
               className={cn(
                 'rounded-lg border border-border bg-background/70 p-3 text-left dark:border-white/10 dark:bg-white/[0.03]',
                 date === selectedDate ? 'border-primary ring-2 ring-primary/20' : '',
@@ -1386,7 +1710,6 @@ function WeekPlanner({
               onClick={() => {
                 onSelectDate(date);
               }}
-              type="button"
             >
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -1397,10 +1720,18 @@ function WeekPlanner({
               </div>
               <div className="mt-3 grid gap-2">
                 {dayPosts.slice(0, 3).map((post) => (
-                  <PostCard compact key={post.id} post={post} />
+                  <PostCard
+                    compact
+                    key={post.id}
+                    post={post}
+                    selected={selectedPostId === post.id}
+                    onSelect={() => {
+                      onSelectPost(post);
+                    }}
+                  />
                 ))}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -1413,14 +1744,18 @@ function MonthPlanner({
   selectedDate,
   posts,
   draggedDraftId,
+  selectedPostId,
   onSelectDate,
+  onSelectPost,
   onDropDraft,
 }: {
   visibleDates: string[];
   selectedDate: string;
   posts: ScheduledPost[];
   draggedDraftId: string | null;
+  selectedPostId: string | null;
   onSelectDate: (date: string) => void;
+  onSelectPost: (post: ScheduledPost) => void;
   onDropDraft: (date: string) => void;
 }) {
   const currentMonth = parseLocalDate(selectedDate).getMonth();
@@ -1440,7 +1775,7 @@ function MonthPlanner({
           const isMuted = parseLocalDate(date).getMonth() !== currentMonth;
 
           return (
-            <button
+            <div
               className={cn(
                 'min-h-36 border-b border-r border-border p-3 text-left transition hover:bg-muted/45 dark:border-white/10 dark:hover:bg-white/[0.04]',
                 date === selectedDate ? 'bg-primary/10 ring-2 ring-inset ring-primary/25' : '',
@@ -1461,7 +1796,6 @@ function MonthPlanner({
               onClick={() => {
                 onSelectDate(date);
               }}
-              type="button"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold">{shortDate(date)}</span>
@@ -1474,7 +1808,14 @@ function MonthPlanner({
                   </div>
                 ) : null}
                 {dayPosts.slice(0, 3).map((post) => (
-                  <MonthPostPill key={post.id} post={post} />
+                  <MonthPostPill
+                    key={post.id}
+                    post={post}
+                    selected={selectedPostId === post.id}
+                    onSelect={() => {
+                      onSelectPost(post);
+                    }}
+                  />
                 ))}
                 {dayPosts.length > 3 ? (
                   <div className="text-xs text-muted-foreground">
@@ -1482,7 +1823,7 @@ function MonthPlanner({
                   </div>
                 ) : null}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -1493,11 +1834,20 @@ function MonthPlanner({
 function ListPlanner({
   posts,
   approvingId,
+  publishingId,
+  selectedPostId,
   onApprove,
+  onPostNow,
+  onSelectPost,
 }: {
   posts: ScheduledPost[];
   approvingId: string | null;
+  publishingId: string | null;
+  reschedulingId: string | null;
+  selectedPostId: string | null;
   onApprove: (id: string) => void;
+  onPostNow: (post: ScheduledPost) => void;
+  onSelectPost: (post: ScheduledPost) => void;
 }) {
   const sortedPosts = [...posts].sort(
     (a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor),
@@ -1516,8 +1866,16 @@ function ListPlanner({
               approving={approvingId === post.id || approvingId === 'bulk'}
               key={post.id}
               post={post}
+              publishing={publishingId === post.id}
+              selected={selectedPostId === post.id}
               onApprove={() => {
                 onApprove(post.id);
+              }}
+              onPostNow={() => {
+                onPostNow(post);
+              }}
+              onSelect={() => {
+                onSelectPost(post);
               }}
             />
           ))
@@ -1600,27 +1958,6 @@ function MiniMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function DayAgenda({ date, posts }: { date: string; posts: ScheduledPost[] }) {
-  return (
-    <Card className="border-border/80 bg-card/95 dark:border-white/10">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Clock3 className="h-4 w-4" />
-          {weekdayLabel(date)}
-        </CardTitle>
-        <CardDescription>{shortDate(date)} publishing plan.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {posts.length ? (
-          posts.map((post) => <PostCard compact key={post.id} post={post} />)
-        ) : (
-          <EmptyState label="No posts scheduled for this day." />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
   return (
     <Card className="border-border/80 bg-card/95 dark:border-white/10">
@@ -1657,11 +1994,15 @@ function ChannelHealth({ posts }: { posts: ScheduledPost[] }) {
 function ReviewQueue({
   posts,
   approvingId,
+  selectedPostId,
   onApprove,
+  onSelectPost,
 }: {
   posts: ScheduledPost[];
   approvingId: string | null;
+  selectedPostId: string | null;
   onApprove: (id: string) => void;
+  onSelectPost: (post: ScheduledPost) => void;
 }) {
   const reviewPosts = posts.filter(
     (post) => post.status === 'FAILED' || post.status === 'PENDING_APPROVAL',
@@ -1698,8 +2039,12 @@ function ReviewQueue({
               approving={approvingId === post.id || approvingId === 'bulk'}
               key={post.id}
               post={post}
+              selected={selectedPostId === post.id}
               onApprove={() => {
                 onApprove(post.id);
+              }}
+              onSelect={() => {
+                onSelectPost(post);
               }}
             />
           ))
@@ -1715,12 +2060,20 @@ function PostCard({
   post,
   compact = false,
   approving = false,
+  publishing = false,
+  selected = false,
   onApprove,
+  onPostNow,
+  onSelect,
 }: {
   post: ScheduledPost;
   compact?: boolean;
   approving?: boolean;
+  publishing?: boolean;
+  selected?: boolean;
   onApprove?: () => void;
+  onPostNow?: () => void;
+  onSelect?: () => void;
 }) {
   const config =
     platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
@@ -1731,10 +2084,13 @@ function PostCard({
     <article
       className={cn(
         'rounded-lg border bg-background/80 p-3 shadow-sm transition hover:border-primary/40 dark:bg-white/[0.035]',
-        post.status === 'PENDING_APPROVAL'
+        selected
+          ? 'border-primary ring-2 ring-primary/20'
+          : post.status === 'PENDING_APPROVAL'
           ? 'border-amber-500/35 ring-1 ring-amber-500/10 dark:border-amber-400/30'
           : 'border-border dark:border-white/10',
       )}
+      onClick={onSelect}
     >
       <div className="flex gap-3">
         <div
@@ -1807,14 +2163,59 @@ function PostCard({
             </div>
           ) : null}
           {post.status === 'PENDING_APPROVAL' && onApprove ? (
-            <div className="mt-3">
-              <Button disabled={approving} onClick={onApprove} size="sm">
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                disabled={approving}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onApprove();
+                }}
+                size="sm"
+              >
                 {approving ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <CalendarClock className="h-3.5 w-3.5" />
                 )}
                 Final approval
+              </Button>
+              {onPostNow ? (
+                <Button
+                  disabled={publishing}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onPostNow();
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  {publishing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5" />
+                  )}
+                  Post now
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {post.status !== 'PENDING_APPROVAL' && onPostNow && !compact ? (
+            <div className="mt-3">
+              <Button
+                disabled={publishing}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPostNow();
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {publishing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Zap className="h-3.5 w-3.5" />
+                )}
+                Post now
               </Button>
             </div>
           ) : null}
@@ -1824,16 +2225,34 @@ function PostCard({
   );
 }
 
-function MonthPostPill({ post }: { post: ScheduledPost }) {
+function MonthPostPill({
+  post,
+  selected = false,
+  onSelect,
+}: {
+  post: ScheduledPost;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   const config =
     platformOptions.find((item) => item.platform === post.platform) ?? fallbackPlatform;
   const Icon = config.icon;
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-xs shadow-sm dark:bg-white/[0.05]">
+    <button
+      className={cn(
+        'flex min-w-0 items-center gap-1.5 rounded-md bg-background/80 px-2 py-1 text-left text-xs shadow-sm transition hover:ring-1 hover:ring-primary/30 dark:bg-white/[0.05]',
+        selected ? 'ring-2 ring-primary/35' : '',
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+      type="button"
+    >
       <Icon className={cn('h-3.5 w-3.5 shrink-0', config.tone)} />
       <span className="truncate">{post.title}</span>
-    </div>
+    </button>
   );
 }
 
@@ -1929,6 +2348,10 @@ function toDateInputValue(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function toTimeInputValue(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 function shortDate(dateValue: string): string {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(
     parseLocalDate(dateValue),
@@ -1994,6 +2417,11 @@ function titleCase(value: string): string {
     .replaceAll('_', ' ')
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function metadataString(metadata: Record<string, unknown> | null | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
 }
 
 function postFromApi(post: ApiPost): ScheduledPost {

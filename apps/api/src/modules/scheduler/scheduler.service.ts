@@ -14,7 +14,11 @@ import {
 import type { AuthenticatedUser } from '../auth/types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { WordPressService } from '../wordpress/application/wordpress.service.js';
-import type { AutoScheduleDailyDto, CreatePublishJobDto } from './scheduler.dto.js';
+import type {
+  AutoScheduleDailyDto,
+  CreatePublishJobDto,
+  UpdatePublishJobScheduleDto,
+} from './scheduler.dto.js';
 
 const DAILY_SLOT_HOURS = [8, 10, 12, 14, 16, 18, 20, 21];
 
@@ -50,6 +54,7 @@ export class SchedulerService {
             select: {
               title: true,
               categoryNames: true,
+              url: true,
             },
           },
         },
@@ -89,7 +94,11 @@ export class SchedulerService {
           status:
             draft.status === 'PUBLISHED' ? PublishJobStatus.PUBLISHED : PublishJobStatus.SCHEDULED,
           tags: draft.hashtags.length ? draft.hashtags : draft.article.categoryNames,
-          metadata: null,
+          metadata: {
+            draftId: draft.id,
+            mediaUrl: draft.mediaUrl,
+            sourceUrl: draft.sourceUrl || draft.article.url,
+          },
           logs: [],
           createdAt: draft.createdAt,
         })),
@@ -125,6 +134,49 @@ export class SchedulerService {
     });
 
     return { post };
+  }
+
+  async updatePostSchedule(
+    user: AuthenticatedUser,
+    id: string,
+    dto: UpdatePublishJobScheduleDto,
+  ) {
+    const organizationId = await this.requireOrganizationId(user.id);
+    const scheduledFor = new Date(dto.scheduledFor);
+
+    if (Number.isNaN(scheduledFor.getTime())) {
+      throw new BadRequestException('scheduledFor must be a valid ISO date.');
+    }
+
+    const post = await this.prisma.publishJob.findFirst({
+      where: { id, organizationId },
+      select: { id: true, status: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Scheduled post was not found.');
+    }
+
+    if (post.status === PublishJobStatus.PUBLISHED || post.status === PublishJobStatus.PROCESSING) {
+      throw new BadRequestException('Published or processing posts cannot be rescheduled.');
+    }
+
+    const updated = await this.prisma.publishJob.update({
+      where: { id },
+      data: {
+        scheduledFor,
+        logs: {
+          create: {
+            level: PublishLogLevel.INFO,
+            message: 'Scheduled time updated from calendar.',
+            metadata: { scheduledFor: scheduledFor.toISOString(), updatedBy: user.id },
+          },
+        },
+      },
+      include: { logs: { orderBy: { createdAt: 'desc' }, take: 6 } },
+    });
+
+    return { post: updated };
   }
 
   async autoPlanDaily(user: AuthenticatedUser, dto: AutoScheduleDailyDto) {
