@@ -178,92 +178,133 @@ export class SchedulerService {
 
     const slots = this.randomSlots(date, Math.max(count, selectedArticles.length), usedTimes);
     const planned = [];
+    const failures = [];
+    const plannedArticleIds = new Set<string>();
+    const reusableDrafts = await this.prisma.socialDraft.findMany({
+      where: {
+        article: {
+          connection: { organizationId },
+          id: { notIn: Array.from(excludedArticleIds) },
+        },
+        platform: { in: connectedChannels.map((channel) => channel.platform) },
+        scheduledFor: null,
+        status: { in: ['DRAFT', 'APPROVED'] },
+      },
+      include: {
+        article: true,
+        campaignGeneration: { select: { campaignId: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: count * 8,
+    });
+
+    for (const draft of shuffle(reusableDrafts)) {
+      if (planned.length >= count) {
+        break;
+      }
+
+      if (plannedArticleIds.has(draft.articleId)) {
+        continue;
+      }
+
+      const channel = connectedChannels.find((item) => item.platform === draft.platform);
+      if (!channel) {
+        continue;
+      }
+
+      const scheduledFor =
+        slots[planned.length] ?? this.fallbackSlot(date, planned.length, usedTimes);
+      const job = await this.createApprovalJobFromDraft({
+        organizationId,
+        userId: user.id,
+        channel,
+        draft,
+        scheduledFor,
+        campaignId: draft.campaignGeneration?.campaignId,
+        logMessage: 'Existing generated draft selected for automatic daily planning.',
+      });
+
+      planned.push(job);
+      plannedArticleIds.add(draft.articleId);
+      excludedArticleIds.add(draft.articleId);
+    }
 
     for (const [index, article] of selectedArticles.entries()) {
+      if (planned.length >= count) {
+        break;
+      }
+
+      if (excludedArticleIds.has(article.id) || plannedArticleIds.has(article.id)) {
+        continue;
+      }
+
       const channel = connectedChannels[index % connectedChannels.length];
       if (!channel) {
         throw new BadRequestException('No connected channel was available for scheduling.');
       }
-      const scheduledFor = slots[index] ?? this.fallbackSlot(date, index, usedTimes);
+      const scheduledFor =
+        slots[planned.length] ?? this.fallbackSlot(date, planned.length, usedTimes);
 
-      const generation = await this.wordpressService.generateCampaign(
-        article.id,
-        {
-          platforms: [channel.platform],
-          campaignName: `${article.title} Auto Schedule`,
-          prompt:
-            'Generate a publish-ready social post and a premium image asset for automatic daily scheduling. Keep it accurate, unique, and suitable for final human approval.',
-          promptVersion: 'auto-scheduler-v1',
-        },
-        user,
-      );
-      const draft =
-        generation.drafts.find((item) => item.platform === channel.platform) ??
-        generation.drafts[0];
+      try {
+        const generation = await this.wordpressService.generateCampaign(
+          article.id,
+          {
+            platforms: [channel.platform],
+            campaignName: `${article.title} Auto Schedule`,
+            prompt:
+              'Generate a publish-ready social post and a premium image asset for automatic daily scheduling. Keep it accurate, unique, and suitable for final human approval.',
+            promptVersion: 'auto-scheduler-v1',
+          },
+          user,
+        );
+        const draft =
+          generation.drafts.find((item) => item.platform === channel.platform) ??
+          generation.drafts[0];
 
-      if (!draft) {
-        throw new BadRequestException(`AI generation did not return a draft for ${article.title}.`);
-      }
+        if (!draft) {
+          throw new BadRequestException(
+            `AI generation did not return a draft for ${article.title}.`,
+          );
+        }
 
-      const job = await this.prisma.publishJob.create({
-        data: {
+        const job = await this.createApprovalJobFromDraft({
           organizationId,
           userId: user.id,
-          campaignId: generation.campaign.id,
-          platform: draft.platform,
-          platformAccount: channel.displayName,
-          title: draft.title,
-          caption: draft.body,
-          hashtags: draft.hashtags,
+          channel,
+          draft: {
+            ...draft,
+            article: {
+              wordpressId: article.wordpressId,
+            },
+          },
           scheduledFor,
-          status: PublishJobStatus.PENDING_APPROVAL,
-          metadata: {
-            automation: 'daily-ai-auto-scheduler',
-            articleId: article.id,
-            wordpressId: article.wordpressId,
-            sourceUrl: draft.sourceUrl,
-            draftId: draft.id,
-            mediaUrl: draft.mediaUrl,
-            channelAccountId: channel.id,
-            requiresFinalApproval: true,
-          },
-          logs: {
-            create: [
-              {
-                level: PublishLogLevel.INFO,
-                message: 'AI generated campaign draft for automatic daily planning.',
-                metadata: {
-                  articleId: article.id,
-                  wordpressId: article.wordpressId,
-                  platform: draft.platform,
-                },
-              },
-              {
-                level: PublishLogLevel.INFO,
-                message: 'Queued for final approval before publishing.',
-                metadata: {
-                  scheduledFor: scheduledFor.toISOString(),
-                  channel: channel.displayName,
-                },
-              },
-            ],
-          },
-        },
-        include: { logs: { orderBy: { createdAt: 'desc' } } },
-      });
+          campaignId: generation.campaign.id,
+          logMessage: 'AI generated campaign draft for automatic daily planning.',
+        });
 
-      await this.prisma.socialDraft.update({
-        where: { id: draft.id },
-        data: { scheduledFor },
-      });
+        planned.push(job);
+        plannedArticleIds.add(article.id);
+      } catch (error) {
+        failures.push({
+          articleId: article.id,
+          title: article.title,
+          error: error instanceof Error ? error.message : 'AI generation failed.',
+        });
+      }
+    }
 
-      planned.push(job);
+    if (!planned.length) {
+      throw new BadRequestException(
+        failures[0]?.error ?? 'No posts could be generated or scheduled for approval.',
+      );
     }
 
     return {
       date: toDateInputValue(date),
       requested: count,
       planned: planned.length,
+      failed: failures.length,
+      failures,
       posts: planned,
     };
   }
@@ -341,6 +382,87 @@ export class SchedulerService {
     }
 
     return Array.from(unique.values());
+  }
+
+  private async createApprovalJobFromDraft(input: {
+    organizationId: string;
+    userId: string;
+    channel: {
+      id: string;
+      platform: SocialPlatform;
+      displayName: string;
+      externalAccountId: string | null;
+    };
+    draft: {
+      id: string;
+      articleId: string;
+      platform: SocialPlatform;
+      title: string;
+      body: string;
+      hashtags: string[];
+      sourceUrl: string;
+      mediaUrl: string | null;
+      article: {
+        wordpressId: number;
+      };
+    };
+    scheduledFor: Date;
+    campaignId?: string;
+    logMessage: string;
+  }) {
+    const job = await this.prisma.publishJob.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: input.userId,
+        campaignId: input.campaignId,
+        platform: input.draft.platform,
+        platformAccount: input.channel.displayName,
+        title: input.draft.title,
+        caption: input.draft.body,
+        hashtags: input.draft.hashtags,
+        scheduledFor: input.scheduledFor,
+        status: PublishJobStatus.PENDING_APPROVAL,
+        metadata: {
+          automation: 'daily-ai-auto-scheduler',
+          articleId: input.draft.articleId,
+          wordpressId: input.draft.article.wordpressId,
+          sourceUrl: input.draft.sourceUrl,
+          draftId: input.draft.id,
+          mediaUrl: input.draft.mediaUrl,
+          channelAccountId: input.channel.id,
+          requiresFinalApproval: true,
+        },
+        logs: {
+          create: [
+            {
+              level: PublishLogLevel.INFO,
+              message: input.logMessage,
+              metadata: {
+                articleId: input.draft.articleId,
+                wordpressId: input.draft.article.wordpressId,
+                platform: input.draft.platform,
+              },
+            },
+            {
+              level: PublishLogLevel.INFO,
+              message: 'Queued for final approval before publishing.',
+              metadata: {
+                scheduledFor: input.scheduledFor.toISOString(),
+                channel: input.channel.displayName,
+              },
+            },
+          ],
+        },
+      },
+      include: { logs: { orderBy: { createdAt: 'desc' } } },
+    });
+
+    await this.prisma.socialDraft.update({
+      where: { id: input.draft.id },
+      data: { scheduledFor: input.scheduledFor },
+    });
+
+    return job;
   }
 
   private randomSlots(date: Date, count: number, usedTimes: Set<string>) {

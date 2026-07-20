@@ -45,7 +45,7 @@ export class WordPressPostsQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(200)
   perPage?: number;
 }
 
@@ -119,7 +119,6 @@ export class DraftsQueryDto extends WordPressPostsQueryDto {
   @IsOptional()
   @IsEnum(SocialPlatform)
   platform?: SocialPlatform;
-
 }
 
 export class ScheduleDraftDto {
