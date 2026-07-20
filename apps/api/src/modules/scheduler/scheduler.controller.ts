@@ -30,6 +30,11 @@ export class SchedulerController {
     return this.schedulerService.autoPlanDaily(user, dto);
   }
 
+  @Patch('posts/approve')
+  async approvePosts(@CurrentUser() user: AuthenticatedUser, @Body() dto: { ids?: string[] }) {
+    return this.schedulerService.approvePosts(user, dto.ids ?? []);
+  }
+
   @Patch('posts/:id/approve')
   async approvePost(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.schedulerService.approvePost(user, id);
@@ -42,10 +47,5 @@ export class SchedulerController {
     @Body() dto: UpdatePublishJobScheduleDto,
   ) {
     return this.schedulerService.updatePostSchedule(user, id, dto);
-  }
-
-  @Patch('posts/approve')
-  async approvePosts(@CurrentUser() user: AuthenticatedUser, @Body() dto: { ids?: string[] }) {
-    return this.schedulerService.approvePosts(user, dto.ids ?? []);
   }
 }

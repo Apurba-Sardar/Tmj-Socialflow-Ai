@@ -582,16 +582,21 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
     setPublishingId(post.id);
     try {
+      const draftId = metadataString(post.metadata, 'draftId') ?? (post.source === 'draft' ? post.id : undefined);
+      const mediaUrl = metadataString(post.metadata, 'mediaUrl') ?? undefined;
+      const shouldHydrateMediaFromDraft = Boolean(
+        draftId && mediaUrl?.startsWith('data:image/') && post.platform === 'FACEBOOK',
+      );
       const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          draftId: metadataString(post.metadata, 'draftId') ?? (post.source === 'draft' ? post.id : undefined),
+          draftId,
           title: post.title,
           caption: post.caption,
           hashtags: post.tags,
-          mediaUrl: metadataString(post.metadata, 'mediaUrl') ?? undefined,
+          ...(mediaUrl && !shouldHydrateMediaFromDraft ? { mediaUrl } : {}),
           sourceUrl: metadataString(post.metadata, 'sourceUrl') ?? undefined,
         }),
       });
