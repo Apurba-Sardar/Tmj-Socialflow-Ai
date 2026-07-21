@@ -76,7 +76,7 @@ interface PromptTemplate {
   id: string;
   platform: Platform;
   purpose: string;
-  contentCategory: PromptContentCategory;
+  contentCategory?: PromptContentCategory;
   name: string;
   description: string | null;
   template: string;
@@ -304,7 +304,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       promptTemplates.find(
         (item) =>
           item.platform === promptForm.platform &&
-          item.contentCategory === promptForm.contentCategory &&
+          promptTemplateCategory(item) === promptForm.contentCategory &&
           item.purpose === 'IMAGE_GENERATION',
       ),
     [promptForm.contentCategory, promptForm.platform, promptTemplates],
@@ -376,7 +376,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         nextPrompts.find(
           (item) =>
             item.platform === promptForm.platform &&
-            item.contentCategory === promptForm.contentCategory,
+            promptTemplateCategory(item) === promptForm.contentCategory,
         ) ?? nextPrompts[0];
       if (currentPrompt) {
         hydratePromptForm(currentPrompt);
@@ -582,9 +582,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   }
 
   function hydratePromptForm(template: PromptTemplate) {
+    const contentCategory = template.contentCategory ?? 'ARTICLE';
     setPromptForm({
       platform: template.platform,
-      contentCategory: template.contentCategory,
+      contentCategory,
       name: template.name,
       description: template.description ?? '',
       template: template.template,
@@ -595,10 +596,11 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   }
 
   function updatePromptPlatform(platform: Platform) {
+    const contentCategory = promptForm.contentCategory;
     const template = promptTemplates.find(
       (item) =>
         item.platform === platform &&
-        item.contentCategory === promptForm.contentCategory &&
+        promptTemplateCategory(item) === contentCategory &&
         item.purpose === 'IMAGE_GENERATION',
     );
     if (template) {
@@ -606,15 +608,16 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       return;
     }
 
-    setPromptForm((value) => ({ ...value, platform }));
+    setPromptForm(defaultPromptForm(platform, contentCategory));
     setPromptPreview('');
   }
 
   function updatePromptCategory(contentCategory: PromptContentCategory) {
+    const platform = promptForm.platform;
     const template = promptTemplates.find(
       (item) =>
-        item.platform === promptForm.platform &&
-        item.contentCategory === contentCategory &&
+        item.platform === platform &&
+        promptTemplateCategory(item) === contentCategory &&
         item.purpose === 'IMAGE_GENERATION',
     );
     if (template) {
@@ -622,7 +625,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       return;
     }
 
-    setPromptForm((value) => ({ ...value, contentCategory }));
+    setPromptForm(defaultPromptForm(platform, contentCategory));
     setPromptPreview('');
   }
 
@@ -1070,7 +1073,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   className={cn(
                     'rounded-xl border border-border bg-background/70 p-4 text-left transition hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.03]',
                     promptForm.platform === template.platform &&
-                      promptForm.contentCategory === template.contentCategory
+                      promptForm.contentCategory === promptTemplateCategory(template)
                       ? 'border-primary/60 bg-primary/5'
                       : '',
                   )}
@@ -1086,7 +1089,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                         {titleCase(template.platform)}
                       </Badge>
                       <Badge variant="secondary">
-                        {promptCategoryLabel(template.contentCategory)}
+                        {promptCategoryLabel(promptTemplateCategory(template))}
                       </Badge>
                     </div>
                     <Badge variant="secondary">v{template.version}</Badge>
@@ -1735,6 +1738,23 @@ function appendUniqueLine(current: string, next: string): string {
   }
 
   return [...lines, cleanNext].join('\n');
+}
+
+function promptTemplateCategory(template: Pick<PromptTemplate, 'contentCategory'>): PromptContentCategory {
+  return template.contentCategory ?? 'ARTICLE';
+}
+
+function defaultPromptForm(platform: Platform, contentCategory: PromptContentCategory): PromptForm {
+  return {
+    platform,
+    contentCategory,
+    name: `${titleCase(platform)} ${promptCategoryLabel(contentCategory)} premium image`,
+    description:
+      'Clean postable image asset generated from WordPress content. Caption remains separate in SocialFlow.',
+    template: premiumImagePromptFor(platform, contentCategory),
+    negativePrompt: noTextPolicy,
+    styleNotes: platformStyleNotes(platform),
+  };
 }
 
 function premiumImagePromptFor(platform: Platform, contentCategory: PromptContentCategory): string {
