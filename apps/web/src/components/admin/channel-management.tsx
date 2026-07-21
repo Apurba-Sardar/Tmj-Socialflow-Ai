@@ -672,11 +672,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
 
     setSavingPrompt(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/prompt-templates`, {
+      const response = await sendPromptTemplateRequest(`${apiBaseUrl}/api/prompt-templates`, {
         method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           platform: promptForm.platform,
           purpose: 'IMAGE_GENERATION',
           contentCategory: promptForm.contentCategory,
@@ -686,7 +684,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           negativePrompt: promptForm.negativePrompt || undefined,
           styleNotes: promptForm.styleNotes || undefined,
           active: true,
-        }),
+        },
       });
 
       if (!response.ok) {
@@ -733,11 +731,11 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   async function previewPromptTemplate() {
     setPreviewingPrompt(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/prompt-templates/preview`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await sendPromptTemplateRequest(
+        `${apiBaseUrl}/api/prompt-templates/preview`,
+        {
+          method: 'POST',
+          body: {
           platform: promptForm.platform,
           purpose: 'IMAGE_GENERATION',
           contentCategory: promptForm.contentCategory,
@@ -747,8 +745,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           content:
             'Peptides are short chains of amino acids discussed in research contexts. The visual should be scientific, careful, and non-prescriptive.',
           categories: 'Guest Posts, Health Science, Peptides',
-        }),
-      });
+          },
+        },
+      );
 
       if (!response.ok) {
         throw new Error(await responseErrorMessage(response, 'Could not preview this prompt.'));
@@ -1672,6 +1671,40 @@ function parseScopes(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+async function sendPromptTemplateRequest(
+  url: string,
+  options: { method: 'POST' | 'PUT'; body: Record<string, unknown> },
+): Promise<Response> {
+  const request = (body: Record<string, unknown>) =>
+    fetch(url, {
+      method: options.method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const response = await request(options.body);
+
+  if (response.ok || !('contentCategory' in options.body)) {
+    return response;
+  }
+
+  const payload = (await response.clone().json().catch(() => null)) as
+    | { message?: string | string[] }
+    | null;
+  const message = Array.isArray(payload?.message)
+    ? payload.message.join(' ')
+    : payload?.message ?? '';
+
+  if (!message.includes('contentCategory') || !message.includes('should not exist')) {
+    return response;
+  }
+
+  const legacyBody = { ...options.body };
+  delete legacyBody.contentCategory;
+  return request(legacyBody);
 }
 
 async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
