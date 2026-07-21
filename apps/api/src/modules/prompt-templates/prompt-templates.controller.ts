@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -32,7 +32,11 @@ export class PromptTemplatesController {
   }
 
   @Post(':platform/reset')
-  reset(@Param('platform') platform: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.promptTemplatesService.reset(platform, user);
+  reset(
+    @Param('platform') platform: string,
+    @Query('contentCategory') contentCategory: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.promptTemplatesService.reset(platform, user, contentCategory);
   }
 }

@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 type Platform = 'PINTEREST' | 'INSTAGRAM' | 'LINKEDIN' | 'X' | 'FACEBOOK';
 type ChannelStatus = 'CONNECTED' | 'ACTION_REQUIRED' | 'DISCONNECTED' | 'EXPIRED';
 type AuthType = 'OAUTH' | 'MANUAL' | 'APPLICATION_PASSWORD';
+type PromptContentCategory = 'ARTICLE' | 'QUOTES' | 'NEWS';
 
 interface SupportedPlatform {
   platform: Platform;
@@ -75,6 +76,7 @@ interface PromptTemplate {
   id: string;
   platform: Platform;
   purpose: string;
+  contentCategory: PromptContentCategory;
   name: string;
   description: string | null;
   template: string;
@@ -104,6 +106,7 @@ interface ChannelForm {
 
 interface PromptForm {
   platform: Platform;
+  contentCategory: PromptContentCategory;
   name: string;
   description: string;
   template: string;
@@ -134,12 +137,31 @@ const initialForm: ChannelForm = {
 
 const initialPromptForm: PromptForm = {
   platform: 'PINTEREST',
+  contentCategory: 'ARTICLE',
   name: '',
   description: '',
   template: '',
   negativePrompt: '',
   styleNotes: '',
 };
+
+const promptContentCategories: { value: PromptContentCategory; label: string; help: string }[] = [
+  {
+    value: 'ARTICLE',
+    label: 'Articles',
+    help: 'General educational, evergreen, and blog article visuals.',
+  },
+  {
+    value: 'QUOTES',
+    label: 'Quotes',
+    help: 'Quote cards, short sayings, and shareable family wisdom posts.',
+  },
+  {
+    value: 'NEWS',
+    label: 'News',
+    help: 'Updates, reports, announcements, studies, and timely story visuals.',
+  },
+];
 
 const platformTone: Record<Platform, string> = {
   PINTEREST: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
@@ -280,9 +302,12 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   const selectedPrompt = useMemo(
     () =>
       promptTemplates.find(
-        (item) => item.platform === promptForm.platform && item.purpose === 'IMAGE_GENERATION',
+        (item) =>
+          item.platform === promptForm.platform &&
+          item.contentCategory === promptForm.contentCategory &&
+          item.purpose === 'IMAGE_GENERATION',
       ),
-    [promptForm.platform, promptTemplates],
+    [promptForm.contentCategory, promptForm.platform, promptTemplates],
   );
   const selectedSetup = selectedPlatform
     ? platformSetup[selectedPlatform.platform]
@@ -351,7 +376,11 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         scopes: nextSupported[0]?.requiredScopes.join(', ') ?? value.scopes,
       }));
       const currentPrompt =
-        nextPrompts.find((item) => item.platform === promptForm.platform) ?? nextPrompts[0];
+        nextPrompts.find(
+          (item) =>
+            item.platform === promptForm.platform &&
+            item.contentCategory === promptForm.contentCategory,
+        ) ?? nextPrompts[0];
       if (currentPrompt) {
         hydratePromptForm(currentPrompt);
       }
@@ -551,6 +580,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   function hydratePromptForm(template: PromptTemplate) {
     setPromptForm({
       platform: template.platform,
+      contentCategory: template.contentCategory,
       name: template.name,
       description: template.description ?? '',
       template: template.template,
@@ -562,7 +592,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
 
   function updatePromptPlatform(platform: Platform) {
     const template = promptTemplates.find(
-      (item) => item.platform === platform && item.purpose === 'IMAGE_GENERATION',
+      (item) =>
+        item.platform === platform &&
+        item.contentCategory === promptForm.contentCategory &&
+        item.purpose === 'IMAGE_GENERATION',
     );
     if (template) {
       hydratePromptForm(template);
@@ -573,14 +606,32 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     setPromptPreview('');
   }
 
+  function updatePromptCategory(contentCategory: PromptContentCategory) {
+    const template = promptTemplates.find(
+      (item) =>
+        item.platform === promptForm.platform &&
+        item.contentCategory === contentCategory &&
+        item.purpose === 'IMAGE_GENERATION',
+    );
+    if (template) {
+      hydratePromptForm(template);
+      return;
+    }
+
+    setPromptForm((value) => ({ ...value, contentCategory }));
+    setPromptPreview('');
+  }
+
   function applyPremiumImageBaseline() {
     setPromptForm((value) => ({
       ...value,
-      name: value.name || `${titleCase(value.platform)} premium post image`,
+      name:
+        value.name ||
+        `${titleCase(value.platform)} ${promptCategoryLabel(value.contentCategory)} premium image`,
       description:
         value.description ||
         'Clean postable image asset generated from WordPress content. Caption remains separate in SocialFlow.',
-      template: premiumImagePromptFor(value.platform),
+      template: premiumImagePromptFor(value.platform, value.contentCategory),
       negativePrompt: noTextPolicy,
       styleNotes: platformStyleNotes(value.platform),
     }));
@@ -624,6 +675,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         body: JSON.stringify({
           platform: promptForm.platform,
           purpose: 'IMAGE_GENERATION',
+          contentCategory: promptForm.contentCategory,
           name: promptForm.name || `${titleCase(promptForm.platform)} image prompt`,
           description: promptForm.description || undefined,
           template: promptForm.template,
@@ -650,7 +702,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     setSavingPrompt(true);
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/prompt-templates/${promptForm.platform}/reset`,
+        `${apiBaseUrl}/api/prompt-templates/${promptForm.platform}/reset?${new URLSearchParams({
+          contentCategory: promptForm.contentCategory,
+        }).toString()}`,
         {
           method: 'POST',
           credentials: 'include',
@@ -682,6 +736,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         body: JSON.stringify({
           platform: promptForm.platform,
           purpose: 'IMAGE_GENERATION',
+          contentCategory: promptForm.contentCategory,
           title: 'Fat Loss Research Peptides: A Scientific Review',
           excerpt:
             'A careful article about peptide research, metabolism, and weight-management science.',
@@ -1011,7 +1066,8 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 <button
                   className={cn(
                     'rounded-xl border border-border bg-background/70 p-4 text-left transition hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.03]',
-                    promptForm.platform === template.platform
+                    promptForm.platform === template.platform &&
+                      promptForm.contentCategory === template.contentCategory
                       ? 'border-primary/60 bg-primary/5'
                       : '',
                   )}
@@ -1022,9 +1078,14 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   type="button"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <Badge className={platformTone[template.platform]} variant="outline">
-                      {titleCase(template.platform)}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className={platformTone[template.platform]} variant="outline">
+                        {titleCase(template.platform)}
+                      </Badge>
+                      <Badge variant="secondary">
+                        {promptCategoryLabel(template.contentCategory)}
+                      </Badge>
+                    </div>
                     <Badge variant="secondary">v{template.version}</Badge>
                   </div>
                   <div className="mt-3 font-semibold">{template.name}</div>
@@ -1093,7 +1154,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
               </div>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <div className="grid gap-3 md:grid-cols-[0.45fr_1fr]">
+              <div className="grid gap-3 lg:grid-cols-[0.35fr_0.45fr_1fr]">
                 <Field label="Channel">
                   <select
                     className="sf-focus-ring h-11 rounded-lg border border-input bg-background/80 px-3 text-sm dark:bg-white/[0.035]"
@@ -1105,6 +1166,21 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                     {Object.keys(platformTone).map((platform) => (
                       <option key={platform} value={platform}>
                         {titleCase(platform)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Content type">
+                  <select
+                    className="sf-focus-ring h-11 rounded-lg border border-input bg-background/80 px-3 text-sm dark:bg-white/[0.035]"
+                    onChange={(event) => {
+                      updatePromptCategory(event.target.value as PromptContentCategory);
+                    }}
+                    value={promptForm.contentCategory}
+                  >
+                    {promptContentCategories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
                       </option>
                     ))}
                   </select>
@@ -1137,8 +1213,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                       Image generation controls
                     </div>
                     <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                      Use these controls for the core workflow: WordPress article in, clean
-                      channel-ready image asset out. The caption is kept outside the image.
+                      Use these controls for the core workflow: WordPress content in, clean
+                      channel-ready image asset out. Category-specific prompts let Mind Family
+                      generate different visuals for articles, quotes, and news.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1256,7 +1333,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                         : 'No saved prompt selected'}
                     </div>
                   </div>
-                  <Badge variant="secondary">{promptForm.platform}</Badge>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{promptForm.platform}</Badge>
+                    <Badge variant="outline">{promptCategoryLabel(promptForm.contentCategory)}</Badge>
+                  </div>
                 </div>
                 {promptPreview ? (
                   <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-background p-4 text-xs leading-5 text-muted-foreground dark:bg-black/30">
@@ -1609,7 +1689,7 @@ function appendUniqueLine(current: string, next: string): string {
   return [...lines, cleanNext].join('\n');
 }
 
-function premiumImagePromptFor(platform: Platform): string {
+function premiumImagePromptFor(platform: Platform, contentCategory: PromptContentCategory): string {
   const channelDirection: Record<Platform, string> = {
     PINTEREST:
       'Vertical 2:3 Pinterest-ready image asset, save-worthy quote card, text-over-photo poster, magazine-style educational cover, premium editorial collage, realistic lifestyle image, or refined illustration. Vary the format based on the article.',
@@ -1621,6 +1701,14 @@ function premiumImagePromptFor(platform: Platform): string {
       'Landscape LinkedIn-ready image asset, credible professional editorial visual, refined quote card, research/strategy mood, clean workspace, abstract concept art, or muted premium magazine cover.',
     X: 'Wide X-ready preview image asset, simple high-contrast editorial composition, one bold idea, minimal detail, readable as a small link preview.',
   };
+  const categoryDirection: Record<PromptContentCategory, string> = {
+    ARTICLE:
+      'Content type direction: article mode. Create an evergreen educational or editorial image based on the article insight, practical lesson, or emotional theme.',
+    QUOTES:
+      'Content type direction: quote mode. Create a shareable quote-card or text-over-photo poster. One short quote or 3-10 word hook is allowed and preferred when it is readable, accurate, and beautifully composed.',
+    NEWS:
+      'Content type direction: news mode. Create a polished news/update visual with accurate editorial tone, serious clarity, and no clickbait. A concise headline-style hook is allowed when useful.',
+  };
 
   return [
     `Create a premium postable image asset for {{platform}} from this WordPress article.`,
@@ -1631,6 +1719,7 @@ function premiumImagePromptFor(platform: Platform): string {
     'Article context: {{articleContext}}',
     '',
     `Channel direction: ${channelDirection[platform]}`,
+    categoryDirection[contentCategory],
     '',
     'Use a visual idea that is directly connected to the article content. Do not create a generic wellness, office, cartoon family, or marketing background.',
     'The image should work alongside the separate SocialFlow caption: {{captionTitle}} / {{captionBody}}',
@@ -1640,6 +1729,10 @@ function premiumImagePromptFor(platform: Platform): string {
     '',
     'No platform label, no social network label, no UI, no logos, no watermark, no tiny unreadable text, no misspelled text, no dense paragraphs.',
   ].join('\n');
+}
+
+function promptCategoryLabel(value: PromptContentCategory): string {
+  return promptContentCategories.find((category) => category.value === value)?.label ?? 'Articles';
 }
 
 function platformStyleNotes(platform: Platform): string {

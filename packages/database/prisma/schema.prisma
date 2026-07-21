@@ -865,6 +865,7 @@ model PromptTemplate {
   organizationId String?
   platform       SocialPlatform
   purpose        String         @default("IMAGE_GENERATION")
+  contentCategory String        @default("ARTICLE")
   name           String
   description    String?
   template       String
@@ -880,8 +881,8 @@ model PromptTemplate {
   createdBy      User?          @relation("PromptTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy      User?          @relation("PromptTemplateUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  @@unique([organizationId, platform, purpose, active])
-  @@index([platform, purpose])
+  @@unique([organizationId, platform, purpose, contentCategory, active])
+  @@index([platform, purpose, contentCategory])
   @@index([updatedAt])
 }
 

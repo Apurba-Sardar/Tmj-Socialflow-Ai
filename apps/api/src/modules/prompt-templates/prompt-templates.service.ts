@@ -20,7 +20,11 @@ interface RenderPromptInput {
   article: PromptArticleContext;
   captionTitle?: string;
   captionBody?: string;
+  contentCategory?: string;
 }
+
+const promptContentCategories = ['ARTICLE', 'QUOTES', 'NEWS'] as const;
+type PromptContentCategory = (typeof promptContentCategories)[number];
 
 const defaultPromptTemplates: Record<
   SocialPlatform,
@@ -92,6 +96,7 @@ export class PromptTemplatesService {
     return Object.entries(defaultPromptTemplates).map(([platform, template]) => ({
       platform,
       purpose: PROMPT_PURPOSE_IMAGE,
+      contentCategory: 'ARTICLE',
       ...template,
     }));
   }
@@ -102,7 +107,12 @@ export class PromptTemplatesService {
 
     return this.prisma.promptTemplate.findMany({
       where: this.visibleWhere(organizationId),
-      orderBy: [{ platform: 'asc' }, { purpose: 'asc' }, { updatedAt: 'desc' }],
+      orderBy: [
+        { platform: 'asc' },
+        { contentCategory: 'asc' },
+        { purpose: 'asc' },
+        { updatedAt: 'desc' },
+      ],
       include: {
         updatedBy: {
           select: {
@@ -118,9 +128,10 @@ export class PromptTemplatesService {
     this.ensureAdmin(user);
     const organizationId = await this.defaultOrganizationId(user.id);
     const purpose = this.purpose(dto.purpose);
+    const contentCategory = this.contentCategory(dto.contentCategory);
 
     const existing = await this.prisma.promptTemplate.findFirst({
-      where: { organizationId, platform: dto.platform, purpose, active: true },
+      where: { organizationId, platform: dto.platform, purpose, contentCategory, active: true },
       select: { id: true, version: true },
     });
 
@@ -130,6 +141,7 @@ export class PromptTemplatesService {
         data: {
           name: dto.name.trim(),
           description: this.optionalTrim(dto.description),
+          contentCategory,
           template: dto.template.trim(),
           negativePrompt: this.optionalTrim(dto.negativePrompt),
           styleNotes: this.optionalTrim(dto.styleNotes),
@@ -145,6 +157,7 @@ export class PromptTemplatesService {
         organizationId,
         platform: dto.platform,
         purpose,
+        contentCategory,
         name: dto.name.trim(),
         description: this.optionalTrim(dto.description),
         template: dto.template.trim(),
@@ -157,16 +170,20 @@ export class PromptTemplatesService {
     });
   }
 
-  async reset(platform: string, user: AuthenticatedUser) {
+  async reset(platform: string, user: AuthenticatedUser, contentCategory?: string) {
     this.ensureAdmin(user);
     const cleanPlatform = this.parsePlatform(platform);
+    const cleanCategory = this.contentCategory(contentCategory);
     const defaults = defaultPromptTemplates[cleanPlatform];
+    const categoryDefaults = this.categoryDefaultOverrides(cleanCategory, cleanPlatform);
 
     return this.upsert(
       {
         platform: cleanPlatform,
         purpose: PROMPT_PURPOSE_IMAGE,
+        contentCategory: cleanCategory,
         ...defaults,
+        ...categoryDefaults,
         active: true,
       },
       user,
@@ -177,6 +194,7 @@ export class PromptTemplatesService {
     const rendered = await this.renderImagePrompt(
       {
         platform: dto.platform,
+        contentCategory: dto.contentCategory,
         article: {
           title: nonEmpty(dto.title?.trim(), 'Example WordPress article'),
           excerpt: nonEmpty(
@@ -206,16 +224,22 @@ export class PromptTemplatesService {
   ) {
     const organizationId = userId ? await this.defaultOrganizationId(userId) : null;
     await this.ensureDefaults(organizationId, userId);
+    const contentCategory = this.contentCategory(
+      input.contentCategory ?? this.inferContentCategory(input.article),
+    );
 
-    const template = await this.prisma.promptTemplate.findFirst({
+    const templates = await this.prisma.promptTemplate.findMany({
       where: {
         ...this.visibleWhere(organizationId),
         platform: input.platform,
         purpose,
+        contentCategory: { in: contentCategory === 'ARTICLE' ? ['ARTICLE'] : [contentCategory, 'ARTICLE'] },
         active: true,
       },
       orderBy: { updatedAt: 'desc' },
     });
+    const template =
+      templates.find((item) => item.contentCategory === contentCategory) ?? templates[0];
 
     const fallback = defaultPromptTemplates[input.platform];
     const body = template?.template ?? fallback.template;
@@ -228,6 +252,7 @@ export class PromptTemplatesService {
       articleUrl: input.article.url,
       categories: nonEmpty(input.article.categoryNames.join(', '), 'social media article'),
       platform: platformTitle(input.platform),
+      contentCategory: categoryTitle(contentCategory),
       captionTitle: input.captionTitle ?? input.article.title,
       captionBody: input.captionBody ?? '',
       topicGuidance: this.topicVisualGuidance(input.article),
@@ -248,7 +273,7 @@ export class PromptTemplatesService {
       ]
         .filter(Boolean)
         .join('\n\n'),
-      promptVersion: `admin-${input.platform.toLowerCase()}-${String(template?.version ?? 1)}`,
+      promptVersion: `admin-${input.platform.toLowerCase()}-${contentCategory.toLowerCase()}-${String(template?.version ?? 1)}`,
       templateId: template?.id ?? null,
     };
   }
@@ -275,44 +300,49 @@ export class PromptTemplatesService {
 
   private async ensureDefaults(organizationId: string | null, userId?: string) {
     for (const [platform, template] of Object.entries(defaultPromptTemplates)) {
-      const existing = await this.prisma.promptTemplate.findFirst({
-        where: {
-          organizationId,
-          platform: platform as SocialPlatform,
-          purpose: PROMPT_PURPOSE_IMAGE,
-          active: true,
-        },
-        select: { id: true, name: true, template: true, styleNotes: true },
-      });
-
-      if (!existing) {
-        await this.prisma.promptTemplate.create({
-          data: {
+      for (const category of promptContentCategories) {
+        const categoryDefaults = this.categoryDefaultOverrides(category, platform as SocialPlatform);
+        const existing = await this.prisma.promptTemplate.findFirst({
+          where: {
             organizationId,
             platform: platform as SocialPlatform,
             purpose: PROMPT_PURPOSE_IMAGE,
-            name: template.name,
-            description: template.description,
-            template: template.template,
-            negativePrompt: template.negativePrompt,
-            styleNotes: template.styleNotes,
-            createdById: userId,
-            updatedById: userId,
+            contentCategory: category,
+            active: true,
           },
+          select: { id: true, name: true, template: true, styleNotes: true, contentCategory: true },
         });
-      } else if (this.shouldUpgradeLegacyDefault(existing)) {
-        await this.prisma.promptTemplate.update({
-          where: { id: existing.id },
-          data: {
-            name: template.name,
-            description: template.description,
-            template: template.template,
-            negativePrompt: template.negativePrompt,
-            styleNotes: template.styleNotes,
-            updatedById: userId,
-            version: { increment: 1 },
-          },
-        });
+
+        if (!existing) {
+          await this.prisma.promptTemplate.create({
+            data: {
+              organizationId,
+              platform: platform as SocialPlatform,
+              purpose: PROMPT_PURPOSE_IMAGE,
+              contentCategory: category,
+              name: categoryDefaults.name ?? template.name,
+              description: categoryDefaults.description ?? template.description,
+              template: categoryDefaults.template ?? template.template,
+              negativePrompt: categoryDefaults.negativePrompt ?? template.negativePrompt,
+              styleNotes: categoryDefaults.styleNotes ?? template.styleNotes,
+              createdById: userId,
+              updatedById: userId,
+            },
+          });
+        } else if (category === 'ARTICLE' && this.shouldUpgradeLegacyDefault(existing)) {
+          await this.prisma.promptTemplate.update({
+            where: { id: existing.id },
+            data: {
+              name: template.name,
+              description: template.description,
+              template: template.template,
+              negativePrompt: template.negativePrompt,
+              styleNotes: template.styleNotes,
+              updatedById: userId,
+              version: { increment: 1 },
+            },
+          });
+        }
       }
     }
   }
@@ -369,6 +399,61 @@ export class PromptTemplatesService {
     return nonEmpty(value?.trim().toUpperCase(), PROMPT_PURPOSE_IMAGE);
   }
 
+  private contentCategory(value?: string): PromptContentCategory {
+    const clean = value?.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_') || 'ARTICLE';
+
+    if (promptContentCategories.includes(clean as PromptContentCategory)) {
+      return clean as PromptContentCategory;
+    }
+
+    return 'ARTICLE';
+  }
+
+  private inferContentCategory(article: PromptArticleContext): PromptContentCategory {
+    const text = `${article.url} ${article.title} ${article.categoryNames.join(' ')}`.toLowerCase();
+
+    if (/(\/quotes?\/|\bquotes?\b|saying|proverb)/i.test(text)) {
+      return 'QUOTES';
+    }
+
+    if (/(\/news\/|\bnews\b|update|announces?|report|study|research|202[0-9])/i.test(text)) {
+      return 'NEWS';
+    }
+
+    return 'ARTICLE';
+  }
+
+  private categoryDefaultOverrides(
+    category: PromptContentCategory,
+    platform: SocialPlatform,
+  ): Partial<(typeof defaultPromptTemplates)[SocialPlatform]> {
+    if (category === 'QUOTES') {
+      return {
+        name: `${platformTitle(platform)} Mind Family quote image`,
+        description:
+          'Quote-first visual prompts for quote posts, short sayings, and shareable family wisdom.',
+        template:
+          'Create a premium {{platform}} image asset for a quote-style WordPress post.\n\nArticle title: {{articleTitle}}\nExcerpt or quote idea: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: make this feel like a finished Mind Family quote post, not a generic cartoon. Use one of these formats: elegant paper quote card, realistic photo background with clean readable quote overlay, warm minimal typography poster, subtle illustration plus quote block, premium book/page texture, or emotional concept image with a short quote area.\n\nText treatment: because this is quote content, one short quote or 3-10 word hook is allowed and preferred. Keep text large, correctly spelled, centered or intentionally composed, and easy to read on mobile. Do not include hashtags, platform labels, UI, or long paragraphs.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first Mind Family style. No SocialFlow branding.',
+        styleNotes:
+          'Quote/category mode. Prioritize readable short quote-card, paper texture, soft photo poster, premium typography, and emotional simplicity. Avoid childish cartoons and dense text.',
+      };
+    }
+
+    if (category === 'NEWS') {
+      return {
+        name: `${platformTitle(platform)} Mind Family news image`,
+        description:
+          'News/update visual prompts for timely posts, reports, studies, and announcements.',
+        template:
+          'Create a premium {{platform}} image asset for a news or update-style WordPress post.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: make a polished social news asset that communicates the story clearly without looking like a generic cartoon. Use one of these formats: editorial photo poster, clean news-card graphic, magazine-style cover, serious mental-health concept art, report-style visual without charts, or realistic lifestyle/news image with a concise headline area.\n\nText treatment: a short headline or 3-8 word news hook is allowed. Keep it accurate, large, correctly spelled, and not sensational. Do not add fake statistics, charts, labels, hashtags, platform names, or full caption text.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first Mind Family style. No SocialFlow branding.',
+        styleNotes:
+          'News/category mode. Prioritize editorial clarity, accurate headline-style visuals, realistic/contextual imagery, and serious but supportive tone. Avoid clickbait, fear imagery, and childish cartoons.',
+      };
+    }
+
+    return {};
+  }
+
   private optionalTrim(value?: string): string | undefined {
     const clean = value?.trim();
     return nonEmptyOrUndefined(clean);
@@ -421,6 +506,13 @@ export class PromptTemplatesService {
 
 function platformTitle(platform: SocialPlatform): string {
   return platform.charAt(0) + platform.slice(1).toLowerCase();
+}
+
+function categoryTitle(category: string): string {
+  return category
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function nonEmpty(value: string | undefined, fallback: string): string {

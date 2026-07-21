@@ -10,6 +10,11 @@ export class UpsertPromptTemplateDto {
   @MaxLength(80)
   purpose?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  contentCategory?: string;
+
   @IsString()
   @MinLength(3)
   @MaxLength(120)
@@ -48,6 +53,11 @@ export class PreviewPromptTemplateDto {
   @IsString()
   @MaxLength(80)
   purpose?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  contentCategory?: string;
 
   @IsOptional()
   @IsString()

@@ -44,7 +44,7 @@ import { cn } from '@/lib/utils';
 
 type CampaignStatus = 'NOT_GENERATED' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'ARCHIVED';
 
-type SortBy = 'modifiedAt' | 'publishedAt' | 'title';
+type SortBy = 'modifiedAt' | 'publishedAt' | 'title' | 'lifetimeViews';
 type SortDir = 'asc' | 'desc';
 
 interface WordPressConnection {
@@ -196,6 +196,18 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
     () => Array.from(new Set(articles.flatMap((article) => article.categoryNames))).slice(0, 6),
     [articles],
   );
+  const visibleArticles = useMemo(() => {
+    if (sortBy !== 'lifetimeViews') {
+      return articles;
+    }
+
+    return [...articles].sort((first, second) => {
+      const firstViews = googleAnalytics[first.id]?.pageViews ?? -1;
+      const secondViews = googleAnalytics[second.id]?.pageViews ?? -1;
+      const result = firstViews - secondViews;
+      return sortDir === 'asc' ? result : -result;
+    });
+  }, [articles, googleAnalytics, sortBy, sortDir]);
 
   function notify(message: string, tone: Toast['tone'] = 'success') {
     setToast({ message, tone });
@@ -225,7 +237,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
       const params = new URLSearchParams({
         page: String(page),
         perPage: String(perPage),
-        sortBy,
+        sortBy: sortBy === 'lifetimeViews' ? 'modifiedAt' : sortBy,
         sortDir,
       });
       if (search.trim()) params.set('search', search.trim());
@@ -789,6 +801,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                   >
                     <option value="modifiedAt">Modified</option>
                     <option value="publishedAt">Published</option>
+                    <option value="lifetimeViews">Lifetime Views</option>
                     <option value="title">Title</option>
                   </FilterSelect>
                   <FilterSelect
@@ -886,7 +899,14 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                         />
                         <th className="px-4 py-3 text-left">Taxonomy</th>
                         <th className="px-4 py-3 text-left">Campaign Status</th>
-                        <th className="px-4 py-3 text-left">Lifetime Views</th>
+                        <SortableHead
+                          active={sortBy === 'lifetimeViews'}
+                          label="Lifetime Views"
+                          onClick={() => {
+                            setSortBy('lifetimeViews');
+                            setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'));
+                          }}
+                        />
                         <SortableHead
                           active={sortBy === 'publishedAt'}
                           label="Published"
@@ -909,8 +929,8 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                             Loading WordPress posts
                           </td>
                         </tr>
-                      ) : articles.length ? (
-                        articles.map((article) => (
+                      ) : visibleArticles.length ? (
+                        visibleArticles.map((article) => (
                           <HubRow
                             analytics={googleAnalytics[article.id]}
                             article={article}
@@ -947,8 +967,8 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                       <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                       Loading WordPress posts
                     </div>
-                  ) : articles.length ? (
-                    articles.map((article) => (
+                  ) : visibleArticles.length ? (
+                    visibleArticles.map((article) => (
                       <MobileArticleCard
                         analytics={googleAnalytics[article.id]}
                         article={article}
