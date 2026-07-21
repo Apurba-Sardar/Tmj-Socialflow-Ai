@@ -354,17 +354,14 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           }),
         ]);
 
-      if (
-        !supportedResponse.ok ||
-        !channelsResponse.ok ||
-        !summaryResponse.ok ||
-        !promptsResponse.ok
-      ) {
+      if (!supportedResponse.ok || !channelsResponse.ok || !summaryResponse.ok) {
         throw new Error('Unable to load social channel settings.');
       }
 
       const nextSupported = (await supportedResponse.json()) as SupportedPlatform[];
-      const nextPrompts = (await promptsResponse.json()) as PromptTemplate[];
+      const nextPrompts = promptsResponse.ok
+        ? ((await promptsResponse.json()) as PromptTemplate[])
+        : [];
       setSupported(nextSupported);
       setChannels((await channelsResponse.json()) as ChannelAccount[]);
       setSummary((await summaryResponse.json()) as ChannelSummary);
@@ -383,6 +380,13 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         ) ?? nextPrompts[0];
       if (currentPrompt) {
         hydratePromptForm(currentPrompt);
+      } else if (!promptsResponse.ok) {
+        notify(
+          await responseErrorMessage(
+            promptsResponse,
+            'Prompt templates could not load. Redeploy the backend and run Prisma migrations.',
+          ),
+        );
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Channel settings failed to load.');
@@ -686,7 +690,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       });
 
       if (!response.ok) {
-        throw new Error('Could not save this prompt template.');
+        throw new Error(await responseErrorMessage(response, 'Could not save this prompt template.'));
       }
 
       notify('Image prompt template saved.');
@@ -712,7 +716,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       );
 
       if (!response.ok) {
-        throw new Error('Could not reset this prompt template.');
+        throw new Error(await responseErrorMessage(response, 'Could not reset this prompt template.'));
       }
 
       const resetTemplate = (await response.json()) as PromptTemplate;
@@ -747,7 +751,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       });
 
       if (!response.ok) {
-        throw new Error('Could not preview this prompt.');
+        throw new Error(await responseErrorMessage(response, 'Could not preview this prompt.'));
       }
 
       const result = (await response.json()) as { prompt: string };
@@ -1668,6 +1672,17 @@ function parseScopes(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as
+    | { message?: string | string[]; error?: string }
+    | null;
+  const message = Array.isArray(payload?.message)
+    ? payload.message.join(' ')
+    : payload?.message;
+
+  return payload?.error ?? message ?? fallback;
 }
 
 function appendUniqueLine(current: string, next: string): string {

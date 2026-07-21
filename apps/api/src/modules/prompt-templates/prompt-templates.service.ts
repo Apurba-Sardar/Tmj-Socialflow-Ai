@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Role, SocialPlatform } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/types.js';
@@ -90,6 +90,8 @@ const defaultPromptTemplates: Record<
 
 @Injectable()
 export class PromptTemplatesService {
+  private readonly logger = new Logger(PromptTemplatesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   defaults() {
@@ -103,7 +105,17 @@ export class PromptTemplatesService {
 
   async list(user: AuthenticatedUser) {
     const organizationId = await this.defaultOrganizationId(user.id);
-    await this.ensureDefaults(organizationId, user.id);
+    try {
+      await this.ensureDefaults(organizationId, user.id);
+    } catch (error) {
+      this.logger.warn(
+        {
+          error: error instanceof Error ? error.message : 'Unknown prompt default seed error.',
+          organizationId,
+        },
+        'Prompt template defaults could not be ensured.',
+      );
+    }
 
     return this.prisma.promptTemplate.findMany({
       where: this.visibleWhere(organizationId),
