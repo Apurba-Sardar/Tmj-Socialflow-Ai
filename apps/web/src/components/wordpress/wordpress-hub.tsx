@@ -489,7 +489,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
           {sidebar}
         </aside>
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 backdrop-blur-2xl dark:border-white/10">
+          <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
             <div className="mx-auto flex max-w-[98rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <Button
                 aria-label="Open navigation"
@@ -536,7 +536,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
             </div>
           </header>
 
-          <main className="sf-page-enter mx-auto flex w-full max-w-[98rem] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+          <main className="sf-page-enter mx-auto flex w-full max-w-[98rem] flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
             {toast ? (
               <div
                 className={cn(

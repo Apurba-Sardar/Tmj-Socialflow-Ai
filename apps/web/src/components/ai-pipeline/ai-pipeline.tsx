@@ -270,7 +270,7 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
 
   return (
     <div className="sf-app-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 backdrop-blur-2xl dark:border-white/10">
+      <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
         <div className="mx-auto flex max-w-[96rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <BrandIcon className="h-10 w-10 rounded-xl" priority />
           <div className="min-w-0 flex-1">
@@ -286,7 +286,7 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
         </div>
       </header>
 
-      <main className="sf-page-enter mx-auto grid w-full max-w-[96rem] gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="sf-page-enter mx-auto grid w-full max-w-[96rem] gap-4 px-4 py-5 sm:px-6 lg:px-8">
         {message ? (
           <div className="fixed right-4 top-20 z-40 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 shadow-2xl backdrop-blur dark:text-sky-200">
             {message}

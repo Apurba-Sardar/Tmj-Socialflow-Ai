@@ -663,7 +663,7 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b border-border/70 bg-background/82 backdrop-blur-2xl dark:border-white/10">
+          <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
             <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 xl:px-8">
               <Button
                 aria-label="Open navigation"

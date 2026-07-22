@@ -168,7 +168,7 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="sf-app-bg min-h-screen text-foreground">
       <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
         <MediaSidebar user={user} />
       </Sheet>
@@ -177,7 +177,7 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
           <MediaSidebar user={user} />
         </aside>
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
+          <header className="sf-premium-header sticky top-0 z-30">
             <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
               <Button
                 aria-label="Open navigation"
@@ -212,7 +212,7 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
             </div>
           </header>
 
-          <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[16rem_1fr_22rem] lg:px-8">
+          <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[15rem_1fr_21rem] lg:px-8">
             <FilterPanel
               availableTags={availableTags}
               collections={collections}

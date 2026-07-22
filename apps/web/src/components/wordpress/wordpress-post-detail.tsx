@@ -436,7 +436,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
 
   return (
     <div className="sf-app-bg min-h-screen text-foreground transition-colors">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 backdrop-blur-2xl dark:border-white/10">
+      <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
         <div className="mx-auto flex max-w-[92rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <Button asChild size="sm" variant="ghost">
             <Link href="/wordpress-hub">
@@ -454,6 +454,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <Button
+            className="shrink-0"
             disabled={generating}
             onClick={() => {
               void generateCampaign();
@@ -470,7 +471,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         </div>
       </header>
 
-      <main className="sf-page-enter mx-auto flex w-full max-w-[92rem] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="sf-page-enter sf-premium-shell">
         {message ? (
           <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 shadow-2xl backdrop-blur dark:text-sky-200">
             {message}
@@ -486,7 +487,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
           </div>
         ) : article ? (
           <>
-            <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] xl:items-end">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">WP #{article.wordpressId}</Badge>
@@ -495,10 +496,10 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
                   </Badge>
                   <Badge variant="outline">{article.authorName ?? 'Unknown author'}</Badge>
                 </div>
-                <h1 className="text-3xl font-semibold tracking-normal text-slate-950 dark:text-white">
+                <h1 className="max-w-5xl text-2xl font-semibold leading-tight tracking-normal text-slate-950 dark:text-white sm:text-3xl">
                   {article.title}
                 </h1>
-                <p className="max-w-4xl text-sm text-muted-foreground">{article.excerpt}</p>
+                <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{article.excerpt}</p>
               </div>
               <div className="sf-card grid grid-cols-3 gap-2 rounded-xl border border-border bg-card/80 p-2 dark:border-white/10">
                 <DetailStat label="Campaigns" value={String(campaigns.length)} />
@@ -507,13 +508,13 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
               </div>
             </section>
 
-            <div className="flex gap-2 overflow-x-auto border-b border-border pb-2 dark:border-white/10">
+            <div className="flex gap-1.5 overflow-x-auto border-b border-border pb-2 dark:border-white/10">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     className={cn(
-                      'inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
+                      'inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition',
                       activeTab === tab.label
                         ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -678,14 +679,14 @@ function GeneratedContentTab({
   return (
     <section className="grid gap-4">
       <Card className="border-border/80 bg-card/80 dark:border-white/10 dark:bg-white/[0.04]">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
+        <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <p className="text-sm font-semibold">Generated channel drafts</p>
             <p className="text-xs text-muted-foreground">
               {String(drafts.length)} drafts, {String(approvableCount)} waiting for approval.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <Button className="h-8 px-2" onClick={onToggleAll} size="sm" variant="outline">
               {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
               {allSelected ? 'Clear selection' : 'Select all'}
@@ -713,7 +714,7 @@ function GeneratedContentTab({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2">
         {drafts.map((draft) => {
           const selected = selectedDraftIds.includes(draft.id);
           const busy = busyDraftId === draft.id || busyDraftId === 'approve-selected';
@@ -727,7 +728,7 @@ function GeneratedContentTab({
               key={draft.id}
             >
               <button
-                className="flex w-full items-center justify-between gap-3 border-b border-border/70 p-3 text-left transition hover:bg-muted/60 dark:border-white/10 dark:hover:bg-white/[0.04]"
+                className="flex w-full items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5 text-left transition hover:bg-muted/60 dark:border-white/10 dark:hover:bg-white/[0.04]"
                 onClick={() => {
                   onToggleDraft(draft.id);
                 }}
@@ -749,31 +750,38 @@ function GeneratedContentTab({
                   {titleCase(draft.status)}
                 </Badge>
               </button>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-base">{titleCase(draft.platform)}</CardTitle>
-                  <Badge variant="outline">{formatDate(draft.createdAt)}</Badge>
+              <CardHeader className="px-3 pb-2 pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CardTitle className="text-base">{titleCase(draft.platform)}</CardTitle>
+                    <Badge variant="secondary">{platformShapeLabel(draft.platform)}</Badge>
+                  </div>
+                  <Badge className="shrink-0" variant="outline">
+                    {formatDate(draft.createdAt)}
+                  </Badge>
                 </div>
-                <CardDescription>{draft.title}</CardDescription>
+                <CardDescription className="line-clamp-2">{draft.title}</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3">
+              <CardContent className="grid gap-3 px-3 pb-3">
                 {draft.mediaUrl ? (
-                  <div className="overflow-hidden rounded-xl border border-border bg-background/70 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div
+                    className={cn(
+                      'flex items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/30 dark:border-white/10 dark:bg-white/[0.03]',
+                      draftImageFrameClass(draft.platform),
+                    )}
+                  >
                     <img
                       alt={`${titleCase(draft.platform)} generated campaign visual`}
-                      className={cn(
-                        'w-full object-cover',
-                        draft.platform === 'PINTEREST' ? 'aspect-[2/3]' : 'aspect-video',
-                      )}
+                      className="h-full w-full object-contain"
                       src={draft.mediaUrl}
                     />
                   </div>
                 ) : (
-                  <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-border bg-background/70 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-border bg-background/70 px-4 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
                     Visual will be generated with the next campaign run.
                   </div>
                 )}
-                <p className="rounded-md border border-border bg-background/70 p-3 text-sm leading-6 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="max-h-36 overflow-auto rounded-md border border-border bg-background/70 p-3 text-sm leading-6 dark:border-white/10 dark:bg-white/[0.03]">
                   {draft.body}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -783,9 +791,9 @@ function GeneratedContentTab({
                     </Badge>
                   ))}
                 </div>
-                <div className="flex flex-wrap gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap">
                   <Button
-                    className="h-8 px-2"
+                    className="h-8 justify-center px-2"
                     disabled={busyDraftId !== null || draft.status !== 'DRAFT'}
                     onClick={() => {
                       onApproveDraft(draft);
@@ -801,7 +809,7 @@ function GeneratedContentTab({
                     Approve
                   </Button>
                   <Button
-                    className="h-8 px-2"
+                    className="h-8 justify-center px-2"
                     disabled={busyDraftId !== null || draft.status === 'PUBLISHED'}
                     onClick={() => {
                       onPublishNow(draft);
@@ -816,7 +824,7 @@ function GeneratedContentTab({
                     Post now
                   </Button>
                   <Button
-                    className="h-8 px-2"
+                    className="h-8 justify-center px-2"
                     disabled={
                       busyDraftId !== null ||
                       draft.status === 'SCHEDULED' ||
@@ -835,7 +843,7 @@ function GeneratedContentTab({
                     Schedule tomorrow
                   </Button>
                   <Button
-                    className="h-8 px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
+                    className="h-8 justify-center px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
                     disabled={busyDraftId !== null}
                     onClick={() => {
                       onDeleteDraft(draft);
@@ -869,7 +877,7 @@ function MediaAssetsTab({
   drafts: WordPressSocialDraft[];
   generations: WordPressCampaignGeneration[];
 }) {
-  const images: { id: string; url: string; label: string }[] = [];
+  const images: { id: string; url: string; label: string; platform?: string }[] = [];
 
   if (article.featuredImageUrl) {
     images.push({
@@ -881,7 +889,12 @@ function MediaAssetsTab({
 
   generations.forEach((item) => {
     if (item.imageUrl) {
-      images.push({ id: item.id, url: item.imageUrl, label: titleCase(item.platform) });
+      images.push({
+        id: item.id,
+        url: item.imageUrl,
+        label: titleCase(item.platform),
+        platform: item.platform,
+      });
     }
   });
 
@@ -891,6 +904,7 @@ function MediaAssetsTab({
         id: draft.id,
         url: draft.mediaUrl,
         label: `${titleCase(draft.platform)} draft image`,
+        platform: draft.platform,
       });
     }
   });
@@ -906,8 +920,18 @@ function MediaAssetsTab({
           className="sf-card overflow-hidden rounded-xl border border-border bg-card dark:border-white/10"
           key={image.id}
         >
-          <img alt={image.label} className="aspect-video w-full object-cover" src={image.url} />
-          <div className="p-3 text-sm font-medium">{image.label}</div>
+          <div
+            className={cn(
+              'flex items-center justify-center bg-muted/30 dark:bg-white/[0.03]',
+              mediaAssetFrameClass(image.platform),
+            )}
+          >
+            <img alt={image.label} className="h-full w-full object-contain" src={image.url} />
+          </div>
+          <div className="flex items-center justify-between gap-3 p-3 text-sm font-medium">
+            <span className="min-w-0 truncate">{image.label}</span>
+            {image.platform ? <Badge variant="secondary">{platformShapeLabel(image.platform)}</Badge> : null}
+          </div>
         </div>
       ))}
     </section>
@@ -1087,11 +1111,63 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function DetailStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-background/70 px-4 py-3 text-center dark:bg-white/[0.04]">
-      <div className="text-lg font-semibold">{value}</div>
+    <div className="rounded-lg bg-background/70 px-3 py-2 text-center dark:bg-white/[0.04]">
+      <div className="text-base font-semibold">{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
+}
+
+function draftImageFrameClass(platform: string) {
+  switch (platform.toUpperCase()) {
+    case 'PINTEREST':
+      return 'aspect-[4/5] max-h-[34rem] sm:aspect-[2/3]';
+    case 'INSTAGRAM':
+    case 'FACEBOOK':
+      return 'aspect-square max-h-[28rem]';
+    case 'LINKEDIN':
+    case 'X':
+    case 'TWITTER':
+      return 'aspect-[16/9] max-h-[20rem]';
+    default:
+      return 'aspect-video max-h-[22rem]';
+  }
+}
+
+function mediaAssetFrameClass(platform?: string) {
+  if (!platform) {
+    return 'aspect-video max-h-[18rem]';
+  }
+
+  switch (platform.toUpperCase()) {
+    case 'PINTEREST':
+      return 'aspect-[4/5] max-h-[28rem] sm:aspect-[2/3]';
+    case 'INSTAGRAM':
+    case 'FACEBOOK':
+      return 'aspect-square max-h-[22rem]';
+    case 'LINKEDIN':
+    case 'X':
+    case 'TWITTER':
+      return 'aspect-[16/9] max-h-[16rem]';
+    default:
+      return 'aspect-video max-h-[18rem]';
+  }
+}
+
+function platformShapeLabel(platform: string) {
+  switch (platform.toUpperCase()) {
+    case 'PINTEREST':
+      return 'Vertical';
+    case 'INSTAGRAM':
+    case 'FACEBOOK':
+      return 'Square';
+    case 'LINKEDIN':
+    case 'X':
+    case 'TWITTER':
+      return 'Landscape';
+    default:
+      return 'Visual';
+  }
 }
 
 function EmptyState({ title }: { title: string }) {

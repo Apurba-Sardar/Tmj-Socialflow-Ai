@@ -485,7 +485,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
               notify(`Switched to ${nextDarkMode ? 'dark' : 'light'} mode.`, 'info');
             }}
           />
-          <main className="mx-auto flex w-full max-w-[86rem] flex-col gap-5 overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
+          <main className="mx-auto flex w-full max-w-[86rem] flex-col gap-4 overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
             <Hero
               pendingApprovals={pendingApprovals}
               retryingCount={retryingCount}
@@ -719,7 +719,7 @@ function DashboardHeader({
   onThemeToggle: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl dark:border-white/10">
+    <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
       <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
         <Button
           aria-label="Open navigation"

@@ -767,7 +767,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
 
   return (
     <div className="sf-app-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-2xl dark:border-white/10">
+      <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
         <div className="mx-auto flex max-w-[92rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <Button asChild size="sm" variant="ghost">
             <Link href="/dashboard">
@@ -788,7 +788,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         </div>
       </header>
 
-      <main className="sf-page-enter mx-auto flex w-full max-w-[92rem] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="sf-page-enter sf-premium-shell">
         {message ? (
           <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 dark:text-sky-200">
             {message}
@@ -820,7 +820,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           </Card>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.4fr]">
+        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.4fr]">
           <Card className="border-border/80 bg-card/95 dark:border-white/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -1055,7 +1055,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
           </Card>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.4fr]">
+        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.4fr]">
           <Card className="border-border/80 bg-card/95 dark:border-white/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
