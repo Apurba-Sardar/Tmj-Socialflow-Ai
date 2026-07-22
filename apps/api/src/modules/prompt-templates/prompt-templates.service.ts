@@ -3,6 +3,9 @@ import { Prisma, Role, SocialPlatform } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { facebookArticleImagePrompt } from './facebook-article-image-prompt.js';
+import { instagramArticleImagePrompt } from './instagram-article-image-prompt.js';
+import { pinterestArticleImagePrompt } from './pinterest-article-image-prompt.js';
 import type { PreviewPromptTemplateDto, UpsertPromptTemplateDto } from './prompt-templates.dto.js';
 
 export const PROMPT_PURPOSE_IMAGE = 'IMAGE_GENERATION';
@@ -37,36 +40,13 @@ const defaultPromptTemplates: Record<
   }
 > = {
   [SocialPlatform.PINTEREST]: {
-    name: 'Pinterest mixed editorial pin image',
-    description:
-      'Tall save-worthy pins with varied quote, poster, photo, collage, and editorial formats.',
-    template:
-      'Create a tall vertical Pinterest-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: choose the strongest postable format for this article, not a repeated cartoon template. Use one of these formats when appropriate: emotional text-over-photo poster, elegant quote card, magazine-style educational cover, editorial collage, realistic lifestyle photograph with tasteful overlay space, abstract mental-health concept art, or clean illustrated explainer. Make it feel like a Mind Family social post people would save and share.\n\nText treatment: short readable text is allowed only when it improves the asset, such as a concise quote, 3-6 word hook, or article-inspired headline. Keep text large, minimal, correctly spelled, and visually designed. Do not paste the full caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nBrand: content-first, no software branding, no platform label.',
-    negativePrompt:
-      'No platform label, social network name, UI, app logo, watermark, fake website chrome, tiny unreadable text, misspelled text, dense paragraphs, clutter, generic stock-photo styling, medical procedures, violent or fear-based imagery, or unrelated decoration.',
-    styleNotes:
-      'Vertical 2:3. Vary the format across posts: quote card, emotional photo poster, editorial collage, magazine cover, concept art, or clean explainer. Avoid defaulting to childish cartoons.',
+    ...pinterestArticleImagePrompt,
   },
   [SocialPlatform.INSTAGRAM]: {
-    name: 'Instagram mixed premium feed image',
-    description:
-      'Square feed images with realistic, quote-card, editorial, and concept-art variety.',
-    template:
-      'Create a square Instagram-ready image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: choose a premium feed format that fits the article: realistic lifestyle photo, emotional portrait-style concept, quote-card graphic, soft editorial collage, magazine-style mental-health visual, or refined illustration. Avoid repetitive cartoon parent-child scenes. The image should look like a finished Mind Family post, visually strong at feed size, warm, human, and shareable.\n\nText treatment: short readable text is allowed when useful, such as a concise quote or 3-7 word hook. Keep it large, clean, correctly spelled, and designed as part of the image. Do not paste the full caption.\n\nTopic safety guidance: {{topicGuidance}}\n\nMake it polished enough to publish on a brand account. No platform label.',
-    negativePrompt:
-      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, cheap template look, childish cartoon styling, busy infographic layouts, medical procedures, or sensational imagery.',
-    styleNotes:
-      'Square 1:1. Use varied premium formats: realistic lifestyle, quote card, editorial collage, emotional concept art, or refined illustration.',
+    ...instagramArticleImagePrompt,
   },
   [SocialPlatform.FACEBOOK]: {
-    name: 'Facebook Mind Family post image',
-    description: 'Shareable Facebook images in the style of Mind Family posts.',
-    template:
-      'Create a Facebook-ready Mind Family style image asset for a WordPress article.\n\nArticle title: {{articleTitle}}\nExcerpt: {{articleExcerpt}}\nCategories: {{categories}}\nArticle context: {{articleContext}}\n\nCreative direction: create a postable social image like a manually designed Facebook page asset, not a generic cartoon scene. Select the best format for the content: realistic family/mental-health photo poster, dramatic but tasteful concept art, quote card on paper/neutral background, magazine-style educational graphic, editorial collage, illustrated psychology metaphor, or warm lifestyle image with a designed text area. Make it unique to this article and emotionally clear.\n\nText treatment: short readable text is allowed and often preferred for Facebook, such as a concise quote, article-inspired headline, or 3-8 word hook. Keep text large, clean, correctly spelled, and visually designed. Do not include the full caption or hashtags.\n\nTopic safety guidance: {{topicGuidance}}\n\nNo Facebook label, no SocialFlow branding, no app UI.',
-    negativePrompt:
-      'No platform label, social network name, UI, app logo, watermark, tiny unreadable text, misspelled text, dense paragraphs, cheap meme template, repeated generic cartoon families, clinical drama, gore, fearmongering, or unrelated generic objects.',
-    styleNotes:
-      'Square/landscape. Match Mind Family page style: quote cards, text-over-photo posters, emotional concept art, magazine-style mental-health graphics, and premium educational visuals.',
+    ...facebookArticleImagePrompt,
   },
   [SocialPlatform.LINKEDIN]: {
     name: 'LinkedIn professional research image',
@@ -341,7 +321,10 @@ export class PromptTemplatesService {
               updatedById: userId,
             },
           });
-        } else if (category === 'ARTICLE' && this.shouldUpgradeLegacyDefault(existing)) {
+        } else if (
+          category === 'ARTICLE' &&
+          this.shouldUpgradeDefault(platform as SocialPlatform, existing, template)
+        ) {
           await this.prisma.promptTemplate.update({
             where: { id: existing.id },
             data: {
@@ -357,6 +340,34 @@ export class PromptTemplatesService {
         }
       }
     }
+  }
+
+  private shouldUpgradeDefault(
+    platform: SocialPlatform,
+    existing: {
+      name: string;
+      template: string;
+      styleNotes: string | null;
+    },
+    template: {
+      name: string;
+      template: string;
+    },
+  ) {
+    const importedArticlePromptPlatforms = new Set<SocialPlatform>([
+      SocialPlatform.FACEBOOK,
+      SocialPlatform.INSTAGRAM,
+      SocialPlatform.PINTEREST,
+    ]);
+
+    if (
+      importedArticlePromptPlatforms.has(platform) &&
+      (existing.name !== template.name || !existing.template.includes('MANDATORY OUTPUT FORMAT'))
+    ) {
+      return true;
+    }
+
+    return this.shouldUpgradeLegacyDefault(existing);
   }
 
   private shouldUpgradeLegacyDefault(template: {

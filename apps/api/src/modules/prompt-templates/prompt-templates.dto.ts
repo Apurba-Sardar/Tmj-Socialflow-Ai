@@ -27,17 +27,17 @@ export class UpsertPromptTemplateDto {
 
   @IsString()
   @MinLength(80)
-  @MaxLength(8000)
+  @MaxLength(25000)
   template!: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(3000)
+  @MaxLength(8000)
   negativePrompt?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(8000)
   styleNotes?: string;
 
   @IsOptional()

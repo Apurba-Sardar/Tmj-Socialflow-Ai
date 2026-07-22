@@ -25,6 +25,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { facebookArticleImagePrompt } from './facebook-article-image-prompt';
+import { instagramArticleImagePrompt } from './instagram-article-image-prompt';
+import { pinterestArticleImagePrompt } from './pinterest-article-image-prompt';
 import type { AuthenticatedUser } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
@@ -162,6 +165,12 @@ const promptContentCategories: { value: PromptContentCategory; label: string; he
     help: 'Updates, reports, announcements, studies, and timely story visuals.',
   },
 ];
+
+const articlePromptPresets = {
+  FACEBOOK: facebookArticleImagePrompt,
+  INSTAGRAM: instagramArticleImagePrompt,
+  PINTEREST: pinterestArticleImagePrompt,
+} as const;
 
 const platformTone: Record<Platform, string> = {
   PINTEREST: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
@@ -1745,6 +1754,23 @@ function promptTemplateCategory(template: Pick<PromptTemplate, 'contentCategory'
 }
 
 function defaultPromptForm(platform: Platform, contentCategory: PromptContentCategory): PromptForm {
+  const articlePreset =
+    contentCategory === 'ARTICLE'
+      ? articlePromptPresets[platform as keyof typeof articlePromptPresets]
+      : undefined;
+
+  if (articlePreset) {
+    return {
+      platform,
+      contentCategory,
+      name: articlePreset.name,
+      description: articlePreset.description,
+      template: articlePreset.template,
+      negativePrompt: articlePreset.negativePrompt,
+      styleNotes: articlePreset.styleNotes,
+    };
+  }
+
   return {
     platform,
     contentCategory,
