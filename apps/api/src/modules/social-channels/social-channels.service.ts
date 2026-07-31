@@ -141,6 +141,10 @@ export class SocialChannelsService {
     }
 
     const token = await this.exchangeCode(config, dto.code, state.verifier);
+    const xUser =
+      platform === SocialPlatform.X && token.access_token
+        ? await this.fetchXUser(token.access_token)
+        : null;
     const organizationId = await this.defaultOrganizationId(state.userId);
     const supported = supportedPlatforms.find((item) => item.platform === platform);
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined;
@@ -155,9 +159,11 @@ export class SocialChannelsService {
         organizationId,
         connectedById: state.userId,
         platform,
-        displayName: facebookPage?.name ?? `${supported?.label ?? platform} OAuth account`,
-        handle: facebookPage?.id ?? token.screen_name ?? undefined,
-        externalAccountId: facebookPage?.id ?? token.user_id ?? token.account_id ?? undefined,
+        displayName:
+          facebookPage?.name ?? xUser?.name ?? `${supported?.label ?? platform} OAuth account`,
+        handle: facebookPage?.id ?? token.screen_name ?? xUser?.username ?? undefined,
+        externalAccountId:
+          facebookPage?.id ?? token.user_id ?? token.account_id ?? xUser?.id ?? undefined,
         accountType: platformAccountType(platform),
         authType: SocialChannelAuthType.OAUTH,
         scopes:
@@ -187,6 +193,12 @@ export class SocialChannelsService {
                 facebookPageId: facebookPage.id,
                 facebookPageName: facebookPage.name,
                 facebookPageTasks: facebookPage.tasks,
+              }
+            : {}),
+          ...(xUser
+            ? {
+                xUserId: xUser.id,
+                xUsername: xUser.username,
               }
             : {}),
           note:
@@ -606,6 +618,19 @@ export class SocialChannelsService {
     return this.providerJson<TokenResponse>(response, 'OAuth token exchange failed.');
   }
 
+  private async fetchXUser(accessToken: string): Promise<XUser | null> {
+    try {
+      const response = await fetch('https://api.x.com/2/users/me?user.fields=name,username', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await this.providerJson<{ data?: XUser }>(response, 'X user lookup failed.');
+      return payload.data ?? null;
+    } catch {
+      // Profile lookup is helpful for display only; publishing can still use the token.
+      return null;
+    }
+  }
+
   private async publishToProvider(
     account: SocialChannelAccountRecord,
     accessToken: string,
@@ -966,6 +991,12 @@ interface TokenResponse {
   screen_name?: string;
   user_id?: string;
   account_id?: string;
+}
+
+interface XUser {
+  id: string;
+  name?: string;
+  username?: string;
 }
 
 interface FacebookPageCredential {

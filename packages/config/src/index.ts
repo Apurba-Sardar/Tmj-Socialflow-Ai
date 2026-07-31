@@ -60,6 +60,9 @@ const environmentSchema = z.object({
     .url()
     .default('http://localhost:4000/api/pinterest/oauth/callback'),
   PINTEREST_TOKEN_ENCRYPTION_KEY: z.string().min(32),
+  X_CLIENT_ID: z.string().optional(),
+  X_CLIENT_SECRET: z.string().optional(),
+  X_REDIRECT_URI: z.string().url().optional(),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

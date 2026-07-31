@@ -67,10 +67,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <Card className="w-full max-w-md border-white/10 bg-background/80 shadow-2xl shadow-black/10 dark:bg-[#09090b]/78">
-      <CardHeader className="pb-5">
+    <Card className="w-full max-w-md border-white/20 bg-background/85 shadow-2xl shadow-slate-950/10 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b1220]/88">
+      <CardHeader className="pb-6">
         <BrandIcon className="mb-3 h-11 w-11" priority />
-        <CardTitle className="text-3xl">{titleForMode(mode)}</CardTitle>
+        <p className="sf-section-kicker">Welcome back</p>
+        <CardTitle className="mt-2 text-3xl tracking-[-0.03em]">{titleForMode(mode)}</CardTitle>
         <CardDescription>{descriptionForMode(mode)}</CardDescription>
       </CardHeader>
       <CardContent>

@@ -499,11 +499,7 @@ export function EnterpriseDashboard({ user }: { user: AuthenticatedUser }) {
             ) : null}
             {searchQuery ? (
               <SearchSummary
-                count={
-                  filteredSchedule.length +
-                  filteredApprovals.length +
-                  filteredActivity.length
-                }
+                count={filteredSchedule.length + filteredApprovals.length + filteredActivity.length}
                 onClear={() => {
                   setSearchQuery('');
                 }}
@@ -619,15 +615,16 @@ function DashboardSidebar({
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full min-h-screen flex-col px-3 py-4">
-      <div className="flex items-center gap-3 rounded-md px-2 py-2">
+    <div className="flex h-full min-h-screen flex-col px-4 py-5">
+      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/35 px-3 py-3 dark:border-white/10 dark:bg-white/[0.025]">
         <BrandIcon className="h-10 w-10 rounded-xl" priority />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">TMJ SocialFlow AI</p>
           <p className="truncate text-xs text-muted-foreground">Automation OS</p>
         </div>
       </div>
-      <nav className="mt-6 space-y-1">
+      <p className="sf-section-kicker mt-8 px-3">Workspace</p>
+      <nav className="mt-3 space-y-1.5">
         {navigation.map((item) => {
           const active =
             pathname === item.href ||
@@ -640,7 +637,7 @@ function DashboardSidebar({
           return (
             <Link
               className={cn(
-                'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
+                'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
                 active
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-blue-950/20'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.06]',
@@ -660,10 +657,8 @@ function DashboardSidebar({
         })}
       </nav>
       <Separator className="my-5" />
-      <div className="space-y-3 px-2">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Platforms
-        </p>
+      <div className="space-y-3 px-3">
+        <p className="sf-section-kicker">Channels</p>
         {platforms.map((platform) => (
           <a
             className="flex items-center gap-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -675,7 +670,7 @@ function DashboardSidebar({
           </a>
         ))}
       </div>
-      <div className="mt-auto rounded-md border bg-muted/40 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="mt-auto rounded-2xl border bg-muted/40 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-500 text-sm font-semibold text-slate-950">
             {initialsForEmail(user.email)}

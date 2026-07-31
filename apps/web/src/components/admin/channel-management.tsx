@@ -12,6 +12,7 @@ import {
   KeyRound,
   Loader2,
   Plus,
+  UserRound,
   RadioTower,
   RefreshCw,
   ShieldCheck,
@@ -700,7 +701,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       });
 
       if (!response.ok) {
-        throw new Error(await responseErrorMessage(response, 'Could not save this prompt template.'));
+        throw new Error(
+          await responseErrorMessage(response, 'Could not save this prompt template.'),
+        );
       }
 
       notify('Image prompt template saved.');
@@ -726,7 +729,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
       );
 
       if (!response.ok) {
-        throw new Error(await responseErrorMessage(response, 'Could not reset this prompt template.'));
+        throw new Error(
+          await responseErrorMessage(response, 'Could not reset this prompt template.'),
+        );
       }
 
       const resetTemplate = (await response.json()) as PromptTemplate;
@@ -748,15 +753,15 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         {
           method: 'POST',
           body: {
-          platform: promptForm.platform,
-          purpose: 'IMAGE_GENERATION',
-          contentCategory: promptForm.contentCategory,
-          title: 'Fat Loss Research Peptides: A Scientific Review',
-          excerpt:
-            'A careful article about peptide research, metabolism, and weight-management science.',
-          content:
-            'Peptides are short chains of amino acids discussed in research contexts. The visual should be scientific, careful, and non-prescriptive.',
-          categories: 'Guest Posts, Health Science, Peptides',
+            platform: promptForm.platform,
+            purpose: 'IMAGE_GENERATION',
+            contentCategory: promptForm.contentCategory,
+            title: 'Fat Loss Research Peptides: A Scientific Review',
+            excerpt:
+              'A careful article about peptide research, metabolism, and weight-management science.',
+            content:
+              'Peptides are short chains of amino acids discussed in research contexts. The visual should be scientific, careful, and non-prescriptive.',
+            categories: 'Guest Posts, Health Science, Peptides',
           },
         },
       );
@@ -820,7 +825,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
             </p>
           </div>
           <Card className="border-border/80 bg-card/95 dark:border-white/10">
-            <CardContent className="grid grid-cols-4 gap-2 p-3">
+            <CardContent className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
               <Metric label="Total" value={summary.total} />
               <Metric label="Connected" value={summary.connected} tone="success" />
               <Metric label="Needs action" value={summary.actionRequired} tone="warning" />
@@ -886,101 +891,126 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 />
               ) : null}
 
-              <Field label="Display name">
-                <Input
-                  onChange={(event) => {
-                    setForm((value) => ({ ...value, displayName: event.target.value }));
-                  }}
-                  placeholder="Mind Family Pinterest"
-                  value={form.displayName}
-                />
-              </Field>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Handle">
+              {form.platform === 'X' ? (
+                <div className="flex gap-3 rounded-xl border border-zinc-400/30 bg-zinc-500/[0.07] p-4 dark:border-zinc-500/30 dark:bg-white/[0.04]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                    <UserRound className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">Connect your X account securely</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      OAuth will identify the account and save its publishing permission. You do not
+                      need to paste an access token or X user ID.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className={cn(form.platform === 'X' ? 'hidden' : 'contents')}>
+                <Field label="Display name">
                   <Input
                     onChange={(event) => {
-                      setForm((value) => ({ ...value, handle: event.target.value }));
+                      setForm((value) => ({ ...value, displayName: event.target.value }));
                     }}
-                    placeholder="@mindfamily"
-                    value={form.handle}
+                    placeholder="Mind Family Pinterest"
+                    value={form.displayName}
                   />
                 </Field>
-                <Field label="Account ID">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Handle">
+                    <Input
+                      onChange={(event) => {
+                        setForm((value) => ({ ...value, handle: event.target.value }));
+                      }}
+                      placeholder="@mindfamily"
+                      value={form.handle}
+                    />
+                  </Field>
+                  <Field label="Account ID">
+                    <Input
+                      onChange={(event) => {
+                        setForm((value) => ({ ...value, externalAccountId: event.target.value }));
+                      }}
+                      placeholder={selectedSetup.accountIdLabel}
+                      value={form.externalAccountId}
+                    />
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {selectedSetup.accountIdHelp}
+                    </p>
+                  </Field>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Account type">
+                    <Input
+                      onChange={(event) => {
+                        setForm((value) => ({ ...value, accountType: event.target.value }));
+                      }}
+                      placeholder="Page, Business, Board"
+                      value={form.accountType}
+                    />
+                  </Field>
+                  <Field label="Token expires">
+                    <Input
+                      onChange={(event) => {
+                        setForm((value) => ({ ...value, tokenExpiresAt: event.target.value }));
+                      }}
+                      type="datetime-local"
+                      value={form.tokenExpiresAt}
+                    />
+                  </Field>
+                </div>
+                <Field label="Scopes">
                   <Input
                     onChange={(event) => {
-                      setForm((value) => ({ ...value, externalAccountId: event.target.value }));
+                      setForm((value) => ({ ...value, scopes: event.target.value }));
                     }}
-                    placeholder={selectedSetup.accountIdLabel}
-                    value={form.externalAccountId}
+                    value={form.scopes}
                   />
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {selectedSetup.accountIdHelp}
-                  </p>
+                </Field>
+                <Field label="Access token">
+                  <Input
+                    onChange={(event) => {
+                      setForm((value) => ({ ...value, accessToken: event.target.value }));
+                    }}
+                    placeholder="Paste token for manual setup"
+                    type="password"
+                    value={form.accessToken}
+                  />
+                </Field>
+                <Field label="Refresh token">
+                  <Input
+                    onChange={(event) => {
+                      setForm((value) => ({ ...value, refreshToken: event.target.value }));
+                    }}
+                    placeholder="Optional"
+                    type="password"
+                    value={form.refreshToken}
+                  />
                 </Field>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Account type">
-                  <Input
-                    onChange={(event) => {
-                      setForm((value) => ({ ...value, accountType: event.target.value }));
-                    }}
-                    placeholder="Page, Business, Board"
-                    value={form.accountType}
-                  />
-                </Field>
-                <Field label="Token expires">
-                  <Input
-                    onChange={(event) => {
-                      setForm((value) => ({ ...value, tokenExpiresAt: event.target.value }));
-                    }}
-                    type="datetime-local"
-                    value={form.tokenExpiresAt}
-                  />
-                </Field>
-              </div>
-              <Field label="Scopes">
-                <Input
-                  onChange={(event) => {
-                    setForm((value) => ({ ...value, scopes: event.target.value }));
-                  }}
-                  value={form.scopes}
-                />
-              </Field>
-              <Field label="Access token">
-                <Input
-                  onChange={(event) => {
-                    setForm((value) => ({ ...value, accessToken: event.target.value }));
-                  }}
-                  placeholder="Paste token for manual setup"
-                  type="password"
-                  value={form.accessToken}
-                />
-              </Field>
-              <Field label="Refresh token">
-                <Input
-                  onChange={(event) => {
-                    setForm((value) => ({ ...value, refreshToken: event.target.value }));
-                  }}
-                  placeholder="Optional"
-                  type="password"
-                  value={form.refreshToken}
-                />
-              </Field>
               <div className="grid gap-3 sm:grid-cols-2">
+                {form.platform !== 'X' ? (
+                  <Button
+                    disabled={saving}
+                    onClick={() => {
+                      void addChannel();
+                    }}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                    Add manual channel
+                  </Button>
+                ) : null}
                 <Button
-                  disabled={saving}
-                  onClick={() => {
-                    void addChannel();
-                  }}
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <KeyRound className="h-4 w-4" />
+                  className={cn(
+                    form.platform === 'X'
+                      ? 'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 dark:border-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200'
+                      : '',
+                    form.platform === 'X' ? 'sm:col-span-2' : '',
                   )}
-                  Add manual channel
-                </Button>
-                <Button
                   disabled={oauthStarting || !selectedPlatform?.oauthConfigured}
                   onClick={() => {
                     void startOAuth(form.platform);
@@ -992,9 +1022,14 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   ) : (
                     <ExternalLink className="h-4 w-4" />
                   )}
-                  Connect real account
+                  {form.platform === 'X' ? 'Connect X account' : 'Connect real account'}
                 </Button>
               </div>
+              {form.platform === 'X' ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  You’ll be redirected to X to approve access, then returned here automatically.
+                </p>
+              ) : null}
               {!selectedPlatform?.oauthConfigured ? (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200">
                   Add {selectedSetup.credentialLabels.join(' and ')} to `.env`, restart the backend,
@@ -1350,7 +1385,9 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">{promptForm.platform}</Badge>
-                    <Badge variant="outline">{promptCategoryLabel(promptForm.contentCategory)}</Badge>
+                    <Badge variant="outline">
+                      {promptCategoryLabel(promptForm.contentCategory)}
+                    </Badge>
                   </div>
                 </div>
                 {promptPreview ? (
@@ -1508,10 +1545,22 @@ function ChannelCard({
           </div>
           <h3 className="mt-3 text-lg font-semibold">{channel.displayName}</h3>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            {channel.handle ? <span>{channel.handle}</span> : null}
+            {channel.handle ? (
+              <span>
+                {channel.platform === 'X' && !channel.handle.startsWith('@')
+                  ? `@${channel.handle}`
+                  : channel.handle}
+              </span>
+            ) : null}
             {channel.externalAccountId ? <span>ID: {channel.externalAccountId}</span> : null}
             {channel.accountType ? <span>{channel.accountType}</span> : null}
           </div>
+          {channel.platform === 'X' && channel.status === 'CONNECTED' ? (
+            <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Ready to publish text posts to X
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {channel.scopes.slice(0, 5).map((scope) => (
               <Badge key={scope} variant="outline">
@@ -1574,17 +1623,19 @@ function ChannelCard({
             <CheckCircle2 className="h-4 w-4" />
             Connect
           </Button>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              onStatus('DISCONNECTED');
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Disable
-          </Button>
+          {channel.status !== 'DISCONNECTED' ? (
+            <Button
+              disabled={busy}
+              onClick={() => {
+                onStatus('DISCONNECTED');
+              }}
+              size="sm"
+              variant="outline"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Disable
+            </Button>
+          ) : null}
           <Button disabled={busy} onClick={onRemove} size="sm" variant="destructive">
             <Trash2 className="h-4 w-4" />
             Remove
@@ -1703,12 +1754,13 @@ async function sendPromptTemplateRequest(
     return response;
   }
 
-  const payload = (await response.clone().json().catch(() => null)) as
-    | { message?: string | string[] }
-    | null;
+  const payload = (await response
+    .clone()
+    .json()
+    .catch(() => null)) as { message?: string | string[] } | null;
   const message = Array.isArray(payload?.message)
     ? payload.message.join(' ')
-    : payload?.message ?? '';
+    : (payload?.message ?? '');
 
   if (!message.includes('contentCategory') || !message.includes('should not exist')) {
     return response;
@@ -1720,12 +1772,11 @@ async function sendPromptTemplateRequest(
 }
 
 async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
-  const payload = (await response.json().catch(() => null)) as
-    | { message?: string | string[]; error?: string }
-    | null;
-  const message = Array.isArray(payload?.message)
-    ? payload.message.join(' ')
-    : payload?.message;
+  const payload = (await response.json().catch(() => null)) as {
+    message?: string | string[];
+    error?: string;
+  } | null;
+  const message = Array.isArray(payload?.message) ? payload.message.join(' ') : payload?.message;
 
   return payload?.error ?? message ?? fallback;
 }
@@ -1749,7 +1800,9 @@ function appendUniqueLine(current: string, next: string): string {
   return [...lines, cleanNext].join('\n');
 }
 
-function promptTemplateCategory(template: Pick<PromptTemplate, 'contentCategory'>): PromptContentCategory {
+function promptTemplateCategory(
+  template: Pick<PromptTemplate, 'contentCategory'>,
+): PromptContentCategory {
   return template.contentCategory ?? 'ARTICLE';
 }
 
@@ -1800,8 +1853,7 @@ function premiumImagePromptFor(platform: Platform, contentCategory: PromptConten
       'Content type direction: article mode. Create an evergreen educational or editorial image based on the article insight, practical lesson, or emotional theme.',
     QUOTES:
       'Content type direction: quote mode. Create a shareable quote-card or text-over-photo poster. One short quote or 3-10 word hook is allowed and preferred when it is readable, accurate, and beautifully composed.',
-    NEWS:
-      'Content type direction: news mode. Create a polished news/update visual with accurate editorial tone, serious clarity, and no clickbait. A concise headline-style hook is allowed when useful.',
+    NEWS: 'Content type direction: news mode. Create a polished news/update visual with accurate editorial tone, serious clarity, and no clickbait. A concise headline-style hook is allowed when useful.',
   };
 
   return [
