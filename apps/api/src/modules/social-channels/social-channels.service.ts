@@ -42,12 +42,7 @@ const supportedPlatforms = [
     platform: SocialPlatform.INSTAGRAM,
     label: 'Instagram Business',
     authType: SocialChannelAuthType.OAUTH,
-    requiredScopes: [
-      'instagram_basic',
-      'instagram_content_publish',
-      'pages_show_list',
-      'pages_read_engagement',
-    ],
+    requiredScopes: ['instagram_business_basic', 'instagram_business_content_publish'],
     setupHint:
       'Use an Instagram Professional account connected to a Facebook Page. OAuth will discover the account automatically.',
   },
@@ -158,15 +153,11 @@ export class SocialChannelsService {
       platform === SocialPlatform.FACEBOOK && token.access_token
         ? await this.findFacebookPageCredential(token.access_token, process.env.FACEBOOK_PAGE_ID)
         : null;
-    const instagramAccount =
+    const instagramUser =
       platform === SocialPlatform.INSTAGRAM && token.access_token
-        ? await this.findInstagramBusinessCredential(
-            token.access_token,
-            process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID,
-          )
+        ? await this.fetchInstagramUser(token.access_token)
         : null;
-    const accessToken =
-      facebookPage?.accessToken ?? instagramAccount?.accessToken ?? token.access_token;
+    const accessToken = facebookPage?.accessToken ?? token.access_token;
 
     const account = await this.prisma.socialChannelAccount.create({
       data: {
@@ -175,18 +166,18 @@ export class SocialChannelsService {
         platform,
         displayName:
           facebookPage?.name ??
-          instagramAccount?.name ??
+          instagramUser?.name ??
           xUser?.name ??
           `${supported?.label ?? platform} OAuth account`,
         handle:
           facebookPage?.id ??
-          instagramAccount?.username ??
+          instagramUser?.username ??
           token.screen_name ??
           xUser?.username ??
           undefined,
         externalAccountId:
           facebookPage?.id ??
-          instagramAccount?.id ??
+          instagramUser?.id ??
           token.user_id ??
           token.account_id ??
           xUser?.id ??
@@ -205,15 +196,15 @@ export class SocialChannelsService {
         status:
           token.access_token &&
           (platform !== SocialPlatform.FACEBOOK || facebookPage) &&
-          (platform !== SocialPlatform.INSTAGRAM || instagramAccount)
+          (platform !== SocialPlatform.INSTAGRAM || instagramUser)
             ? SocialChannelStatus.CONNECTED
             : SocialChannelStatus.ACTION_REQUIRED,
         lastHealthCheckAt: new Date(),
         lastError:
           platform === SocialPlatform.FACEBOOK && !facebookPage
             ? 'No Facebook Page access token was found. Add a Page ID and reconnect or run Check.'
-            : platform === SocialPlatform.INSTAGRAM && !instagramAccount
-              ? 'No linked Instagram Professional account was found. Connect an Instagram Business or Creator account to a Facebook Page and reconnect.'
+            : platform === SocialPlatform.INSTAGRAM && !instagramUser
+              ? 'Instagram did not return the connected Professional account. Reconnect through Instagram and approve the requested permissions.'
               : null,
         metadata: {
           setupSource: 'oauth',
@@ -226,12 +217,10 @@ export class SocialChannelsService {
                 facebookPageTasks: facebookPage.tasks,
               }
             : {}),
-          ...(instagramAccount
+          ...(instagramUser
             ? {
-                instagramBusinessAccountId: instagramAccount.id,
-                instagramUsername: instagramAccount.username,
-                instagramPageId: instagramAccount.pageId,
-                instagramPageName: instagramAccount.pageName,
+                instagramBusinessAccountId: instagramUser.id,
+                instagramUsername: instagramUser.username,
               }
             : {}),
           ...(xUser
@@ -244,7 +233,7 @@ export class SocialChannelsService {
             platform === SocialPlatform.FACEBOOK
               ? 'Facebook publishing uses the selected Page access token.'
               : platform === SocialPlatform.INSTAGRAM
-                ? 'Instagram publishing uses the linked Professional account and its Page access token.'
+                ? 'Instagram publishing uses the connected Instagram Professional account token.'
                 : 'Set externalAccountId to the Page, board, organization, or IG business account ID required for publishing.',
         },
       },
@@ -627,48 +616,19 @@ export class SocialChannelsService {
     }
   }
 
-  private async findInstagramBusinessCredential(
-    userAccessToken: string,
-    requestedAccountId?: string | null,
-  ): Promise<InstagramBusinessCredential | null> {
-    const accountId = requestedAccountId?.trim();
-
+  private async fetchInstagramUser(accessToken: string): Promise<InstagramUser | null> {
     try {
-      const payload = await this.providerJson<InstagramAccountsResponse>(
+      const payload = await this.providerJson<{ data?: InstagramUser }>(
         await fetch(
-          `https://graph.facebook.com/v20.0/me/accounts?${new URLSearchParams({
-            fields: 'id,name,access_token,instagram_business_account{id,name,username}',
-            access_token: userAccessToken,
+          `https://graph.instagram.com/me?${new URLSearchParams({
+            fields: 'id,username,name',
+            access_token: accessToken,
           }).toString()}`,
         ),
-        'Unable to load linked Instagram Professional accounts.',
+        'Unable to load the connected Instagram account.',
       );
-      const page = (payload.data ?? []).find((item) => {
-        const account = item.instagram_business_account;
-        return account && (!accountId || account.id === accountId);
-      });
-
-      if (!page?.instagram_business_account?.id || !page.access_token) {
-        if (accountId) {
-          throw new BadRequestException(
-            `Instagram account ${accountId} was not returned by Meta. Reconnect and make sure the account is a Professional account linked to a Facebook Page.`,
-          );
-        }
-        return null;
-      }
-
-      return {
-        id: page.instagram_business_account.id,
-        name: page.instagram_business_account.name,
-        username: page.instagram_business_account.username,
-        accessToken: page.access_token,
-        pageId: page.id,
-        pageName: page.name,
-      };
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
+      return payload.data ?? null;
+    } catch {
       return null;
     }
   }
@@ -852,7 +812,7 @@ export class SocialChannelsService {
         }
 
         const createPayload = await this.providerJson<Record<string, unknown>>(
-          await fetch(`https://graph.facebook.com/v20.0/${instagramBusinessId}/media`, {
+          await fetch(`https://graph.instagram.com/${instagramBusinessId}/media`, {
             method: 'POST',
             body: new URLSearchParams({
               access_token: accessToken,
@@ -869,7 +829,7 @@ export class SocialChannelsService {
         }
 
         const publishPayload = await this.providerJson<Record<string, unknown>>(
-          await fetch(`https://graph.facebook.com/v20.0/${instagramBusinessId}/media_publish`, {
+          await fetch(`https://graph.instagram.com/${instagramBusinessId}/media_publish`, {
             method: 'POST',
             body: new URLSearchParams({
               access_token: accessToken,
@@ -1102,26 +1062,10 @@ interface FacebookAccountsResponse {
   }[];
 }
 
-interface InstagramBusinessCredential {
+interface InstagramUser {
   id: string;
   name?: string;
   username?: string;
-  accessToken: string;
-  pageId?: string;
-  pageName?: string;
-}
-
-interface InstagramAccountsResponse {
-  data?: {
-    id?: string;
-    name?: string;
-    access_token?: string;
-    instagram_business_account?: {
-      id?: string;
-      name?: string;
-      username?: string;
-    };
-  }[];
 }
 
 function providerConfig(platform: SocialPlatform): ProviderConfig | null {
@@ -1136,13 +1080,30 @@ function providerConfig(platform: SocialPlatform): ProviderConfig | null {
     return null;
   }
 
-  if (platform === SocialPlatform.FACEBOOK || platform === SocialPlatform.INSTAGRAM) {
+  if (platform === SocialPlatform.FACEBOOK) {
     const clientId = process.env.META_CLIENT_ID ?? process.env.FACEBOOK_CLIENT_ID;
     const clientSecret = process.env.META_CLIENT_SECRET ?? process.env.FACEBOOK_CLIENT_SECRET;
     return clientId && clientSecret
       ? {
           authorizeUrl: 'https://www.facebook.com/v20.0/dialog/oauth',
           tokenUrl: 'https://graph.facebook.com/v20.0/oauth/access_token',
+          clientId,
+          clientSecret,
+          redirectUri,
+          scopes: [...supported.requiredScopes],
+          scopeSeparator: ',',
+          pkce: false,
+        }
+      : null;
+  }
+
+  if (platform === SocialPlatform.INSTAGRAM) {
+    const clientId = process.env.INSTAGRAM_CLIENT_ID ?? process.env.META_CLIENT_ID;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET ?? process.env.META_CLIENT_SECRET;
+    return clientId && clientSecret
+      ? {
+          authorizeUrl: 'https://www.instagram.com/oauth/authorize',
+          tokenUrl: 'https://api.instagram.com/oauth/access_token',
           clientId,
           clientSecret,
           redirectUri,
@@ -1337,7 +1298,7 @@ function nextStep(platform: SocialPlatform): string {
     [SocialPlatform.FACEBOOK]:
       'Set Account ID to the Facebook Page ID and use a Page access token with pages_manage_posts.',
     [SocialPlatform.INSTAGRAM]:
-      'Set Account ID to the Instagram Business account ID connected to your Facebook Page.',
+      'Instagram Login discovers the Professional account automatically. Reconnect if the account name is not shown.',
     [SocialPlatform.PINTEREST]:
       'Set Account ID to the Pinterest board ID used for publishing pins.',
     [SocialPlatform.LINKEDIN]:

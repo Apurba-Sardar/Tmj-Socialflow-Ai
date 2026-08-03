@@ -205,15 +205,14 @@ const platformSetup: Record<
   },
   INSTAGRAM: {
     developerUrl: 'https://developers.facebook.com/apps/',
-    credentialLabels: ['META_CLIENT_ID', 'META_CLIENT_SECRET'],
+    credentialLabels: ['INSTAGRAM_CLIENT_ID', 'INSTAGRAM_CLIENT_SECRET'],
     accountIdLabel: 'Instagram Business account ID',
-    accountIdHelp:
-      'OAuth discovers this automatically. Only enter it when you need to select a specific account.',
+    accountIdHelp: 'OAuth discovers the Instagram Professional account automatically.',
     steps: [
       'Create a Meta developer app with Instagram content publishing access.',
       'Add this redirect URI to the Meta OAuth settings.',
-      'Add Meta Client ID and Secret to .env, then restart the backend.',
-      'Connect OAuth with the Instagram Professional account linked to your Facebook Page.',
+      'Add the Instagram Client ID and Secret to .env, then restart the backend.',
+      'Connect OAuth with the Instagram Professional account you want to publish from.',
     ],
   },
   FACEBOOK: {
@@ -323,6 +322,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   const selectedSetup = selectedPlatform
     ? platformSetup[selectedPlatform.platform]
     : platformSetup.PINTEREST;
+  const oauthOnlyPlatform = form.platform === 'X' || form.platform === 'INSTAGRAM';
   const redirectUri = useMemo(() => {
     const apiUrl = new URL(apiBaseUrl);
     return `${apiUrl.origin}/api/social-channels/oauth/${form.platform}/callback`;
@@ -892,22 +892,27 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 />
               ) : null}
 
-              {form.platform === 'X' ? (
-                <div className="flex gap-3 rounded-xl border border-zinc-400/30 bg-zinc-500/[0.07] p-4 dark:border-zinc-500/30 dark:bg-white/[0.04]">
+              {oauthOnlyPlatform ? (
+                <div className="flex gap-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-4 dark:border-primary/30 dark:bg-white/[0.04]">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
                     <UserRound className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">Connect your X account securely</div>
+                    <div className="text-sm font-semibold">
+                      {form.platform === 'INSTAGRAM'
+                        ? 'Connect your Instagram account securely'
+                        : 'Connect your X account securely'}
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      OAuth will identify the account and save its publishing permission. You do not
-                      need to paste an access token or X user ID.
+                      {form.platform === 'INSTAGRAM'
+                        ? 'Instagram Login will identify the Professional account and save its publishing permission. No Facebook Page or manual token is needed.'
+                        : 'OAuth will identify the account and save its publishing permission. You do not need to paste an access token or X user ID.'}
                     </p>
                   </div>
                 </div>
               ) : null}
 
-              <div className={cn(form.platform === 'X' ? 'hidden' : 'contents')}>
+              <div className={cn(oauthOnlyPlatform ? 'hidden' : 'contents')}>
                 <Field label="Display name">
                   <Input
                     onChange={(event) => {
@@ -990,7 +995,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 </Field>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {form.platform !== 'X' ? (
+                {!oauthOnlyPlatform ? (
                   <Button
                     disabled={saving}
                     onClick={() => {
@@ -1007,10 +1012,10 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                 ) : null}
                 <Button
                   className={cn(
-                    form.platform === 'X'
+                    oauthOnlyPlatform
                       ? 'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 dark:border-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200'
                       : '',
-                    form.platform === 'X' ? 'sm:col-span-2' : '',
+                    oauthOnlyPlatform ? 'sm:col-span-2' : '',
                   )}
                   disabled={oauthStarting || !selectedPlatform?.oauthConfigured}
                   onClick={() => {
@@ -1023,12 +1028,17 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   ) : (
                     <ExternalLink className="h-4 w-4" />
                   )}
-                  {form.platform === 'X' ? 'Connect X account' : 'Connect real account'}
+                  {form.platform === 'INSTAGRAM'
+                    ? 'Connect Instagram account'
+                    : form.platform === 'X'
+                      ? 'Connect X account'
+                      : 'Connect real account'}
                 </Button>
               </div>
-              {form.platform === 'X' ? (
+              {oauthOnlyPlatform ? (
                 <p className="text-center text-xs text-muted-foreground">
-                  You’ll be redirected to X to approve access, then returned here automatically.
+                  You’ll be redirected to {form.platform === 'INSTAGRAM' ? 'Instagram' : 'X'} to
+                  approve access, then returned here automatically.
                 </p>
               ) : null}
               {!selectedPlatform?.oauthConfigured ? (
