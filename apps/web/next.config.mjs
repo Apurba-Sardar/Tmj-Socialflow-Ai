@@ -7,6 +7,11 @@ const appDir = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   // Keep generated output away from the stale OneDrive-managed .next directory.
   distDir: '.next-build',
+  // ESLint runs separately in the workspace checks. Skipping it here keeps
+  // Vercel builds independent from root-only development dependencies.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   typedRoutes: true,
   experimental: {
     serverActions: {
