@@ -63,6 +63,7 @@ const environmentSchema = z.object({
   X_CLIENT_ID: z.string().optional(),
   X_CLIENT_SECRET: z.string().optional(),
   X_REDIRECT_URI: z.string().url().optional(),
+  INSTAGRAM_BUSINESS_ACCOUNT_ID: z.string().optional(),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

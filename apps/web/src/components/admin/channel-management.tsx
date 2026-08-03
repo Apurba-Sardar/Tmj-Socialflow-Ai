@@ -207,12 +207,13 @@ const platformSetup: Record<
     developerUrl: 'https://developers.facebook.com/apps/',
     credentialLabels: ['META_CLIENT_ID', 'META_CLIENT_SECRET'],
     accountIdLabel: 'Instagram Business account ID',
-    accountIdHelp: 'Use the IG Business or Creator account connected to your Facebook Page.',
+    accountIdHelp:
+      'OAuth discovers this automatically. Only enter it when you need to select a specific account.',
     steps: [
       'Create a Meta developer app with Instagram content publishing access.',
       'Add this redirect URI to the Meta OAuth settings.',
       'Add Meta Client ID and Secret to .env, then restart the backend.',
-      'Connect OAuth and select the connected Instagram Business account.',
+      'Connect OAuth with the Instagram Professional account linked to your Facebook Page.',
     ],
   },
   FACEBOOK: {
