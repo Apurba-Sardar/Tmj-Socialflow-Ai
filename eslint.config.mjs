@@ -4,7 +4,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/**', '**/dist/**', '**/.next/**', 'coverage/**'],
+    ignores: [
+      'node_modules/**',
+      '**/dist/**',
+      '**/.next/**',
+      '**/.next-build/**',
+      '**/next-env.d.ts',
+      '**/prisma/seed.mjs',
+      'coverage/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -33,4 +41,3 @@ export default tseslint.config(
     },
   },
 );
-

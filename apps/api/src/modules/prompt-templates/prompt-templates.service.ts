@@ -225,7 +225,9 @@ export class PromptTemplatesService {
         ...this.visibleWhere(organizationId),
         platform: input.platform,
         purpose,
-        contentCategory: { in: contentCategory === 'ARTICLE' ? ['ARTICLE'] : [contentCategory, 'ARTICLE'] },
+        contentCategory: {
+          in: contentCategory === 'ARTICLE' ? ['ARTICLE'] : [contentCategory, 'ARTICLE'],
+        },
         active: true,
       },
       orderBy: { updatedAt: 'desc' },
@@ -293,7 +295,10 @@ export class PromptTemplatesService {
   private async ensureDefaults(organizationId: string | null, userId?: string) {
     for (const [platform, template] of Object.entries(defaultPromptTemplates)) {
       for (const category of promptContentCategories) {
-        const categoryDefaults = this.categoryDefaultOverrides(category, platform as SocialPlatform);
+        const categoryDefaults = this.categoryDefaultOverrides(
+          category,
+          platform as SocialPlatform,
+        );
         const existing = await this.prisma.promptTemplate.findFirst({
           where: {
             organizationId,
@@ -423,7 +428,11 @@ export class PromptTemplatesService {
   }
 
   private contentCategory(value?: string): PromptContentCategory {
-    const clean = value?.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_') || 'ARTICLE';
+    const clean =
+      value
+        ?.trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, '_') ?? 'ARTICLE';
 
     if (promptContentCategories.includes(clean as PromptContentCategory)) {
       return clean as PromptContentCategory;

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import {
   AlertTriangle,
@@ -182,8 +183,6 @@ const platformOptions: PlatformOption[] = [
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const timeSlots = Array.from({ length: 15 }, (_value, index) => index + 7);
-const schedulerHref = (href: string) => href as Parameters<typeof Link>[0]['href'];
-
 export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const apiBaseUrl = getApiBaseUrl();
   const [view, setView] = useState<CalendarView>('week');
@@ -282,7 +281,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       (post) => post.scheduledFor && toDateInputValue(new Date(post.scheduledFor)) === selectedDate,
     )
     .sort((a, b) => dateTimeValue(a.scheduledFor) - dateTimeValue(b.scheduledFor));
-  const selectedPost = posts.find((post) => post.id === selectedPostId) ?? selectedDayPosts[0] ?? null;
+  const selectedPost =
+    posts.find((post) => post.id === selectedPostId) ?? selectedDayPosts[0] ?? null;
 
   useEffect(() => {
     if (!selectedPost?.scheduledFor) {
@@ -558,7 +558,10 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
       notify('Scheduled time updated.', 'success');
       await loadCalendarData();
     } catch (error) {
-      notify(error instanceof Error ? error.message : 'Could not update scheduled time.', 'warning');
+      notify(
+        error instanceof Error ? error.message : 'Could not update scheduled time.',
+        'warning',
+      );
     } finally {
       setReschedulingId(null);
     }
@@ -582,7 +585,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
     setPublishingId(post.id);
     try {
-      const draftId = metadataString(post.metadata, 'draftId') ?? (post.source === 'draft' ? post.id : undefined);
+      const draftId =
+        metadataString(post.metadata, 'draftId') ?? (post.source === 'draft' ? post.id : undefined);
       const mediaUrl = metadataString(post.metadata, 'mediaUrl') ?? undefined;
       const shouldHydrateMediaFromDraft = Boolean(
         draftId && mediaUrl?.startsWith('data:image/') && post.platform === 'FACEBOOK',
@@ -801,7 +805,9 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
               <aside className="grid gap-4 xl:sticky xl:top-24">
                 <SelectedPostPanel
-                  approving={selectedPost ? approvingId === selectedPost.id || approvingId === 'bulk' : false}
+                  approving={
+                    selectedPost ? approvingId === selectedPost.id || approvingId === 'bulk' : false
+                  }
                   channels={channels}
                   post={selectedPost}
                   publishing={selectedPost ? publishingId === selectedPost.id : false}
@@ -871,7 +877,7 @@ function SchedulerSidebar({ user }: { user: AuthenticatedUser }) {
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.05]',
             )}
-            href={schedulerHref(item.href)}
+            href={item.href as Route}
             key={item.href}
           >
             <item.icon className="h-4 w-4" />
@@ -1259,7 +1265,9 @@ function SelectedPostPanel({
   approving: boolean;
   publishing: boolean;
   rescheduling: boolean;
-  setTimeEditor: (updater: (value: { date: string; time: string }) => { date: string; time: string }) => void;
+  setTimeEditor: (
+    updater: (value: { date: string; time: string }) => { date: string; time: string },
+  ) => void;
   onApprove: (post: ScheduledPost) => void;
   onPostNow: (post: ScheduledPost) => void;
   onSaveTime: (post: ScheduledPost) => void;
@@ -2092,8 +2100,8 @@ function PostCard({
         selected
           ? 'border-primary ring-2 ring-primary/20'
           : post.status === 'PENDING_APPROVAL'
-          ? 'border-amber-500/35 ring-1 ring-amber-500/10 dark:border-amber-400/30'
-          : 'border-border dark:border-white/10',
+            ? 'border-amber-500/35 ring-1 ring-amber-500/10 dark:border-amber-400/30'
+            : 'border-border dark:border-white/10',
       )}
       onClick={onSelect}
     >

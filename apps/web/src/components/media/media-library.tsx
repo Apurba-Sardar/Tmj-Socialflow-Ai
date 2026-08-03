@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import {
   Archive,
@@ -56,8 +57,6 @@ const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: 'Media Library', href: '/media-library', icon: ImageIcon },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
 ];
-
-type MediaHref = Parameters<typeof Link>[0]['href'];
 
 export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
@@ -343,7 +342,7 @@ function MediaSidebar({ user }: { user: AuthenticatedUser }) {
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
-            href={item.href as MediaHref}
+            href={item.href as Route}
             key={item.href}
           >
             <item.icon className="h-4 w-4" />

@@ -5,6 +5,8 @@ const appDir = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep generated output away from the stale OneDrive-managed .next directory.
+  distDir: '.next-build',
   typedRoutes: true,
   experimental: {
     serverActions: {

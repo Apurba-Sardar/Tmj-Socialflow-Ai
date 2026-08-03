@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 import { SocialPlatform } from '@prisma/client';
 import OpenAI from 'openai';
@@ -33,7 +33,7 @@ export class SocialContentGeneratorService {
   private readonly model: string;
   private readonly imageModel: string;
 
-  constructor(private readonly promptTemplatesService: PromptTemplatesService) {
+  constructor(@Optional() private readonly promptTemplatesService?: PromptTemplatesService) {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -67,7 +67,10 @@ export class SocialContentGeneratorService {
 
         return {
           ...fallback,
-          title: this.truncate(generated.title, fallback.platform === SocialPlatform.PINTEREST ? 95 : 120),
+          title: this.truncate(
+            generated.title,
+            fallback.platform === SocialPlatform.PINTEREST ? 95 : 120,
+          ),
           body: generated.body,
           hashtags: this.normalizeHashtags(generated.hashtags, article.categoryNames),
           callToAction: generated.callToAction,
@@ -80,7 +83,9 @@ export class SocialContentGeneratorService {
       );
     }
 
-    return Promise.all(draftsForVisuals.map((draft) => this.withCreativeImage(article, draft, userId)));
+    return Promise.all(
+      draftsForVisuals.map((draft) => this.withCreativeImage(article, draft, userId)),
+    );
   }
 
   private generateFallback(
@@ -196,15 +201,21 @@ export class SocialContentGeneratorService {
     draft: SocialDraftInput,
     userId?: string,
   ): Promise<SocialDraftInput> {
-    const renderedPrompt = await this.promptTemplatesService.renderImagePrompt(
-      {
-        platform: draft.platform,
-        article,
-        captionTitle: draft.title,
-        captionBody: draft.body,
-      },
-      userId,
-    );
+    const renderedPrompt = this.promptTemplatesService
+      ? await this.promptTemplatesService.renderImagePrompt(
+          {
+            platform: draft.platform,
+            article,
+            captionTitle: draft.title,
+            captionBody: draft.body,
+          },
+          userId,
+        )
+      : {
+          prompt: this.fallbackImagePrompt(article, draft),
+          promptVersion: 'fallback-image-v1',
+          templateId: null,
+        };
 
     try {
       const image = await this.client?.images.generate({
@@ -247,6 +258,15 @@ export class SocialContentGeneratorService {
     }
   }
 
+  private fallbackImagePrompt(article: ArticleForGeneration, draft: SocialDraftInput): string {
+    return [
+      `Create a polished ${draft.platform.toLowerCase()} social media image for this article.`,
+      `Title: ${article.title}`,
+      `Context: ${article.excerpt}`,
+      'Use one clear editorial visual idea, premium composition, strong contrast, and no watermarks or platform logos.',
+    ].join('\n');
+  }
+
   private imagePromptFor(article: ArticleForGeneration, draft: SocialDraftInput): string {
     const category = article.categoryNames.slice(0, 3).join(', ') || 'social media article';
     const sourceText = this.truncate(article.contentText ?? article.excerpt, 1200);
@@ -281,9 +301,12 @@ export class SocialContentGeneratorService {
   }
 
   private topicVisualGuidance(article: ArticleForGeneration): string {
-    const topic = `${article.title} ${article.excerpt} ${article.contentText ?? ''} ${article.categoryNames.join(' ')}`.toLowerCase();
+    const topic =
+      `${article.title} ${article.excerpt} ${article.contentText ?? ''} ${article.categoryNames.join(' ')}`.toLowerCase();
 
-    if (/(peptide|semaglutide|tesamorelin|aod|fat loss|weight loss|metabolism|obesity)/i.test(topic)) {
+    if (
+      /(peptide|semaglutide|tesamorelin|aod|fat loss|weight loss|metabolism|obesity)/i.test(topic)
+    ) {
       return [
         'Topic visual guidance for peptide/weight-management research:',
         'Use abstract molecular structures, amino-acid chain motifs, microscope lens, clean lab glassware without labels, blank research notebook, healthy balanced plate, leaves, soft science-and-wellness symbols.',
@@ -307,10 +330,7 @@ export class SocialContentGeneratorService {
     ].join(' ');
   }
 
-  private async composePostImage(
-    imageBase64: string,
-    draft: SocialDraftInput,
-  ): Promise<string> {
+  private async composePostImage(imageBase64: string, draft: SocialDraftInput): Promise<string> {
     const size = this.visualSize(draft.platform);
     const image = await sharp(Buffer.from(imageBase64, 'base64'))
       .resize(size.width, size.height, { fit: 'cover', position: 'center' })
@@ -408,7 +428,9 @@ export class SocialContentGeneratorService {
     hashtags: string[],
   ): string {
     const size = this.visualSize(platform);
-    const topicSeed = `${article.title} ${article.excerpt} ${article.categoryNames.join(' ')} ${hashtags.join(' ')}`.length;
+    const topicSeed =
+      `${article.title} ${article.excerpt} ${article.categoryNames.join(' ')} ${hashtags.join(' ')}`
+        .length;
     const isPortrait = size.height > size.width;
     const palette = this.visualTheme(platform);
     const centerX = Math.round(size.width * (0.46 + (topicSeed % 7) * 0.01));

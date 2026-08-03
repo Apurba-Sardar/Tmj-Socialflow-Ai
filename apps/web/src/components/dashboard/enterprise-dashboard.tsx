@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import {
   AlertTriangle,
@@ -221,8 +222,6 @@ const defaultPlatformKpi: PlatformKpi = {
   health: '100%',
   delta: '0%',
 };
-
-type DashboardHref = Parameters<typeof Link>[0]['href'];
 
 const navigation: { label: string; href: string; icon: LucideIcon; count?: string }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -642,7 +641,7 @@ function DashboardSidebar({
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-blue-950/20'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.06]',
               )}
-              href={item.href as DashboardHref}
+              href={item.href as Route}
               key={item.label}
             >
               <item.icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />

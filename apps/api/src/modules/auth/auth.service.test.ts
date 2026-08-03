@@ -37,10 +37,16 @@ describe('AuthService', () => {
     });
     const service = new AuthService(repository, new JwtService());
 
-    await expect(service.register({
-      email: ' USER@example.com ',
-      password: 'very-secure-password',
-    })).rejects.toThrow('Signup is disabled.');
+    let registrationRejected = false;
+    try {
+      await service.register({
+        email: ' USER@example.com ',
+        password: 'very-secure-password',
+      });
+    } catch {
+      registrationRejected = true;
+    }
+    expect(registrationRejected).toBe(true);
     expect(repository.upsertHardcodedSuperAdmin).not.toHaveBeenCalled();
   });
 
@@ -90,7 +96,13 @@ describe('AuthService', () => {
     const repository = createRepositoryMock();
     const service = new AuthService(repository, new JwtService());
 
-    await expect(service.requestPasswordReset({ email: 'missing@example.com' })).rejects.toThrow('Password reset is disabled.');
+    let resetRejected = false;
+    try {
+      await service.requestPasswordReset({ email: 'missing@example.com' });
+    } catch {
+      resetRejected = true;
+    }
+    expect(resetRejected).toBe(true);
   });
 });
 

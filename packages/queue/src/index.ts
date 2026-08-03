@@ -1,10 +1,10 @@
 import { Queue, type JobsOptions, type QueueOptions } from 'bullmq';
-import IORedis, { type RedisOptions } from 'ioredis';
+import { Redis, type RedisOptions } from 'ioredis';
 
 export type QueueConnectionOptions = Pick<RedisOptions, 'host' | 'port' | 'password'>;
 
 export const createRedisConnection = (options: QueueConnectionOptions) => {
-  return new IORedis({
+  return new Redis({
     ...options,
     maxRetriesPerRequest: null,
   });
