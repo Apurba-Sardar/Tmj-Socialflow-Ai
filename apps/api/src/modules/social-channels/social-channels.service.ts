@@ -158,6 +158,13 @@ export class SocialChannelsService {
         ? await this.fetchInstagramUser(token.access_token)
         : null;
     const accessToken = facebookPage?.accessToken ?? token.access_token;
+    const externalAccountId = [
+      facebookPage?.id,
+      instagramUser?.id,
+      token.user_id,
+      token.account_id,
+      xUser?.id,
+    ].find((value) => value !== undefined);
 
     const account = await this.prisma.socialChannelAccount.create({
       data: {
@@ -175,13 +182,7 @@ export class SocialChannelsService {
           token.screen_name ??
           xUser?.username ??
           undefined,
-        externalAccountId:
-          facebookPage?.id ??
-          instagramUser?.id ??
-          token.user_id ??
-          token.account_id ??
-          xUser?.id ??
-          undefined,
+        externalAccountId: externalAccountId === undefined ? undefined : String(externalAccountId),
         accountType: platformAccountType(platform),
         authType: SocialChannelAuthType.OAUTH,
         scopes:
@@ -618,7 +619,7 @@ export class SocialChannelsService {
 
   private async fetchInstagramUser(accessToken: string): Promise<InstagramUser | null> {
     try {
-      const payload = await this.providerJson<{ data?: InstagramUser }>(
+      const payload = await this.providerJson<InstagramUser & { data?: InstagramUser }>(
         await fetch(
           `https://graph.instagram.com/me?${new URLSearchParams({
             fields: 'id,username,name',
@@ -627,7 +628,7 @@ export class SocialChannelsService {
         ),
         'Unable to load the connected Instagram account.',
       );
-      return payload.data ?? null;
+      return payload.data ?? (payload.id ? payload : null);
     } catch {
       return null;
     }
@@ -1036,8 +1037,8 @@ interface TokenResponse {
   token_type?: string;
   scope?: string;
   screen_name?: string;
-  user_id?: string;
-  account_id?: string;
+  user_id?: string | number;
+  account_id?: string | number;
 }
 
 interface XUser {
@@ -1063,7 +1064,7 @@ interface FacebookAccountsResponse {
 }
 
 interface InstagramUser {
-  id: string;
+  id: string | number;
   name?: string;
   username?: string;
 }
