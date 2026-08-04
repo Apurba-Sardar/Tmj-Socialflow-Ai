@@ -141,7 +141,10 @@ export class SocialChannelsService {
       throw new BadRequestException('OAuth callback platform does not match the original request.');
     }
 
-    const token = await this.exchangeCode(config, dto.code, state.verifier);
+    let token = await this.exchangeCode(config, dto.code, state.verifier);
+    if (platform === SocialPlatform.INSTAGRAM && token.access_token) {
+      token = await this.exchangeInstagramForLongLivedToken(config, token);
+    }
     const xUser =
       platform === SocialPlatform.X && token.access_token
         ? await this.fetchXUser(token.access_token)
@@ -664,6 +667,33 @@ export class SocialChannelsService {
     });
 
     return this.providerJson<TokenResponse>(response, 'OAuth token exchange failed.');
+  }
+
+  private async exchangeInstagramForLongLivedToken(
+    config: ProviderConfig,
+    token: TokenResponse,
+  ): Promise<TokenResponse> {
+    if (!token.access_token || !config.clientSecret) {
+      throw new BadRequestException(
+        'Instagram OAuth is missing the client secret required for token exchange.',
+      );
+    }
+
+    const query = new URLSearchParams({
+      grant_type: 'ig_exchange_token',
+      client_secret: config.clientSecret,
+      access_token: token.access_token,
+    });
+    const longLivedToken = await this.providerJson<TokenResponse>(
+      await fetch(`https://graph.instagram.com/access_token?${query.toString()}`),
+      'Instagram long-lived token exchange failed.',
+    );
+
+    return {
+      ...token,
+      ...longLivedToken,
+      access_token: longLivedToken.access_token ?? token.access_token,
+    };
   }
 
   private async fetchXUser(accessToken: string): Promise<XUser | null> {
