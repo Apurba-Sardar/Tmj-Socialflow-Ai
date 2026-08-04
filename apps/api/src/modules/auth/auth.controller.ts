@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 import { loadEnvironment } from '@socialflow/config';
@@ -99,7 +109,9 @@ export class AuthController {
     response.cookie(ACCESS_TOKEN_COOKIE, session.accessToken, {
       httpOnly: true,
       secure: this.env.AUTH_COOKIE_SECURE,
-      sameSite: 'lax',
+      // Vercel and Railway are different sites in production. Secure
+      // cross-site cookies require SameSite=None; local HTTP stays Lax.
+      sameSite: this.env.AUTH_COOKIE_SECURE ? 'none' : 'lax',
       domain: this.env.AUTH_COOKIE_DOMAIN ?? undefined,
       expires: session.accessTokenExpiresAt,
       path: '/',
@@ -107,7 +119,7 @@ export class AuthController {
     response.cookie(REFRESH_TOKEN_COOKIE, session.refreshToken, {
       httpOnly: true,
       secure: this.env.AUTH_COOKIE_SECURE,
-      sameSite: 'lax',
+      sameSite: this.env.AUTH_COOKIE_SECURE ? 'none' : 'lax',
       domain: this.env.AUTH_COOKIE_DOMAIN ?? undefined,
       expires: session.refreshTokenExpiresAt,
       path: '/api/auth',
