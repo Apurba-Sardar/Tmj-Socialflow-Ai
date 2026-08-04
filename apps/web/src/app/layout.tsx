@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { SessionKeepAlive } from '@/components/auth/session-keep-alive';
 import { ThemeScript } from '@/components/theme/theme-script';
 
 import './globals.css';
@@ -20,7 +21,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <ThemeScript />
       </head>
-      <body>{children}</body>
+      <body>
+        <SessionKeepAlive />
+        {children}
+      </body>
     </html>
   );
 }
