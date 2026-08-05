@@ -326,75 +326,9 @@ export class PromptTemplatesService {
               updatedById: userId,
             },
           });
-        } else if (
-          category === 'ARTICLE' &&
-          this.shouldUpgradeDefault(platform as SocialPlatform, existing, template)
-        ) {
-          await this.prisma.promptTemplate.update({
-            where: { id: existing.id },
-            data: {
-              name: template.name,
-              description: template.description,
-              template: template.template,
-              negativePrompt: template.negativePrompt,
-              styleNotes: template.styleNotes,
-              updatedById: userId,
-              version: { increment: 1 },
-            },
-          });
         }
       }
     }
-  }
-
-  private shouldUpgradeDefault(
-    platform: SocialPlatform,
-    existing: {
-      name: string;
-      template: string;
-      styleNotes: string | null;
-    },
-    template: {
-      name: string;
-      template: string;
-    },
-  ) {
-    const importedArticlePromptPlatforms = new Set<SocialPlatform>([
-      SocialPlatform.FACEBOOK,
-      SocialPlatform.INSTAGRAM,
-      SocialPlatform.PINTEREST,
-    ]);
-
-    if (
-      importedArticlePromptPlatforms.has(platform) &&
-      (existing.name !== template.name || !existing.template.includes('MANDATORY OUTPUT FORMAT'))
-    ) {
-      return true;
-    }
-
-    return this.shouldUpgradeLegacyDefault(existing);
-  }
-
-  private shouldUpgradeLegacyDefault(template: {
-    name: string;
-    template: string;
-    styleNotes: string | null;
-  }) {
-    const legacyNames = new Set([
-      'Pinterest educational pin image',
-      'Instagram premium feed image',
-      'Facebook friendly educational image',
-      'LinkedIn professional research image',
-      'X high-contrast preview image',
-    ]);
-    const legacyText = `${template.template} ${template.styleNotes ?? ''}`.toLowerCase();
-
-    return (
-      legacyNames.has(template.name) ||
-      legacyText.includes('no readable text') ||
-      legacyText.includes('not contain caption text') ||
-      legacyText.includes('warm premium editorial illustration')
-    );
   }
 
   private visibleWhere(organizationId: string | null): Prisma.PromptTemplateWhereInput {

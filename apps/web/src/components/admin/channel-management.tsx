@@ -707,7 +707,15 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
         );
       }
 
-      notify('Image prompt template saved.');
+      const savedTemplate = (await response.json()) as PromptTemplate;
+      setPromptTemplates((current) => [
+        savedTemplate,
+        ...current.filter((item) => item.id !== savedTemplate.id),
+      ]);
+      hydratePromptForm(savedTemplate);
+      notify(
+        `Current ${promptCategoryLabel(savedTemplate.contentCategory ?? 'ARTICLE')} prompt replaced.`,
+      );
       await loadData();
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Prompt template could not be saved.');
