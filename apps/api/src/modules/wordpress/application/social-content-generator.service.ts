@@ -386,7 +386,7 @@ export class SocialContentGeneratorService {
     const titleText = titleLines
       .map(
         (line, index) =>
-          `<text x="70" y="${118 + index * 70}" fill="#123b50" font-family="Arial, sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
+          `<text x="70" y="${118 + index * 70}" fill="#123b50" font-family="sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
       )
       .join('');
     const footerLines = this.wrapText(
@@ -397,7 +397,7 @@ export class SocialContentGeneratorService {
     const footerText = footerLines
       .map(
         (line, index) =>
-          `<text x="70" y="${270 + index * 32}" fill="#123b50" font-family="Arial, sans-serif" font-size="26" font-weight="500">${escapeXml(line)}</text>`,
+          `<text x="70" y="${270 + index * 32}" fill="#123b50" font-family="sans-serif" font-size="26" font-weight="500">${escapeXml(line)}</text>`,
       )
       .join('');
     const cta = this.truncate(draft.callToAction ?? 'Read the full article — link in bio.', 72);
@@ -407,7 +407,7 @@ export class SocialContentGeneratorService {
   ${titleText}
   ${footerText}
   <rect x="0" y="${size.height - 150}" width="${size.width}" height="150" fill="#123b50" fill-opacity="0.94"/>
-  <text x="70" y="${size.height - 78}" fill="#fffaf1" font-family="Arial, sans-serif" font-size="32" font-weight="600">${escapeXml(cta)}</text>
+  <text x="70" y="${size.height - 78}" fill="#fffaf1" font-family="sans-serif" font-size="32" font-weight="600">${escapeXml(cta)}</text>
 </svg>`;
   }
 
