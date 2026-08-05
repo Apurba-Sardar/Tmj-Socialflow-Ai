@@ -98,7 +98,7 @@ export class PromptTemplatesService {
     }
 
     return this.prisma.promptTemplate.findMany({
-      where: { ...this.visibleWhere(organizationId), active: true },
+      where: this.visibleWhere(organizationId),
       orderBy: [
         { platform: 'asc' },
         { contentCategory: 'asc' },
@@ -174,10 +174,7 @@ export class PromptTemplatesService {
       throw new NotFoundException('Prompt template was not found.');
     }
 
-    await this.prisma.promptTemplate.update({
-      where: { id: template.id },
-      data: { active: false, updatedById: user.id },
-    });
+    await this.prisma.promptTemplate.delete({ where: { id: template.id } });
     return { deleted: true };
   }
 
@@ -324,6 +321,7 @@ export class PromptTemplatesService {
             platform: platform as SocialPlatform,
             purpose: PROMPT_PURPOSE_IMAGE,
             contentCategory: category,
+            active: true,
           },
           select: { id: true, name: true, template: true, styleNotes: true, contentCategory: true },
         });
