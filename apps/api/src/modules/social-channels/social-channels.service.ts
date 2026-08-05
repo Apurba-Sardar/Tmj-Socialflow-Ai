@@ -541,7 +541,12 @@ export class SocialChannelsService {
       await this.prisma.socialChannelAccount.update({
         where: { id: account.id },
         data: {
-          status: SocialChannelStatus.ACTION_REQUIRED,
+          // A failed publish does not necessarily mean the account was
+          // disconnected. Media URLs, captions, permissions, and provider
+          // processing can fail while the OAuth token remains valid.
+          status: this.isAuthenticationFailure(message)
+            ? SocialChannelStatus.ACTION_REQUIRED
+            : account.status,
           lastError: message,
           lastHealthCheckAt: new Date(),
         },
@@ -1084,6 +1089,21 @@ export class SocialChannelsService {
   private decodeSecret(secret?: string | null): string | null {
     const clean = secret?.trim();
     return clean ? Buffer.from(clean, 'base64').toString('utf8') : null;
+  }
+
+  private isAuthenticationFailure(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return [
+      'access token has expired',
+      'error validating access token',
+      'invalid oauth access token',
+      'oauth exception',
+      'session has expired',
+      'token has expired',
+      'token is invalid',
+      'authentication failed',
+      'unauthorized',
+    ].some((indicator) => normalized.includes(indicator));
   }
 
   private optionalTrim(value?: string): string | undefined {
