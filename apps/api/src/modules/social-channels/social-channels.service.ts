@@ -827,7 +827,7 @@ export class SocialChannelsService {
       case SocialPlatform.PINTEREST: {
         const boardId = requiredExternalId(account.externalAccountId, 'Pinterest board ID');
         const payload = await this.providerJson<Record<string, unknown>>(
-          await fetch('https://api.pinterest.com/v5/pins', {
+          await fetch(`${pinterestApiBaseUrl()}/v5/pins`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -1116,6 +1116,10 @@ export class SocialChannelsService {
   }
 }
 
+function pinterestApiBaseUrl() {
+  return (process.env.PINTEREST_API_BASE_URL ?? 'https://api.pinterest.com').replace(/\/$/, '');
+}
+
 interface ProviderConfig {
   authorizeUrl: string;
   tokenUrl: string;
@@ -1224,10 +1228,11 @@ function providerConfig(platform: SocialPlatform): ProviderConfig | null {
   if (platform === SocialPlatform.PINTEREST) {
     const clientId = process.env.PINTEREST_CLIENT_ID;
     const clientSecret = process.env.PINTEREST_CLIENT_SECRET;
+    const apiBaseUrl = pinterestApiBaseUrl();
     return clientId && clientSecret
       ? {
           authorizeUrl: 'https://www.pinterest.com/oauth/',
-          tokenUrl: 'https://api.pinterest.com/v5/oauth/token',
+          tokenUrl: `${apiBaseUrl}/v5/oauth/token`,
           clientId,
           clientSecret,
           redirectUri: process.env.PINTEREST_REDIRECT_URI ?? redirectUri,

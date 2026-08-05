@@ -55,6 +55,7 @@ const environmentSchema = z.object({
   SMTP_FROM: z.string().min(1).default('TMJ SocialFlow AI <no-reply@socialflow.ai>'),
   PINTEREST_CLIENT_ID: z.string().optional(),
   PINTEREST_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_API_BASE_URL: z.string().url().default('https://api.pinterest.com'),
   PINTEREST_REDIRECT_URI: z
     .string()
     .url()
