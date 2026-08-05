@@ -562,7 +562,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                   WordPress content intelligence
                 </Badge>
                 <div>
-                  <h1 className="text-3xl font-semibold tracking-normal text-slate-950 dark:text-white">
+                  <h1 className="text-3xl font-semibold tracking-normal text-foreground">
                     WordPress Hub
                   </h1>
                   <p className="mt-2 max-w-3xl text-sm text-muted-foreground">

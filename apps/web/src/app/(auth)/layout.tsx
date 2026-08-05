@@ -14,7 +14,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <span className="text-sm font-semibold tracking-tight">TMJ SocialFlow AI</span>
           </div>
           <p className="sf-section-kicker">The publishing operating system</p>
-          <h1 className="mt-4 max-w-xl text-5xl font-semibold leading-[1.05] tracking-[-0.04em] text-slate-950 dark:text-white">
+          <h1 className="mt-4 max-w-xl text-5xl font-semibold leading-[1.05] tracking-[-0.04em] text-foreground">
             Turn your content engine into a calm, connected workflow.
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground">

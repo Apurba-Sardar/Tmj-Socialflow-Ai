@@ -475,7 +475,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
 
       <main className="sf-page-enter sf-premium-shell">
         {message ? (
-          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 shadow-2xl backdrop-blur dark:text-sky-200">
+          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-900 shadow-2xl backdrop-blur dark:text-sky-100">
             {message}
           </div>
         ) : null}
@@ -498,7 +498,7 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
                   </Badge>
                   <Badge variant="outline">{article.authorName ?? 'Unknown author'}</Badge>
                 </div>
-                <h1 className="max-w-5xl text-2xl font-semibold leading-tight tracking-normal text-slate-950 dark:text-white sm:text-3xl">
+                <h1 className="max-w-5xl text-2xl font-semibold leading-tight tracking-normal text-foreground sm:text-3xl">
                   {article.title}
                 </h1>
                 <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
