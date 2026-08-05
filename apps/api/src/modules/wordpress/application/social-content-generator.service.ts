@@ -341,7 +341,14 @@ export class SocialContentGeneratorService {
     });
     const image = await (
       draft.platform === SocialPlatform.INSTAGRAM
-        ? imageSource.composite([{ input: Buffer.from(this.instagramTextOverlay(draft, size)) }])
+        ? imageSource.composite([
+            {
+              input: Buffer.from(this.instagramTextOverlay(draft, size), 'utf8'),
+              top: 0,
+              left: 0,
+              blend: 'over',
+            },
+          ])
         : imageSource
     )
       .jpeg({ quality: 92, mozjpeg: true })
