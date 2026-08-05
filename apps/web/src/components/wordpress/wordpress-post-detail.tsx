@@ -345,7 +345,9 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
       const willUseStoredDraftMedia = Boolean(
         draft.mediaUrl && !mediaUrl && draft.platform === 'FACEBOOK',
       );
-      const skippedMedia = Boolean(draft.mediaUrl && !mediaUrl && !willUseStoredDraftMedia);
+      const skippedMedia = Boolean(
+        draft.mediaUrl && !mediaUrl && !willUseStoredDraftMedia && draft.platform !== 'INSTAGRAM',
+      );
       const response = await fetch(`${apiBaseUrl}/api/social-channels/${channel.id}/publish`, {
         method: 'POST',
         credentials: 'include',
@@ -499,7 +501,9 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
                 <h1 className="max-w-5xl text-2xl font-semibold leading-tight tracking-normal text-slate-950 dark:text-white sm:text-3xl">
                   {article.title}
                 </h1>
-                <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{article.excerpt}</p>
+                <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+                  {article.excerpt}
+                </p>
               </div>
               <div className="sf-card grid grid-cols-3 gap-2 rounded-xl border border-border bg-card/80 p-2 dark:border-white/10">
                 <DetailStat label="Campaigns" value={String(campaigns.length)} />
@@ -930,7 +934,9 @@ function MediaAssetsTab({
           </div>
           <div className="flex items-center justify-between gap-3 p-3 text-sm font-medium">
             <span className="min-w-0 truncate">{image.label}</span>
-            {image.platform ? <Badge variant="secondary">{platformShapeLabel(image.platform)}</Badge> : null}
+            {image.platform ? (
+              <Badge variant="secondary">{platformShapeLabel(image.platform)}</Badge>
+            ) : null}
           </div>
         </div>
       ))}
