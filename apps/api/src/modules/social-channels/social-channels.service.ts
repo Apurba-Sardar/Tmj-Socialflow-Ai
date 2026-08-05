@@ -1,9 +1,11 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import sharp from 'sharp';
 
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
@@ -436,7 +438,11 @@ export class SocialChannelsService {
   async publish(id: string, dto: PublishToChannelDto, user: AuthenticatedUser) {
     const account = await this.ensureVisible(id, user);
     const accessToken = this.decodeSecret(account.accessTokenCiphertext);
-    const publishDto = await this.hydratePublishPayload(dto, account.platform);
+    let publishDto = await this.hydratePublishPayload(dto, account.platform);
+
+    if (account.platform === SocialPlatform.INSTAGRAM) {
+      publishDto = this.publicInstagramMedia(publishDto);
+    }
 
     if (!accessToken) {
       throw new BadRequestException(
@@ -575,6 +581,56 @@ export class SocialChannelsService {
       hashtags: dto.hashtags,
       mediaUrl: dto.mediaUrl ?? draft.mediaUrl ?? undefined,
       sourceUrl: dto.sourceUrl ?? draft.sourceUrl,
+    };
+  }
+
+  async draftMedia(draftId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const draft = await this.prisma.socialDraft.findUnique({
+      where: { id: draftId },
+      select: { mediaUrl: true },
+    });
+    const mediaUrl = draft?.mediaUrl;
+
+    if (!mediaUrl?.startsWith('data:image/')) {
+      throw new NotFoundException('Draft image was not found.');
+    }
+
+    const match = /^data:([^;,]+)(?:;base64)?,(.+)$/i.exec(mediaUrl);
+    if (!match?.[1] || !match[2]) {
+      throw new BadRequestException('Draft image is not a valid data URL.');
+    }
+
+    const source = mediaUrl.includes(';base64')
+      ? Buffer.from(match[2], 'base64')
+      : Buffer.from(decodeURIComponent(match[2]), 'utf8');
+    const buffer = await sharp(source).jpeg({ quality: 90 }).toBuffer();
+
+    return { buffer, mimeType: 'image/jpeg' };
+  }
+
+  private publicInstagramMedia(dto: PublishToChannelDto): PublishToChannelDto {
+    if (!dto.mediaUrl?.startsWith('data:image/')) {
+      return dto;
+    }
+
+    if (!dto.draftId) {
+      throw new BadRequestException('Instagram requires a draft image with a public media URL.');
+    }
+
+    const apiBaseUrl = process.env.API_PUBLIC_URL?.replace(/\/$/, '');
+    if (!apiBaseUrl) {
+      throw new ServiceUnavailableException(
+        'API_PUBLIC_URL is required to publish Instagram media.',
+      );
+    }
+
+    return {
+      draftId: dto.draftId,
+      title: dto.title,
+      caption: dto.caption,
+      hashtags: dto.hashtags,
+      sourceUrl: dto.sourceUrl,
+      mediaUrl: `${apiBaseUrl}/api/social-channels/media/${encodeURIComponent(dto.draftId)}`,
     };
   }
 

@@ -1,11 +1,27 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { SocialPlatform } from '@prisma/client';
 import type { Response } from 'express';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/types.js';
-import { CreateSocialChannelDto, OAuthCallbackDto, PublishToChannelDto, UpdateSocialChannelDto } from './social-channels.dto.js';
+import {
+  CreateSocialChannelDto,
+  OAuthCallbackDto,
+  PublishToChannelDto,
+  UpdateSocialChannelDto,
+} from './social-channels.dto.js';
 import { SocialChannelsService } from './social-channels.service.js';
 
 @Controller('social-channels')
@@ -47,6 +63,12 @@ export class SocialChannelsController {
     return this.socialChannelsService.oauthCallback(platform, dto);
   }
 
+  @Get('media/:draftId')
+  async draftMedia(@Param('draftId') draftId: string, @Res() response: Response) {
+    const media = await this.socialChannelsService.draftMedia(draftId);
+    response.type(media.mimeType).send(media.buffer);
+  }
+
   @Get('summary')
   @UseGuards(JwtAuthGuard)
   summary(@CurrentUser() user: AuthenticatedUser) {
@@ -67,7 +89,11 @@ export class SocialChannelsController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(@Param('id') id: string, @Body() dto: UpdateSocialChannelDto, @CurrentUser() user: AuthenticatedUser) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateSocialChannelDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.socialChannelsService.update(id, dto, user);
   }
 
@@ -79,7 +105,11 @@ export class SocialChannelsController {
 
   @Post(':id/publish')
   @UseGuards(JwtAuthGuard)
-  publish(@Param('id') id: string, @Body() dto: PublishToChannelDto, @CurrentUser() user: AuthenticatedUser) {
+  publish(
+    @Param('id') id: string,
+    @Body() dto: PublishToChannelDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.socialChannelsService.publish(id, dto, user);
   }
 
