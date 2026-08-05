@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -24,6 +24,11 @@ export class PromptTemplatesController {
   @Put()
   upsert(@Body() dto: UpsertPromptTemplateDto, @CurrentUser() user: AuthenticatedUser) {
     return this.promptTemplatesService.upsert(dto, user);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.promptTemplatesService.remove(id, user);
   }
 
   @Post('preview')

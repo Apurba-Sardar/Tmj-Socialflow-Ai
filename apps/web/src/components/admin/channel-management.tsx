@@ -724,6 +724,34 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     }
   }
 
+  async function deletePromptTemplate(template: PromptTemplate) {
+    if (
+      !window.confirm(
+        `Delete the ${titleCase(template.platform)} ${promptCategoryLabel(promptTemplateCategory(template))} prompt?`,
+      )
+    ) {
+      return;
+    }
+
+    setSavingPrompt(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/prompt-templates/${template.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response, 'Could not delete this prompt.'));
+      }
+
+      notify('Prompt deleted.');
+      await loadData();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Prompt could not be deleted.');
+    } finally {
+      setSavingPrompt(false);
+    }
+  }
+
   async function resetPromptTemplate() {
     setSavingPrompt(true);
     try {
@@ -1132,7 +1160,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
             </CardHeader>
             <CardContent className="grid gap-3">
               {promptTemplates.map((template) => (
-                <button
+                <div
                   className={cn(
                     'rounded-xl border border-border bg-background/70 p-4 text-left transition hover:border-primary/40 dark:border-white/10 dark:bg-white/[0.03]',
                     promptForm.platform === template.platform &&
@@ -1144,7 +1172,14 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   onClick={() => {
                     hydratePromptForm(template);
                   }}
-                  type="button"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      hydratePromptForm(template);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap gap-2">
@@ -1155,7 +1190,23 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                         {promptCategoryLabel(promptTemplateCategory(template))}
                       </Badge>
                     </div>
-                    <Badge variant="secondary">v{template.version}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">v{template.version}</Badge>
+                      <Button
+                        aria-label={`Delete ${template.name}`}
+                        className="h-7 w-7 p-0"
+                        disabled={savingPrompt}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void deletePromptTemplate(template);
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Trash2 className="h-4 w-4 text-rose-500" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-3 font-semibold">{template.name}</div>
                   <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
@@ -1164,7 +1215,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
                   <div className="mt-3 text-xs text-muted-foreground">
                     Updated {formatDate(template.updatedAt)}
                   </div>
-                </button>
+                </div>
               ))}
             </CardContent>
           </Card>

@@ -162,6 +162,22 @@ export class PromptTemplatesService {
     });
   }
 
+  async remove(id: string, user: AuthenticatedUser) {
+    this.ensureAdmin(user);
+    const organizationId = await this.defaultOrganizationId(user.id);
+    const template = await this.prisma.promptTemplate.findFirst({
+      where: { id, ...this.visibleWhere(organizationId) },
+      select: { id: true },
+    });
+
+    if (!template) {
+      throw new NotFoundException('Prompt template was not found.');
+    }
+
+    await this.prisma.promptTemplate.delete({ where: { id: template.id } });
+    return { deleted: true };
+  }
+
   async reset(platform: string, user: AuthenticatedUser, contentCategory?: string) {
     this.ensureAdmin(user);
     const cleanPlatform = this.parsePlatform(platform);
