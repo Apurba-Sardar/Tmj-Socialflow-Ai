@@ -1409,15 +1409,18 @@ function TodaySchedule({
         </div>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="overflow-hidden rounded-md border bg-muted/30 dark:border-white/10 dark:bg-[#080d16]">
-          <div className="grid grid-cols-5 border-b text-center text-xs text-muted-foreground dark:border-white/10">
+        <div className="overflow-hidden rounded-md border border-border bg-muted/30 text-foreground dark:border-white/10 dark:bg-[#080d16]">
+          <div className="grid grid-cols-5 border-b border-border bg-muted/50 text-center text-xs text-muted-foreground dark:border-white/10 dark:bg-[#0b1220]">
             {daysForView(scheduleView).map((day) => (
-              <div className="border-r px-2 py-3 last:border-r-0 dark:border-white/10" key={day}>
+              <div
+                className="border-r border-border px-2 py-3 text-foreground last:border-r-0 dark:border-white/10"
+                key={day}
+              >
                 {day}
               </div>
             ))}
           </div>
-          <div className="space-y-2 p-3">
+          <div className="space-y-2 bg-background/70 p-3 dark:bg-transparent">
             {items.length ? (
               items.map((item) => (
                 <div
@@ -1992,7 +1995,7 @@ function ToastMessage({ toast }: { toast: Toast }) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground dark:border-white/10">
+    <div className="rounded-md border border-dashed border-border bg-background p-6 text-center text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.02]">
       {label}
     </div>
   );
