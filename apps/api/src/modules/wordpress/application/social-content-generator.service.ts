@@ -24,6 +24,8 @@ interface GeneratedDraft {
   body: string;
   hashtags: string[];
   callToAction: string;
+  imageHeadline?: string;
+  imageFooter?: string;
 }
 
 @Injectable()
@@ -74,6 +76,9 @@ export class SocialContentGeneratorService {
           body: generated.body,
           hashtags: this.normalizeHashtags(generated.hashtags, article.categoryNames),
           callToAction: generated.callToAction,
+          imageHeadline: generated.imageHeadline ?? generated.title,
+          imageFooter:
+            generated.imageFooter ?? 'The most meaningful support may begin in small moments.',
         };
       });
     } catch (error) {
@@ -105,6 +110,8 @@ export class SocialContentGeneratorService {
         body: this.bodyFor(platform, article.title, summary, hashtags),
         hashtags,
         callToAction: this.callToActionFor(platform),
+        imageHeadline: this.titleFor(platform, article.title),
+        imageFooter: this.footerFor(platform),
         mediaUrl: this.visualFor(article, platform, hashtags),
         sourceUrl: article.url,
       };
@@ -159,7 +166,15 @@ export class SocialContentGeneratorService {
                 items: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['platform', 'title', 'body', 'hashtags', 'callToAction'],
+                  required: [
+                    'platform',
+                    'title',
+                    'body',
+                    'hashtags',
+                    'callToAction',
+                    'imageHeadline',
+                    'imageFooter',
+                  ],
                   properties: {
                     platform: {
                       type: 'string',
@@ -178,6 +193,12 @@ export class SocialContentGeneratorService {
                       },
                     },
                     callToAction: {
+                      type: 'string',
+                    },
+                    imageHeadline: {
+                      type: 'string',
+                    },
+                    imageFooter: {
                       type: 'string',
                     },
                   },
@@ -361,11 +382,22 @@ export class SocialContentGeneratorService {
     draft: SocialDraftInput,
     size: { width: number; height: number },
   ): string {
-    const titleLines = this.wrapText(draft.title, 28, 3);
+    const titleLines = this.wrapText(draft.imageHeadline ?? draft.title, 28, 2);
     const titleText = titleLines
       .map(
         (line, index) =>
-          `<text x="70" y="${145 + index * 76}" fill="#123b50" font-family="Arial, sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
+          `<text x="70" y="${118 + index * 70}" fill="#123b50" font-family="Arial, sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
+      )
+      .join('');
+    const footerLines = this.wrapText(
+      draft.imageFooter ?? 'The most meaningful support may begin in small moments.',
+      48,
+      2,
+    );
+    const footerText = footerLines
+      .map(
+        (line, index) =>
+          `<text x="70" y="${270 + index * 32}" fill="#123b50" font-family="Arial, sans-serif" font-size="26" font-weight="500">${escapeXml(line)}</text>`,
       )
       .join('');
     const cta = this.truncate(draft.callToAction ?? 'Read the full article — link in bio.', 72);
@@ -373,6 +405,7 @@ export class SocialContentGeneratorService {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
   <rect x="0" y="0" width="${size.width}" height="320" fill="#f8f1df" fill-opacity="0.96"/>
   ${titleText}
+  ${footerText}
   <rect x="0" y="${size.height - 150}" width="${size.width}" height="150" fill="#123b50" fill-opacity="0.94"/>
   <text x="70" y="${size.height - 78}" fill="#fffaf1" font-family="Arial, sans-serif" font-size="32" font-weight="600">${escapeXml(cta)}</text>
 </svg>`;
@@ -400,6 +433,12 @@ export class SocialContentGeneratorService {
       [SocialPlatform.X]: cleanTitle,
       [SocialPlatform.FACEBOOK]: cleanTitle,
     }[platform];
+  }
+
+  private footerFor(platform: SocialPlatform): string {
+    return platform === SocialPlatform.PINTEREST
+      ? 'A save-worthy reminder for the moments that matter most.'
+      : 'The most meaningful support may begin in small moments.';
   }
 
   private bodyFor(
