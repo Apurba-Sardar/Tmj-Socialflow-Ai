@@ -220,7 +220,10 @@ export class SocialContentGeneratorService {
     try {
       const image = await this.client?.images.generate({
         model: this.imageModel,
-        prompt: renderedPrompt.prompt,
+        prompt: [
+          renderedPrompt.prompt,
+          'FINAL IMAGE OVERRIDE: generate artwork only. Do not render any readable text, letters, numbers, headlines, captions, logos, labels, signs, or typographic marks. SocialFlow will add the approved text after generation. Keep the top and bottom safe areas visually simple and never crop the artwork.',
+        ].join('\n\n'),
         n: 1,
         size: this.openAiImageSize(draft.platform),
         quality: 'medium',
@@ -332,12 +335,40 @@ export class SocialContentGeneratorService {
 
   private async composePostImage(imageBase64: string, draft: SocialDraftInput): Promise<string> {
     const size = this.visualSize(draft.platform);
-    const image = await sharp(Buffer.from(imageBase64, 'base64'))
-      .resize(size.width, size.height, { fit: 'cover', position: 'center' })
+    const imageSource = sharp(Buffer.from(imageBase64, 'base64')).resize(size.width, size.height, {
+      fit: 'contain',
+      background: { r: 248, g: 244, b: 235, alpha: 1 },
+    });
+    const image = await (
+      draft.platform === SocialPlatform.INSTAGRAM
+        ? imageSource.composite([{ input: Buffer.from(this.instagramTextOverlay(draft, size)) }])
+        : imageSource
+    )
       .jpeg({ quality: 92, mozjpeg: true })
       .toBuffer();
 
     return `data:image/jpeg;base64,${image.toString('base64')}`;
+  }
+
+  private instagramTextOverlay(
+    draft: SocialDraftInput,
+    size: { width: number; height: number },
+  ): string {
+    const titleLines = this.wrapText(draft.title, 28, 3);
+    const titleText = titleLines
+      .map(
+        (line, index) =>
+          `<text x="70" y="${145 + index * 76}" fill="#123b50" font-family="Arial, sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
+      )
+      .join('');
+    const cta = this.truncate(draft.callToAction ?? 'Read the full article — link in bio.', 72);
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
+  <rect x="0" y="0" width="${size.width}" height="320" fill="#f8f1df" fill-opacity="0.96"/>
+  ${titleText}
+  <rect x="0" y="${size.height - 150}" width="${size.width}" height="150" fill="#123b50" fill-opacity="0.94"/>
+  <text x="70" y="${size.height - 78}" fill="#fffaf1" font-family="Arial, sans-serif" font-size="32" font-weight="600">${escapeXml(cta)}</text>
+</svg>`;
   }
 
   private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1536x1024' | '1024x1536' {
@@ -539,4 +570,13 @@ function platformTitle(platform: SocialPlatform): string {
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+function escapeXml(value: string): string {
+  return value.replace(
+    /[&<>'"]/g,
+    (character) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&apos;', '"': '&quot;' })[character] ??
+      character,
+  );
 }
