@@ -41,6 +41,7 @@ import { Sheet } from '@/components/ui/sheet';
 import type { AuthenticatedUser } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/env';
 import { cn } from '@/lib/utils';
+import { WordPressAutomation } from './wordpress-automation';
 
 type CampaignStatus = 'NOT_GENERATED' | 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'ARCHIVED';
 
@@ -677,6 +678,8 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                 </CardContent>
               </Card>
             </section>
+
+            <WordPressAutomation user={user} />
 
             <Card className="overflow-hidden border-border/80 bg-card/95 dark:border-white/10">
               <CardHeader className="gap-4 border-b border-border pb-4 dark:border-white/10">

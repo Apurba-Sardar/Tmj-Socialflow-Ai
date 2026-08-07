@@ -443,6 +443,9 @@ export class SocialChannelsService {
     if (account.platform === SocialPlatform.INSTAGRAM) {
       publishDto = this.publicInstagramMedia(publishDto);
     }
+    if (account.platform === SocialPlatform.PINTEREST) {
+      publishDto = this.publicPinterestMedia(publishDto);
+    }
 
     if (!accessToken) {
       throw new BadRequestException(
@@ -626,6 +629,32 @@ export class SocialChannelsService {
     if (!apiBaseUrl) {
       throw new ServiceUnavailableException(
         'API_PUBLIC_URL is required to publish Instagram media.',
+      );
+    }
+
+    return {
+      draftId: dto.draftId,
+      title: dto.title,
+      caption: dto.caption,
+      hashtags: dto.hashtags,
+      sourceUrl: dto.sourceUrl,
+      mediaUrl: `${apiBaseUrl}/api/social-channels/media/${encodeURIComponent(dto.draftId)}`,
+    };
+  }
+
+  private publicPinterestMedia(dto: PublishToChannelDto): PublishToChannelDto {
+    if (!dto.mediaUrl?.startsWith('data:image/')) {
+      return dto;
+    }
+
+    if (!dto.draftId) {
+      throw new BadRequestException('Pinterest requires a draft image with a public media URL.');
+    }
+
+    const apiBaseUrl = process.env.API_PUBLIC_URL?.replace(/\/$/, '');
+    if (!apiBaseUrl) {
+      throw new ServiceUnavailableException(
+        'API_PUBLIC_URL is required to publish Pinterest media.',
       );
     }
 

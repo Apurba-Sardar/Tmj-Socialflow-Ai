@@ -8,9 +8,11 @@ import { WordPressRepository } from './infrastructure/wordpress.repository.js';
 import { WordPressRestClient } from './infrastructure/wordpress-rest.client.js';
 import { WordPressSecretService } from './infrastructure/wordpress-secret.service.js';
 import { WordPressController } from './wordpress.controller.js';
+import { SocialChannelsModule } from '../social-channels/social-channels.module.js';
+import { WordPressAutomationService } from './application/wordpress-automation.service.js';
 
 @Module({
-  imports: [PrismaModule, PromptTemplatesModule],
+  imports: [PrismaModule, PromptTemplatesModule, SocialChannelsModule],
   controllers: [WordPressController],
   providers: [
     WordPressService,
@@ -18,6 +20,7 @@ import { WordPressController } from './wordpress.controller.js';
     WordPressRepository,
     WordPressRestClient,
     WordPressSecretService,
+    WordPressAutomationService,
   ],
   exports: [WordPressService],
 })

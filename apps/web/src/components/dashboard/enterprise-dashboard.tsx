@@ -226,6 +226,7 @@ const defaultPlatformKpi: PlatformKpi = {
 const navigation: { label: string; href: string; icon: LucideIcon; count?: string }[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'WordPress Hub', href: '/wordpress-hub', icon: FileText },
+  { label: 'Daily Automation', href: '/automation', icon: Clock3 },
   { label: 'Content', href: '/media-library', icon: Library },
   { label: 'Scheduler', href: '/scheduler', icon: CalendarDays },
   { label: 'Queue', href: '/dashboard#queue', icon: Workflow },

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -16,12 +27,17 @@ import {
   WordPressLibraryQueryDto,
   WordPressPostsQueryDto,
 } from './application/wordpress.dto.js';
+import { UpdateWordPressAutomationDto } from './application/wordpress-automation.dto.js';
+import { WordPressAutomationService } from './application/wordpress-automation.service.js';
 import { WordPressService } from './application/wordpress.service.js';
 
 @Controller('wordpress')
 @UseGuards(JwtAuthGuard)
 export class WordPressController {
-  constructor(private readonly wordpressService: WordPressService) {}
+  constructor(
+    private readonly wordpressService: WordPressService,
+    private readonly automationService: WordPressAutomationService,
+  ) {}
 
   @Post('connect')
   connect(@Body() dto: ConnectWordPressDto, @CurrentUser() user: AuthenticatedUser) {
@@ -31,6 +47,24 @@ export class WordPressController {
   @Get('connections')
   connections(@CurrentUser() user: AuthenticatedUser) {
     return this.wordpressService.listConnections(user);
+  }
+
+  @Get('automation/daily')
+  dailyAutomation(@CurrentUser() user: AuthenticatedUser) {
+    return this.automationService.get(user);
+  }
+
+  @Patch('automation/daily')
+  updateDailyAutomation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateWordPressAutomationDto,
+  ) {
+    return this.automationService.update(user, dto);
+  }
+
+  @Post('automation/daily/run')
+  runDailyAutomation(@CurrentUser() user: AuthenticatedUser) {
+    return this.automationService.runNow(user);
   }
 
   @Get('posts')
@@ -99,7 +133,11 @@ export class WordPressController {
   }
 
   @Post('hub/posts/:id/generate-campaign')
-  generateCampaign(@Param('id') id: string, @Body() dto: GenerateCampaignDto, @CurrentUser() user: AuthenticatedUser) {
+  generateCampaign(
+    @Param('id') id: string,
+    @Body() dto: GenerateCampaignDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.wordpressService.generateCampaign(id, dto, user);
   }
 
@@ -109,7 +147,11 @@ export class WordPressController {
   }
 
   @Post('library/:id/repurpose')
-  repurposeArticle(@Param('id') id: string, @Body() dto: RepurposeArticleDto, @CurrentUser() user: AuthenticatedUser) {
+  repurposeArticle(
+    @Param('id') id: string,
+    @Body() dto: RepurposeArticleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.wordpressService.repurposeArticle(id, dto, user);
   }
 
