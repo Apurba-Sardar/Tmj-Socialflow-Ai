@@ -114,7 +114,13 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
         method: 'POST',
         credentials: 'include',
       });
-      const payload = (await response.json()) as { message?: string; published?: number };
+      const raw = await response.text();
+      let payload: { message?: string; published?: number } = {};
+      try {
+        payload = JSON.parse(raw) as { message?: string; published?: number };
+      } catch {
+        payload = { message: raw };
+      }
       if (!response.ok) throw new Error(payload.message ?? 'Automation run failed.');
       setMessage(payload.message ?? `${String(payload.published ?? 0)} post(s) published.`);
       await load();
@@ -152,9 +158,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
               className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               disabled={!isAdmin || loading}
               id="automation-site"
-              onChange={(event) =>
-                { setState((current) => ({ ...current, connectionId: event.target.value })); }
-              }
+              onChange={(event) => {
+                setState((current) => ({ ...current, connectionId: event.target.value }));
+              }}
               value={state.connectionId}
             >
               <option value="">Choose a site</option>
@@ -171,9 +177,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
               id="automation-hour"
               max={23}
               min={0}
-              onChange={(event) =>
-                { setState((current) => ({ ...current, publishHour: Number(event.target.value) })); }
-              }
+              onChange={(event) => {
+                setState((current) => ({ ...current, publishHour: Number(event.target.value) }));
+              }}
               type="number"
               value={state.publishHour}
             />
@@ -184,9 +190,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
               id="automation-limit"
               max={10}
               min={1}
-              onChange={(event) =>
-                { setState((current) => ({ ...current, dailyLimit: Number(event.target.value) })); }
-              }
+              onChange={(event) => {
+                setState((current) => ({ ...current, dailyLimit: Number(event.target.value) }));
+              }}
               type="number"
               value={state.dailyLimit}
             />
@@ -195,9 +201,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
             <Label htmlFor="automation-timezone">Timezone</Label>
             <Input
               id="automation-timezone"
-              onChange={(event) =>
-                { setState((current) => ({ ...current, timezone: event.target.value })); }
-              }
+              onChange={(event) => {
+                setState((current) => ({ ...current, timezone: event.target.value }));
+              }}
               value={state.timezone}
             />
           </div>
@@ -206,7 +212,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
           {platforms.map((platform) => (
             <Button
               key={platform}
-              onClick={() => { togglePlatform(platform); }}
+              onClick={() => {
+                togglePlatform(platform);
+              }}
               size="sm"
               variant={state.platforms.includes(platform) ? 'default' : 'outline'}
             >
@@ -217,7 +225,9 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             disabled={!isAdmin || saving || loading}
-            onClick={() => { setState((current) => ({ ...current, enabled: !current.enabled })); }}
+            onClick={() => {
+              setState((current) => ({ ...current, enabled: !current.enabled }));
+            }}
             variant="outline"
           >
             {state.enabled ? 'Pause automation' : 'Enable automation'}

@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Prisma, SocialChannelStatus, SocialPlatform } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../../auth/types.js';
@@ -224,7 +230,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
       const message = error instanceof Error ? error.message : 'Daily automation failed.';
       await this.save(organizationId, { ...runningConfig, lastError: message });
       this.logger.error(message);
-      if (force) throw error;
+      if (force) throw new BadRequestException(message);
       return { published: 0, checked: 0, message };
     }
   }
