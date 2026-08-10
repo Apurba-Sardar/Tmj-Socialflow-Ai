@@ -54,7 +54,10 @@ export class AuthService {
   async login(dto: LoginDto, metadata: SessionMetadata = {}): Promise<AuthSession> {
     const identifier = dto.email.trim().toLowerCase();
 
-    if (![SUPERADMIN_USER_ID, SUPERADMIN_EMAIL].includes(identifier) || dto.password !== SUPERADMIN_PASSWORD) {
+    if (
+      ![SUPERADMIN_USER_ID, SUPERADMIN_EMAIL].includes(identifier) ||
+      dto.password !== SUPERADMIN_PASSWORD
+    ) {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
@@ -69,7 +72,9 @@ export class AuthService {
       },
     });
 
-    return this.createSession(user, undefined, { ...metadata, rememberMe: dto.rememberMe ?? false });
+    // This app has no short-lived guest session. Keep the refresh token alive
+    // for the configured refresh TTL unless the client explicitly opts out.
+    return this.createSession(user, undefined, { ...metadata, rememberMe: dto.rememberMe ?? true });
   }
 
   async refresh(rawRefreshToken: string, metadata: SessionMetadata = {}): Promise<AuthSession> {
@@ -81,6 +86,13 @@ export class AuthService {
     }
 
     if (persistedToken.revokedAt) {
+      // A duplicate refresh can happen when multiple tabs regain focus at the
+      // same time. The original request has already rotated this token; do not
+      // destroy the whole family and log every tab out as a consequence.
+      if (persistedToken.replacedBy) {
+        throw new UnauthorizedException('Refresh token has already been rotated.');
+      }
+
       await this.authRepository.revokeRefreshTokenFamily(persistedToken.familyId);
       throw new UnauthorizedException('Refresh token reuse detected.');
     }
@@ -111,7 +123,9 @@ export class AuthService {
       return;
     }
 
-    const persistedToken = await this.authRepository.findRefreshToken(this.hashToken(rawRefreshToken));
+    const persistedToken = await this.authRepository.findRefreshToken(
+      this.hashToken(rawRefreshToken),
+    );
 
     if (persistedToken && !persistedToken.revokedAt) {
       await this.authRepository.revokeRefreshToken(persistedToken.id);
@@ -131,7 +145,9 @@ export class AuthService {
 
   verifyEmail(dto: VerifyEmailDto): Promise<AuthenticatedUser> {
     void dto;
-    throw new ForbiddenException('Email verification is disabled for the hardcoded Super Admin login.');
+    throw new ForbiddenException(
+      'Email verification is disabled for the hardcoded Super Admin login.',
+    );
   }
 
   async getCurrentUser(userId: string): Promise<AuthenticatedUser> {
@@ -214,5 +230,4 @@ export class AuthService {
   private secondsFromNow(seconds: number): Date {
     return new Date(Date.now() + seconds * 1000);
   }
-
 }
