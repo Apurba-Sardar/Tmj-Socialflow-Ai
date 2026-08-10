@@ -49,6 +49,11 @@ export class WordPressController {
     return this.wordpressService.listConnections(user);
   }
 
+  @Delete('connections/:id')
+  disconnect(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.wordpressService.disconnect(id, user);
+  }
+
   @Get('automation/daily')
   dailyAutomation(@CurrentUser() user: AuthenticatedUser) {
     return this.automationService.get(user);

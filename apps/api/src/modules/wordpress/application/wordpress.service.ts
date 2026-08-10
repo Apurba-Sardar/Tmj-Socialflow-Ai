@@ -154,6 +154,24 @@ export class WordPressService {
     return this.repository.listConnections(organizationId);
   }
 
+  async disconnect(id: string, user: AuthenticatedUser) {
+    const organizationId = await this.repository.resolveOrganizationId(user.id);
+    if (!organizationId) {
+      throw new BadRequestException('User is not assigned to an organization.');
+    }
+
+    const connection = await this.repository.disconnectConnection(id, organizationId);
+    if (!connection) {
+      throw new NotFoundException('WordPress connection was not found.');
+    }
+
+    return {
+      disconnected: true,
+      connection,
+      message: 'WordPress site disconnected. Synced posts were preserved.',
+    };
+  }
+
   async sync(dto: SyncWordPressDto, user: AuthenticatedUser): Promise<WordPressSyncResult> {
     const connection = await this.requireConnection({ connectionId: dto.connectionId, user });
     const perPage = dto.perPage ?? 100;
@@ -327,7 +345,8 @@ export class WordPressService {
       articleId: article.id,
       campaignName: dto.campaignName?.trim() ?? `Campaign: ${article.title}`,
       prompt: dto.prompt,
-      promptVersion: dto.promptVersion?.trim() ?? generatedDrafts[0]?.promptVersion ?? 'wordpress-hub-v1',
+      promptVersion:
+        dto.promptVersion?.trim() ?? generatedDrafts[0]?.promptVersion ?? 'wordpress-hub-v1',
       aiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       repurposeJobId: job.id,
       drafts: draftsWithPromptMetadata,
@@ -496,7 +515,10 @@ export class WordPressService {
       return mapAuthor(response.data);
     } catch (error) {
       this.logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown author fetch error.', authorId: id },
+        {
+          error: error instanceof Error ? error.message : 'Unknown author fetch error.',
+          authorId: id,
+        },
         'WordPress author fetch failed',
       );
       return undefined;
@@ -520,7 +542,10 @@ export class WordPressService {
       return mapFeaturedImage(response.data);
     } catch (error) {
       this.logger.warn(
-        { error: error instanceof Error ? error.message : 'Unknown media fetch error.', mediaId: id },
+        {
+          error: error instanceof Error ? error.message : 'Unknown media fetch error.',
+          mediaId: id,
+        },
         'WordPress featured image fetch failed',
       );
       return undefined;

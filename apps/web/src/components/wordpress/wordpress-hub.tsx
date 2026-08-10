@@ -141,6 +141,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -365,6 +366,33 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
       notify(error instanceof Error ? error.message : 'Unable to sync WordPress posts.', 'warning');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function disconnectWordPress(connection: WordPressConnection) {
+    if (
+      !isAdmin ||
+      !window.confirm(`Disconnect ${connection.siteUrl}? Synced posts will be preserved.`)
+    ) {
+      return;
+    }
+
+    setDisconnectingId(connection.id);
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/wordpress/connections/${encodeURIComponent(connection.id)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      if (!response.ok) throw new Error('Unable to disconnect WordPress site.');
+      notify('WordPress site disconnected. Synced posts were preserved.');
+      await loadConnections();
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : 'Unable to disconnect WordPress site.',
+        'warning',
+      );
+    } finally {
+      setDisconnectingId(null);
     }
   }
 
@@ -667,6 +695,22 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                             {formatNumber(connection._count.articles)}
                           </div>
                           <div className="text-xs text-muted-foreground">posts</div>
+                          <Button
+                            className="mt-2"
+                            disabled={!isAdmin || disconnectingId === connection.id}
+                            onClick={() => {
+                              void disconnectWordPress(connection);
+                            }}
+                            size="sm"
+                            variant="destructive"
+                          >
+                            {disconnectingId === connection.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            Disconnect
+                          </Button>
                         </div>
                       </div>
                     ))

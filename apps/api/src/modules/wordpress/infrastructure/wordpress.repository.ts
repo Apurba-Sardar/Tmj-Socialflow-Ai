@@ -179,6 +179,20 @@ export class WordPressRepository {
     });
   }
 
+  async disconnectConnection(id: string, organizationId: string) {
+    const connection = await this.prisma.wordPressConnection.findFirst({
+      where: { id, organizationId },
+      select: { id: true, siteUrl: true },
+    });
+    if (!connection) return null;
+
+    return this.prisma.wordPressConnection.update({
+      where: { id: connection.id },
+      data: { isActive: false },
+      select: { id: true, siteUrl: true, isActive: true },
+    });
+  }
+
   async resolveOrganizationId(userId: string): Promise<string | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
