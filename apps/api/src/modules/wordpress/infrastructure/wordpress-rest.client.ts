@@ -115,9 +115,11 @@ export class WordPressRestClient {
 
         if (!response.ok) {
           const text = await response.text();
-          lastError = new Error(
-            `WordPress request failed with ${String(response.status)} ${response.statusText}: ${text.slice(0, 500)}`,
-          );
+          const detail =
+            response.status === 401
+              ? 'WordPress rejected the credentials. Use the WordPress username and an Application Password with spaces removed.'
+              : `WordPress returned ${String(response.status)} ${response.statusText}.`;
+          lastError = new Error(`${detail}${text ? ` ${text.slice(0, 500)}` : ''}`);
 
           if (!this.shouldRetry(response.status) || attempt === this.maxAttempts) {
             break;

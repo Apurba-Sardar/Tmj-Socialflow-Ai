@@ -55,7 +55,10 @@ export class WordPressService {
     const config: WordPressConnectionConfig = {
       siteUrl: this.normalizeSiteUrl(dto.siteUrl),
       username: dto.username.trim(),
-      applicationPassword: dto.applicationPassword.trim(),
+      // WordPress displays application passwords in groups separated by
+      // spaces. Remove formatting whitespace so pasted credentials work with
+      // Basic Auth as well as manually entered passwords.
+      applicationPassword: dto.applicationPassword.replace(/\s+/g, ''),
     };
     const organizationId = user ? await this.repository.resolveOrganizationId(user.id) : null;
 
@@ -665,7 +668,19 @@ export class WordPressService {
   }
 
   private normalizeSiteUrl(siteUrl: string): string {
-    return siteUrl.trim().replace(/\/+$/, '');
+    const normalized = siteUrl.trim().replace(/\/+$/, '');
+
+    try {
+      const url = new URL(normalized);
+      url.pathname = url.pathname
+        .replace(/\/(?:wp-admin|wp-login\.php|wp-json)(?:\/.*)?$/i, '')
+        .replace(/\/+$/, '');
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    } catch {
+      return normalized;
+    }
   }
 
   private readPaginationHeader(headers: Headers, name: string): number {

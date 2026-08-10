@@ -322,7 +322,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
         body: JSON.stringify(connectForm),
       });
       if (!response.ok) {
-        throw new Error('WordPress connection failed.');
+        throw new Error(await apiErrorMessage(response, 'WordPress connection failed.'));
       }
       setConnectForm({ siteUrl: '', username: '', applicationPassword: '' });
       notify('WordPress site connected.');
@@ -355,7 +355,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
         }),
       });
       if (!response.ok) {
-        throw new Error('WordPress sync failed.');
+        throw new Error(await apiErrorMessage(response, 'WordPress sync failed.'));
       }
       const result = (await response.json()) as { scannedPosts: number; upsertedPosts: number };
       notify(

@@ -46,7 +46,7 @@ describe('WordPressService', () => {
     const result = await service.connect({
       siteUrl: 'https://example.com/',
       username: 'editor',
-      applicationPassword: 'app-password',
+      applicationPassword: 'app- pass word',
     });
 
     expect(client.validateConnection).toHaveBeenCalledWith({
