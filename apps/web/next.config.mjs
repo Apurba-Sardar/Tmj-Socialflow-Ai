@@ -2,6 +2,27 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const appDir = path.dirname(fileURLToPath(import.meta.url));
+const productionApiTarget = 'https://socialflowapi-production.up.railway.app';
+
+function resolveApiProxyTarget() {
+  const configured = (
+    process.env.API_PROXY_TARGET ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
+  ).trim().replace(/^['"]|['"]$/g, '');
+  const fallback = process.env.NODE_ENV === 'production' ? productionApiTarget : 'http://localhost:4000';
+
+  try {
+    const target = new URL(configured || fallback);
+    if (!['http:', 'https:'].includes(target.protocol) || !target.hostname) {
+      throw new Error('Invalid API proxy protocol.');
+    }
+    target.pathname = target.pathname.replace(/\/api\/?$/, '');
+    target.search = '';
+    target.hash = '';
+    return target.toString().replace(/\/$/, '');
+  } catch {
+    return fallback;
+  }
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -19,12 +40,7 @@ const nextConfig = {
     },
   },
   async rewrites() {
-    const apiProxyTarget =
-      process.env.API_PROXY_TARGET?.trim() ??
-      process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ??
-      (process.env.NODE_ENV === 'production'
-        ? 'https://socialflowapi-production.up.railway.app'
-        : 'http://localhost:4000');
+    const apiProxyTarget = resolveApiProxyTarget();
 
     return [
       {

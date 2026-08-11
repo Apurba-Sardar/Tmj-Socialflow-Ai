@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 
-const apiBaseUrl = () =>
-  (
-    process.env.API_PROXY_TARGET ??
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    (process.env.NODE_ENV === 'production'
-      ? 'https://socialflowapi-production.up.railway.app'
-      : 'http://localhost:4000')
-  ).replace(/\/$/, '');
+const productionApiTarget = 'https://socialflowapi-production.up.railway.app';
+
+const apiBaseUrl = () => {
+  const configured = (process.env.API_PROXY_TARGET ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '');
+  const fallback =
+    process.env.NODE_ENV === 'production' ? productionApiTarget : 'http://localhost:4000';
+
+  try {
+    const target = new URL(configured || fallback);
+    if (!['http:', 'https:'].includes(target.protocol) || !target.hostname) {
+      throw new Error('Invalid API proxy protocol.');
+    }
+    target.pathname = target.pathname.replace(/\/api\/?$/, '');
+    target.search = '';
+    target.hash = '';
+    return target.toString().replace(/\/$/, '');
+  } catch {
+    return fallback;
+  }
+};
 
 interface RouteContext {
   params: Promise<{ path: string[] }>;
