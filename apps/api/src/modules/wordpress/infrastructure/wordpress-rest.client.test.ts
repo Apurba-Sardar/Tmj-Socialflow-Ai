@@ -66,4 +66,19 @@ describe('WordPressRestClient', () => {
     expect(result.attempts).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('returns an actionable error for rejected credentials', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ code: 'rest_not_logged_in' }), { status: 401 }),
+    );
+    const client = new WordPressRestClient();
+
+    await expect(
+      client.validateConnection({
+        siteUrl: 'https://example.com',
+        username: 'editor',
+        applicationPassword: 'password',
+      }),
+    ).rejects.toThrow('WordPress rejected the credentials.');
+  });
 });

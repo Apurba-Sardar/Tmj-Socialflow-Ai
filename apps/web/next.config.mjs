@@ -19,7 +19,12 @@ const nextConfig = {
     },
   },
   async rewrites() {
-    const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
+    const apiProxyTarget =
+      process.env.API_PROXY_TARGET?.trim() ??
+      process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ??
+      (process.env.NODE_ENV === 'production'
+        ? 'https://socialflowapi-production.up.railway.app'
+        : 'http://localhost:4000');
 
     return [
       {

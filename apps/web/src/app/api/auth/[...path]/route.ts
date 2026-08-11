@@ -4,7 +4,9 @@ const apiBaseUrl = () =>
   (
     process.env.API_PROXY_TARGET ??
     process.env.NEXT_PUBLIC_API_BASE_URL ??
-    'http://localhost:4000'
+    (process.env.NODE_ENV === 'production'
+      ? 'https://socialflowapi-production.up.railway.app'
+      : 'http://localhost:4000')
   ).replace(/\/$/, '');
 
 interface RouteContext {

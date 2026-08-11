@@ -147,11 +147,23 @@ export class WordPressRestClient {
     }
 
     const durationMs = Date.now() - startedAt;
+    const errorMessage =
+      lastError instanceof Error ? lastError.message : 'Unknown WordPress request failure.';
+    const message =
+      statusCode === 401
+        ? 'WordPress rejected the credentials. Reconnect with the correct username and Application Password.'
+        : statusCode === 403
+          ? 'WordPress blocked this REST API request. Check the user permissions and security plugin settings.'
+          : statusCode === 404
+            ? 'WordPress REST API endpoint was not found. Check that the site URL is correct and REST API access is enabled.'
+            : statusCode >= 500
+              ? 'WordPress is temporarily unavailable. Try syncing again in a few minutes.'
+              : 'WordPress REST API request failed.';
     throw new ServiceUnavailableException({
-      message: 'WordPress REST API request failed.',
+      message,
       statusCode,
       durationMs,
-      error: lastError instanceof Error ? lastError.message : 'Unknown WordPress request failure.',
+      error: errorMessage,
     });
   }
 
