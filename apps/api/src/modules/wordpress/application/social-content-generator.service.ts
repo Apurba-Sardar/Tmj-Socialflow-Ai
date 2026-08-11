@@ -47,6 +47,7 @@ export class SocialContentGeneratorService {
     platforms: SocialPlatform[],
     repurposeJobId: string,
     userId?: string,
+    options: { useFeaturedImage?: boolean } = {},
   ): Promise<SocialDraftInput[]> {
     const fallbackDrafts = this.generateFallback(article, platforms, repurposeJobId);
 
@@ -86,6 +87,15 @@ export class SocialContentGeneratorService {
         { error: error instanceof Error ? error.message : 'Unknown OpenAI generation error.' },
         'OpenAI social draft generation failed; using fallback copy',
       );
+    }
+
+    if (options.useFeaturedImage) {
+      return draftsForVisuals.map((draft) => ({
+        ...draft,
+        // Daily automation must publish the image already attached to the
+        // WordPress post. Do not call the AI image generator for this path.
+        mediaUrl: article.featuredImageUrl ?? undefined,
+      }));
     }
 
     return Promise.all(

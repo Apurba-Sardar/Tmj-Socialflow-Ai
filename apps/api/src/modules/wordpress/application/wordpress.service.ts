@@ -324,7 +324,12 @@ export class WordPressService {
     };
   }
 
-  async generateCampaign(id: string, dto: GenerateCampaignDto, user?: { id: string }) {
+  async generateCampaign(
+    id: string,
+    dto: GenerateCampaignDto,
+    user?: { id: string },
+    options: { useFeaturedImage?: boolean } = {},
+  ) {
     const article = await this.repository.findArticle(id);
 
     if (!article) {
@@ -333,7 +338,13 @@ export class WordPressService {
 
     const platforms = this.platforms(dto.platforms);
     const job = await this.repository.createRepurposeJob(article.id, platforms, dto.prompt);
-    const generatedDrafts = await this.generator.generate(article, platforms, job.id, user?.id);
+    const generatedDrafts = await this.generator.generate(
+      article,
+      platforms,
+      job.id,
+      user?.id,
+      options,
+    );
     const drafts = await this.repository.createDrafts(generatedDrafts);
     const generatedByPlatform = new Map(generatedDrafts.map((draft) => [draft.platform, draft]));
     const draftsWithPromptMetadata = drafts.map((draft) => {

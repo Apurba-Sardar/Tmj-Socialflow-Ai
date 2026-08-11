@@ -108,4 +108,41 @@ describe('SocialContentGeneratorService', () => {
     });
     expect(drafts[0]?.mediaUrl).toContain('data:image/jpeg;base64,');
   });
+
+  it('reuses the WordPress featured image for daily automation', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    responseCreate.mockResolvedValue({
+      output_text: JSON.stringify({
+        drafts: [
+          {
+            platform: SocialPlatform.INSTAGRAM,
+            title: 'A mindful daily practice',
+            body: 'A practical reminder from the latest article.',
+            hashtags: ['#Mindfulness'],
+            callToAction: 'Read the full article.',
+          },
+        ],
+      }),
+    });
+
+    const service = new SocialContentGeneratorService();
+    const drafts = await service.generate(
+      {
+        id: 'article_1',
+        title: 'A mindful daily practice',
+        excerpt: 'A practical reminder.',
+        contentText: null,
+        url: 'https://example.com/mindfulness',
+        featuredImageUrl: 'https://example.com/wordpress-image.jpg',
+        categoryNames: ['Mindfulness'],
+      },
+      [SocialPlatform.INSTAGRAM],
+      'job_1',
+      undefined,
+      { useFeaturedImage: true },
+    );
+
+    expect(drafts[0]?.mediaUrl).toBe('https://example.com/wordpress-image.jpg');
+    expect(imageGenerate).not.toHaveBeenCalled();
+  });
 });

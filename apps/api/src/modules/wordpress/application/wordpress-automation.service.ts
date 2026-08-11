@@ -175,6 +175,9 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
           connectionId: config.connectionId,
           status: 'publish',
           publishedAt: { gte: new Date(config.activatedAt), lte: new Date() },
+          // Daily automation publishes the original WordPress featured image
+          // only. Posts without one are left for manual review.
+          featuredImageUrl: { not: null },
           id: { notIn: config.processedArticleIds },
         },
         orderBy: { publishedAt: 'asc' },
@@ -194,6 +197,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
             promptVersion: 'wordpress-daily-automation-v1',
           },
           actor,
+          { useFeaturedImage: true },
         );
         const drafts = new Map(generation.drafts.map((draft) => [draft.platform, draft]));
         for (const platform of config.platforms) {
