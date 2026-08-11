@@ -15,7 +15,9 @@ import { WordPressService } from './wordpress.service.js';
 
 const SETTING_KEY = 'wordpress.daily-automation';
 const DEFAULT_PLATFORMS = [SocialPlatform.FACEBOOK, SocialPlatform.INSTAGRAM];
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
+// Poll frequently so newly published WordPress posts are shared without a
+// browser refresh. The processed article list keeps each post idempotent.
+const POLL_INTERVAL_MS = 60 * 1000;
 
 interface DailyAutomationConfig {
   enabled: boolean;
@@ -117,7 +119,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
       });
       for (const setting of settings) {
         const config = this.parseConfig(setting.value);
-        if (!config.enabled || !this.isDue(config)) continue;
+        if (!config.enabled) continue;
         await this.run(setting.organizationId, config, false);
       }
     } catch (error) {
@@ -237,21 +239,6 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
       if (force) throw new BadRequestException(message);
       return { published: 0, checked: 0, message };
     }
-  }
-
-  private isDue(config: DailyAutomationConfig) {
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: config.timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      hour12: false,
-    }).formatToParts(now);
-    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    const day = `${value.year ?? ''}-${value.month ?? ''}-${value.day ?? ''}`;
-    return Number(value.hour) >= config.publishHour && config.lastRunAt?.slice(0, 10) !== day;
   }
 
   private parseConfig(value: unknown): DailyAutomationConfig {

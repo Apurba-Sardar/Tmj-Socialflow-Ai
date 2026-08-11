@@ -141,8 +141,8 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
               Daily auto-publishing
             </CardTitle>
             <CardDescription>
-              The server checks WordPress automatically, generates one new social campaign, and
-              publishes it without a browser refresh.
+              The server checks WordPress every minute and immediately shares new posts to your
+              selected channels using the original WordPress featured image.
             </CardDescription>
           </div>
           <Badge variant={state.enabled ? 'default' : 'outline'}>
@@ -170,19 +170,6 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <Label htmlFor="automation-hour">Publish hour (24h)</Label>
-            <Input
-              id="automation-hour"
-              max={23}
-              min={0}
-              onChange={(event) => {
-                setState((current) => ({ ...current, publishHour: Number(event.target.value) }));
-              }}
-              type="number"
-              value={state.publishHour}
-            />
           </div>
           <div>
             <Label htmlFor="automation-limit">New posts per day</Label>
