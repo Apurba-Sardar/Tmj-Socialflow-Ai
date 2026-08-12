@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { SocialContentGeneratorService } from '../wordpress/application/social-content-generator.service.js';
 import type {
   AiPipelineQueryDto,
+  BulkDeleteDraftsDto,
   GenerateAiContentDto,
   RegenerateCampaignDto,
   UpdateDraftStatusDto,
@@ -252,7 +253,11 @@ export class AiPipelineService {
     };
   }
 
-  async regenerateCampaign(user: AuthenticatedUser, campaignId: string, dto: RegenerateCampaignDto) {
+  async regenerateCampaign(
+    user: AuthenticatedUser,
+    campaignId: string,
+    dto: RegenerateCampaignDto,
+  ) {
     this.assertCanGenerate(user);
     const organizationId = await this.requireOrganizationId(user.id);
     const campaign = await this.prisma.wordPressCampaign.findFirst({
@@ -301,6 +306,48 @@ export class AiPipelineService {
     });
   }
 
+  async deleteDraft(user: AuthenticatedUser, id: string) {
+    this.assertCanGenerate(user);
+    const organizationId = await this.requireOrganizationId(user.id);
+    const draft = await this.prisma.socialDraft.findFirst({
+      where: { id, article: this.articleScope(organizationId) },
+    });
+
+    if (!draft) {
+      throw new NotFoundException('Draft was not found.');
+    }
+
+    await this.prisma.socialDraft.delete({ where: { id } });
+    return { deleted: 1, id };
+  }
+
+  async bulkDeleteDrafts(user: AuthenticatedUser, dto: BulkDeleteDraftsDto) {
+    this.assertCanGenerate(user);
+    const organizationId = await this.requireOrganizationId(user.id);
+    const articleScope = this.articleScope(organizationId);
+
+    const where: Prisma.SocialDraftWhereInput = {
+      article: articleScope,
+    };
+
+    if (dto.ids?.length) {
+      where.id = { in: dto.ids };
+    }
+    if (dto.status) {
+      where.status = dto.status;
+    }
+    if (dto.platform) {
+      where.platform = dto.platform;
+    }
+
+    if (!dto.ids?.length && !dto.status && !dto.platform && !dto.allDrafts) {
+      throw new BadRequestException('Select at least one draft or filter to delete.');
+    }
+
+    const result = await this.prisma.socialDraft.deleteMany({ where });
+    return { deleted: result.count };
+  }
+
   private async generateForArticle(input: {
     organizationId: string;
     articleId: string;
@@ -328,7 +375,11 @@ export class AiPipelineService {
     });
 
     try {
-      const generatedDrafts = await this.generator.generate(article, input.platforms, repurposeJob.id);
+      const generatedDrafts = await this.generator.generate(
+        article,
+        input.platforms,
+        repurposeJob.id,
+      );
       await this.prisma.socialDraft.createMany({ data: generatedDrafts });
       const drafts = await this.prisma.socialDraft.findMany({
         where: { repurposeJobId: repurposeJob.id },

@@ -392,32 +392,44 @@ export class SocialContentGeneratorService {
     draft: SocialDraftInput,
     size: { width: number; height: number },
   ): string {
-    const titleLines = this.wrapText(draft.imageHeadline ?? draft.title, 28, 2);
+    const rawTitle = draft.imageHeadline ?? draft.title;
+    const titleLines = this.wrapText(rawTitle, 32, 2);
     const titleText = titleLines
       .map(
         (line, index) =>
-          `<text x="70" y="${118 + index * 70}" fill="#123b50" font-family="sans-serif" font-size="62" font-weight="700">${escapeXml(line)}</text>`,
+          `<text x="60" y="${95 + index * 60}" fill="#123b50" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="50" font-weight="700">${sanitizeSvgText(line)}</text>`,
       )
       .join('');
-    const footerLines = this.wrapText(
-      draft.imageFooter ?? 'The most meaningful support may begin in small moments.',
-      48,
-      2,
-    );
+
+    const rawFooter =
+      draft.imageFooter ?? 'The most meaningful support may begin in small moments.';
+    const footerLines = this.wrapText(rawFooter, 52, 2);
     const footerText = footerLines
       .map(
         (line, index) =>
-          `<text x="70" y="${270 + index * 32}" fill="#123b50" font-family="sans-serif" font-size="26" font-weight="500">${escapeXml(line)}</text>`,
+          `<text x="60" y="${220 + index * 32}" fill="#4b6575" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="24" font-weight="500">${sanitizeSvgText(line)}</text>`,
       )
       .join('');
-    const cta = this.truncate(draft.callToAction ?? 'Read the full article — link in bio.', 72);
+
+    const defaultCta =
+      draft.platform === SocialPlatform.FACEBOOK
+        ? 'Read the full article - link in comments.'
+        : 'Read the full article - link in bio.';
+    const cta = this.truncate(draft.callToAction ?? defaultCta, 72);
 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
-  <rect x="0" y="0" width="${size.width}" height="320" fill="#f8f1df" fill-opacity="0.96"/>
+  <defs>
+    <style type="text/css">
+      text {
+        font-family: Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif;
+      }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="${size.width}" height="290" fill="#f8f1df" fill-opacity="0.96"/>
   ${titleText}
   ${footerText}
-  <rect x="0" y="${size.height - 150}" width="${size.width}" height="150" fill="#123b50" fill-opacity="0.94"/>
-  <text x="70" y="${size.height - 78}" fill="#fffaf1" font-family="sans-serif" font-size="32" font-weight="600">${escapeXml(cta)}</text>
+  <rect x="0" y="${size.height - 120}" width="${size.width}" height="120" fill="#123b50" fill-opacity="0.95"/>
+  <text x="60" y="${size.height - 48}" fill="#fffaf1" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="28" font-weight="600">${sanitizeSvgText(cta)}</text>
 </svg>`;
   }
 
@@ -635,4 +647,19 @@ function escapeXml(value: string): string {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&apos;', '"': '&quot;' })[character] ??
       character,
   );
+}
+
+function sanitizeSvgText(value: string): string {
+  if (!value) return '';
+  const cleaned = value
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return escapeXml(cleaned);
 }

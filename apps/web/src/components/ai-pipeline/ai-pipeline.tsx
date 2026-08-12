@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   Check,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -10,6 +11,8 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Square,
+  Trash2,
   WandSparkles,
   X,
 } from 'lucide-react';
@@ -101,6 +104,8 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
   const [drafts, setDrafts] = useState<SocialDraft[]>([]);
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [deletingDrafts, setDeletingDrafts] = useState(false);
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatform[]>([
     'PINTEREST',
     'INSTAGRAM',
@@ -238,6 +243,42 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
       await Promise.all([loadOverview(), loadDrafts()]);
     } else {
       notify(await readError(response));
+    }
+  }
+
+  async function deleteDraft(id: string) {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/ai-pipeline/drafts/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      notify('Draft deleted.');
+      setSelectedDraftIds((prev) => prev.filter((item) => item !== id));
+      await Promise.all([loadOverview(), loadDrafts()]);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Delete failed.');
+    }
+  }
+
+  async function bulkDeleteDrafts(targetIds?: string[]) {
+    setDeletingDrafts(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/ai-pipeline/drafts/bulk`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: targetIds }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const payload = (await response.json()) as { deleted: number };
+      notify(`Successfully deleted ${String(payload.deleted)} draft(s).`);
+      setSelectedDraftIds([]);
+      await Promise.all([loadOverview(), loadDrafts()]);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Bulk delete failed.');
+    } finally {
+      setDeletingDrafts(false);
     }
   }
 
@@ -525,44 +566,134 @@ export function AiPipeline({ user }: { user: AuthenticatedUser }) {
             </Card>
 
             <Card className="border-border/80 dark:border-white/10">
-              <CardHeader>
-                <CardTitle className="text-lg">Review Drafts</CardTitle>
-                <CardDescription>Approve or reject generated draft content.</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-lg">Review Drafts</CardTitle>
+                  <CardDescription>
+                    Approve, reject, or bulk delete generated draft content.
+                  </CardDescription>
+                </div>
+                {drafts.length > 0 && canGenerate ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (selectedDraftIds.length === drafts.length) {
+                          setSelectedDraftIds([]);
+                        } else {
+                          setSelectedDraftIds(drafts.map((d) => d.id));
+                        }
+                      }}
+                      className="h-8 gap-1.5 text-xs font-medium"
+                    >
+                      {selectedDraftIds.length === drafts.length ? (
+                        <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                      ) : (
+                        <Square className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <span>
+                        {selectedDraftIds.length === drafts.length ? 'Deselect all' : 'Select all'}
+                      </span>
+                    </Button>
+                    {selectedDraftIds.length > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={deletingDrafts}
+                        onClick={() => {
+                          void bulkDeleteDrafts(selectedDraftIds);
+                        }}
+                        className="h-8 gap-1.5 text-xs font-medium"
+                      >
+                        {deletingDrafts ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        <span>Delete ({selectedDraftIds.length})</span>
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
               </CardHeader>
               <CardContent className="grid gap-3">
-                {drafts.slice(0, 5).map((draft) => (
-                  <div
-                    className="rounded-md border border-border p-3 text-sm dark:border-white/10"
-                    key={draft.id}
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <Badge variant="secondary">{titleCase(draft.platform)}</Badge>
-                      <StatusBadge value={draft.status} />
+                {drafts.slice(0, 10).map((draft) => {
+                  const isSelected = selectedDraftIds.includes(draft.id);
+                  return (
+                    <div
+                      className={cn(
+                        'rounded-xl border p-3.5 text-sm transition dark:bg-white/[0.03]',
+                        isSelected
+                          ? 'border-primary ring-1 ring-primary/40 bg-primary/5 dark:bg-primary/10'
+                          : 'border-border dark:border-white/10 bg-background/80',
+                      )}
+                      key={draft.id}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDraftIds((prev) =>
+                                prev.includes(draft.id)
+                                  ? prev.filter((i) => i !== draft.id)
+                                  : [...prev, draft.id],
+                              );
+                            }}
+                            className="text-muted-foreground hover:text-primary transition"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="h-4 w-4 text-primary" />
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </button>
+                          <Badge variant="secondary">{titleCase(draft.platform)}</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge value={draft.status} />
+                          {canGenerate ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void deleteDraft(draft.id);
+                              }}
+                              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition"
+                              title="Delete draft"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="font-semibold text-foreground">{draft.title}</div>
+                      <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                        {draft.body}
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          disabled={!canGenerate}
+                          onClick={() => void updateDraftStatus(draft.id, 'APPROVED')}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Check className="h-4 w-4" />
+                          Approve
+                        </Button>
+                        <Button
+                          disabled={!canGenerate}
+                          onClick={() => void updateDraftStatus(draft.id, 'REJECTED')}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <X className="h-4 w-4" />
+                          Reject
+                        </Button>
+                      </div>
                     </div>
-                    <div className="font-medium">{draft.title}</div>
-                    <p className="mt-2 line-clamp-4 text-muted-foreground">{draft.body}</p>
-                    <div className="mt-3 flex gap-2">
-                      <Button
-                        disabled={!canGenerate}
-                        onClick={() => void updateDraftStatus(draft.id, 'APPROVED')}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <Check className="h-4 w-4" />
-                        Approve
-                      </Button>
-                      <Button
-                        disabled={!canGenerate}
-                        onClick={() => void updateDraftStatus(draft.id, 'REJECTED')}
-                        size="sm"
-                        variant="outline"
-                      >
-                        <X className="h-4 w-4" />
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {!drafts.length ? <EmptyState label="No generated drafts yet." /> : null}
               </CardContent>
             </Card>

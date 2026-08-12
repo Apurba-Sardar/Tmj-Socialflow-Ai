@@ -12,6 +12,7 @@ import {
   CalendarPlus,
   CalendarClock,
   CalendarDays,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -29,7 +30,9 @@ import {
   RefreshCw,
   Search,
   Send,
+  Square,
   Sun,
+  Trash2,
   Wand2,
   Zap,
   type LucideIcon,
@@ -195,6 +198,8 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
   const [search, setSearch] = useState('');
   const [draftSearch, setDraftSearch] = useState('');
   const [draftFilter, setDraftFilter] = useState<Platform | 'ALL'>('ALL');
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [deletingDrafts, setDeletingDrafts] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -535,6 +540,32 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
     }
   }
 
+  async function handleBulkDeleteDrafts(ids: string[]) {
+    if (!ids.length) return;
+    setDeletingDrafts(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/scheduler/drafts/bulk`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Drafts could not be deleted.');
+      }
+
+      const payload = (await response.json()) as { deleted: number };
+      notify(`Successfully deleted ${String(payload.deleted)} draft(s).`, 'success');
+      setSelectedDraftIds((prev) => prev.filter((id) => !ids.includes(id)));
+      await loadDrafts();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Draft deletion failed.', 'warning');
+    } finally {
+      setDeletingDrafts(false);
+    }
+  }
+
   async function updateScheduledTime(post: ScheduledPost, date: string, time: string) {
     setReschedulingId(post.id);
 
@@ -740,13 +771,17 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
 
             <section className="grid items-start gap-4 xl:grid-cols-[19rem_minmax(0,1fr)_24rem]">
               <DraftInbox
-                drafts={visibleDrafts}
+                deletingDrafts={deletingDrafts}
                 draftFilter={draftFilter}
                 draftSearch={draftSearch}
+                drafts={visibleDrafts}
                 loading={loadingDrafts}
-                schedulingDraftId={schedulingDraftId}
-                setDraftFilter={setDraftFilter}
-                setDraftSearch={setDraftSearch}
+                onDeleteDraft={(id) => {
+                  void handleBulkDeleteDrafts([id]);
+                }}
+                onDeleteSelected={() => {
+                  void handleBulkDeleteDrafts(selectedDraftIds);
+                }}
                 onDragEnd={resetDraftDrag}
                 onDragStart={(draftId) => {
                   document.body.classList.add('sf-dragging-draft');
@@ -758,6 +793,22 @@ export function PostScheduler({ user }: { user: AuthenticatedUser }) {
                 onSchedule={(draftId, hour) => {
                   void scheduleGeneratedDraft(draftId, selectedDate, hour);
                 }}
+                onSelectAllDrafts={() => {
+                  if (selectedDraftIds.length === visibleDrafts.length) {
+                    setSelectedDraftIds([]);
+                  } else {
+                    setSelectedDraftIds(visibleDrafts.map((d) => d.id));
+                  }
+                }}
+                onToggleSelectDraft={(id) => {
+                  setSelectedDraftIds((prev) =>
+                    prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+                  );
+                }}
+                schedulingDraftId={schedulingDraftId}
+                selectedDraftIds={selectedDraftIds}
+                setDraftFilter={setDraftFilter}
+                setDraftSearch={setDraftSearch}
               />
               <div className="min-w-0">
                 {view === 'month' ? (
@@ -1399,25 +1450,39 @@ function DraftInbox({
   draftSearch,
   draftFilter,
   schedulingDraftId,
+  selectedDraftIds,
+  deletingDrafts,
   setDraftSearch,
   setDraftFilter,
   onDragStart,
   onDragEnd,
   onSchedule,
   onRefresh,
+  onToggleSelectDraft,
+  onSelectAllDrafts,
+  onDeleteSelected,
+  onDeleteDraft,
 }: {
   drafts: GeneratedDraft[];
   loading: boolean;
   draftSearch: string;
   draftFilter: Platform | 'ALL';
   schedulingDraftId: string | null;
+  selectedDraftIds: string[];
+  deletingDrafts: boolean;
   setDraftSearch: (value: string) => void;
   setDraftFilter: (platform: Platform | 'ALL') => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onSchedule: (id: string, hour: number) => void;
   onRefresh: () => void;
+  onToggleSelectDraft: (id: string) => void;
+  onSelectAllDrafts: () => void;
+  onDeleteSelected: () => void;
+  onDeleteDraft: (id: string) => void;
 }) {
+  const allSelected = drafts.length > 0 && selectedDraftIds.length === drafts.length;
+
   return (
     <Card className="h-fit overflow-hidden border-border/80 bg-card/95 dark:border-white/10 xl:sticky xl:top-24">
       <CardHeader className="pb-3">
@@ -1475,6 +1540,41 @@ function DraftInbox({
             </button>
           ))}
         </div>
+
+        {/* Selection & Bulk Actions Bar */}
+        {drafts.length > 0 ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/[0.03]">
+            <button
+              className="flex items-center gap-1.5 font-medium text-foreground hover:text-primary transition"
+              onClick={onSelectAllDrafts}
+              type="button"
+            >
+              {allSelected ? (
+                <CheckSquare className="h-4 w-4 text-primary" />
+              ) : (
+                <Square className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span>{allSelected ? 'Deselect all' : 'Select all'}</span>
+            </button>
+            {selectedDraftIds.length > 0 ? (
+              <Button
+                className="h-7 gap-1 px-2.5 text-xs"
+                disabled={deletingDrafts}
+                onClick={onDeleteSelected}
+                size="sm"
+                variant="destructive"
+              >
+                {deletingDrafts ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                <span>Delete ({selectedDraftIds.length})</span>
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.03]">
           Showing draft and scheduled generated content. Drop any item onto a time slot to schedule
           or move it.
@@ -1489,8 +1589,11 @@ function DraftInbox({
             drafts.map((draft) => (
               <GeneratedDraftCard
                 draft={draft}
+                isSelected={selectedDraftIds.includes(draft.id)}
                 key={draft.id}
-                scheduling={schedulingDraftId === draft.id}
+                onDelete={() => {
+                  onDeleteDraft(draft.id);
+                }}
                 onDragEnd={onDragEnd}
                 onDragStart={() => {
                   onDragStart(draft.id);
@@ -1498,6 +1601,10 @@ function DraftInbox({
                 onSchedule={(hour) => {
                   onSchedule(draft.id, hour);
                 }}
+                onToggleSelect={() => {
+                  onToggleSelectDraft(draft.id);
+                }}
+                scheduling={schedulingDraftId === draft.id}
               />
             ))
           ) : (
@@ -1512,15 +1619,21 @@ function DraftInbox({
 function GeneratedDraftCard({
   draft,
   scheduling,
+  isSelected,
   onDragStart,
   onDragEnd,
   onSchedule,
+  onToggleSelect,
+  onDelete,
 }: {
   draft: GeneratedDraft;
   scheduling: boolean;
+  isSelected: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onSchedule: (hour: number) => void;
+  onToggleSelect: () => void;
+  onDelete: () => void;
 }) {
   const config =
     platformOptions.find((item) => item.platform === draft.platform) ?? fallbackPlatform;
@@ -1528,7 +1641,12 @@ function GeneratedDraftCard({
 
   return (
     <article
-      className="select-none rounded-xl border border-border bg-background/80 p-3 shadow-sm transition hover:border-primary/50 dark:border-white/10 dark:bg-white/[0.04] [&[draggable='true']]:cursor-grab [&[draggable='true']]:active:cursor-grabbing"
+      className={cn(
+        "select-none rounded-xl border bg-background/80 p-3 shadow-sm transition hover:border-primary/50 dark:bg-white/[0.04] [&[draggable='true']]:cursor-grab [&[draggable='true']]:active:cursor-grabbing",
+        isSelected
+          ? 'border-primary ring-1 ring-primary/40 bg-primary/5 dark:bg-primary/10'
+          : 'border-border dark:border-white/10',
+      )}
       draggable
       onDragEnd={onDragEnd}
       onDragStart={(event) => {
@@ -1537,7 +1655,21 @@ function GeneratedDraftCard({
         onDragStart();
       }}
     >
-      <div className="flex gap-3">
+      <div className="flex items-start gap-3">
+        <button
+          className="mt-0.5 shrink-0 text-muted-foreground transition hover:text-primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect();
+          }}
+          type="button"
+        >
+          {isSelected ? (
+            <CheckSquare className="h-4 w-4 text-primary" />
+          ) : (
+            <Square className="h-4 w-4" />
+          )}
+        </button>
         {draft.mediaUrl ? (
           <img alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" src={draft.mediaUrl} />
         ) : (
@@ -1546,10 +1678,23 @@ function GeneratedDraftCard({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Icon className={cn('h-3.5 w-3.5', config.tone)} />
-            <span className="text-xs font-medium text-muted-foreground">{config.label}</span>
-            <Badge variant="secondary">{titleCase(draft.status)}</Badge>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Icon className={cn('h-3.5 w-3.5', config.tone)} />
+              <span className="text-xs font-medium text-muted-foreground">{config.label}</span>
+              <Badge variant="secondary">{titleCase(draft.status)}</Badge>
+            </div>
+            <button
+              className="rounded p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="Delete draft"
+              type="button"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
           <h3 className="mt-1 line-clamp-2 text-sm font-semibold">{draft.title}</h3>
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{draft.body}</p>

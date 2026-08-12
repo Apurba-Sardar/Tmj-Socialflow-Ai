@@ -136,11 +136,7 @@ export class SchedulerService {
     return { post };
   }
 
-  async updatePostSchedule(
-    user: AuthenticatedUser,
-    id: string,
-    dto: UpdatePublishJobScheduleDto,
-  ) {
+  async updatePostSchedule(user: AuthenticatedUser, id: string, dto: UpdatePublishJobScheduleDto) {
     const organizationId = await this.requireOrganizationId(user.id);
     const scheduledFor = new Date(dto.scheduledFor);
 
@@ -408,6 +404,38 @@ export class SchedulerService {
     }
 
     return { approved: approved.length, posts: approved };
+  }
+
+  async deletePosts(user: AuthenticatedUser, ids: string[]) {
+    if (!ids.length) {
+      throw new BadRequestException('Select at least one post to delete.');
+    }
+
+    const organizationId = await this.requireOrganizationId(user.id);
+    const result = await this.prisma.publishJob.deleteMany({
+      where: {
+        id: { in: ids },
+        organizationId,
+      },
+    });
+
+    return { deleted: result.count };
+  }
+
+  async deleteDrafts(user: AuthenticatedUser, ids: string[]) {
+    if (!ids.length) {
+      throw new BadRequestException('Select at least one draft to delete.');
+    }
+
+    const organizationId = await this.requireOrganizationId(user.id);
+    const result = await this.prisma.socialDraft.deleteMany({
+      where: {
+        id: { in: ids },
+        article: { connection: { organizationId } },
+      },
+    });
+
+    return { deleted: result.count };
   }
 
   private async connectedChannels(organizationId: string) {

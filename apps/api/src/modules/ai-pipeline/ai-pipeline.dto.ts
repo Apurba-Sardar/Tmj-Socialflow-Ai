@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { SocialDraftStatus, SocialPlatform } from '@prisma/client';
 
 export class AiPipelineQueryDto {
@@ -58,4 +58,23 @@ export class RegenerateCampaignDto {
 export class UpdateDraftStatusDto {
   @IsEnum(SocialDraftStatus)
   status!: SocialDraftStatus;
+}
+
+export class BulkDeleteDraftsDto {
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ids?: string[];
+
+  @IsOptional()
+  @IsEnum(SocialDraftStatus)
+  status?: SocialDraftStatus;
+
+  @IsOptional()
+  @IsEnum(SocialPlatform)
+  platform?: SocialPlatform;
+
+  @IsOptional()
+  @IsBoolean()
+  allDrafts?: boolean;
 }

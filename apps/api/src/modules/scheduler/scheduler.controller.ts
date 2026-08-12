@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -47,5 +47,15 @@ export class SchedulerController {
     @Body() dto: UpdatePublishJobScheduleDto,
   ) {
     return this.schedulerService.updatePostSchedule(user, id, dto);
+  }
+
+  @Delete('posts/bulk')
+  async deletePosts(@CurrentUser() user: AuthenticatedUser, @Body() dto: { ids?: string[] }) {
+    return this.schedulerService.deletePosts(user, dto.ids ?? []);
+  }
+
+  @Delete('drafts/bulk')
+  async deleteDrafts(@CurrentUser() user: AuthenticatedUser, @Body() dto: { ids?: string[] }) {
+    return this.schedulerService.deleteDrafts(user, dto.ids ?? []);
   }
 }

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { SocialDraftStatus } from '@prisma/client';
 
 import { CurrentUser } from '../auth/decorators.js';
@@ -6,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/types.js';
 import {
   AiPipelineQueryDto,
+  BulkDeleteDraftsDto,
   GenerateAiContentDto,
   RegenerateCampaignDto,
   UpdateDraftStatusDto,
@@ -58,5 +69,15 @@ export class AiPipelineController {
     @Body() dto: UpdateDraftStatusDto,
   ) {
     return this.aiPipelineService.updateDraftStatus(user, id, dto);
+  }
+
+  @Delete('drafts/bulk')
+  bulkDeleteDrafts(@CurrentUser() user: AuthenticatedUser, @Body() dto: BulkDeleteDraftsDto) {
+    return this.aiPipelineService.bulkDeleteDrafts(user, dto);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.aiPipelineService.deleteDraft(user, id);
   }
 }
