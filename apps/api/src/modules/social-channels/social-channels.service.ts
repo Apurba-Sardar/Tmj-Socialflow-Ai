@@ -888,6 +888,7 @@ export class SocialChannelsService {
       case SocialPlatform.FACEBOOK: {
         const pageId = requiredExternalId(account.externalAccountId, 'Facebook Page ID');
         const facebookMedia = facebookMediaUpload(dto.mediaUrl);
+        const facebookCaption = withSourceLink(caption, dto.sourceUrl);
         const endpoint =
           dto.mediaUrl || facebookMedia
             ? `https://graph.facebook.com/v20.0/${pageId}/photos`
@@ -896,12 +897,14 @@ export class SocialChannelsService {
           facebookMedia ??
           new URLSearchParams({
             access_token: accessToken,
-            ...(dto.mediaUrl ? { url: dto.mediaUrl, caption } : { message: caption }),
+            ...(dto.mediaUrl
+              ? { url: dto.mediaUrl, caption: facebookCaption }
+              : { message: facebookCaption }),
           });
 
         if (facebookMedia) {
           facebookMedia.set('access_token', accessToken);
-          facebookMedia.set('caption', caption);
+          facebookMedia.set('caption', facebookCaption);
         }
 
         const payload = await this.providerJson<Record<string, unknown>>(
@@ -948,6 +951,8 @@ export class SocialChannelsService {
         if (!creationId) {
           throw new BadRequestException('Instagram did not return a media container ID.');
         }
+
+        await this.waitForInstagramContainer(creationId, accessToken);
 
         const publishPayload = await this.providerJson<Record<string, unknown>>(
           await fetch(`https://graph.instagram.com/${instagramBusinessId}/media_publish`, {
@@ -1015,6 +1020,34 @@ export class SocialChannelsService {
     }
 
     return payload as T;
+  }
+
+  private async waitForInstagramContainer(creationId: string, accessToken: string): Promise<void> {
+    const statusUrl = new URL(`https://graph.instagram.com/${creationId}`);
+    statusUrl.searchParams.set('fields', 'status_code,status');
+    statusUrl.searchParams.set('access_token', accessToken);
+
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const payload = await this.providerJson<{
+        status_code?: string;
+        status?: string;
+      }>(await fetch(statusUrl), 'Instagram media status check failed.');
+      const status = (payload.status_code ?? payload.status ?? '').toUpperCase();
+
+      if (status === 'FINISHED' || status === 'PUBLISHED') {
+        return;
+      }
+
+      if (status === 'ERROR' || status === 'EXPIRED') {
+        throw new BadRequestException(`Instagram media processing failed (${status}).`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    throw new BadRequestException(
+      'Instagram media is still processing. Try publishing this post again shortly.',
+    );
   }
 
   private requireProviderConfig(platform: SocialPlatform): ProviderConfig {
@@ -1329,6 +1362,15 @@ function withHashtags(caption: string, hashtags?: string[]): string {
   }
 
   return `${caption.trim()}\n\n${cleanTags.map((tag) => (tag.startsWith('#') ? tag : `#${tag}`)).join(' ')}`;
+}
+
+function withSourceLink(caption: string, sourceUrl?: string): string {
+  const cleanUrl = sourceUrl?.trim();
+  if (!cleanUrl || caption.includes(cleanUrl)) {
+    return caption;
+  }
+
+  return `${caption.trim()}\n\nRead the full post: ${cleanUrl}`;
 }
 
 function requiredExternalId(value: string | null, label: string): string {
