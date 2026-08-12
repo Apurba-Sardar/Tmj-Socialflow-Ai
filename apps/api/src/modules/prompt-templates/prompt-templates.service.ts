@@ -302,19 +302,19 @@ export class PromptTemplatesService {
 
   private productionCreativeBrief(platform: SocialPlatform): string {
     const base =
-      'Production quality requirements: create a premium, postable social media asset directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, useful at feed size, and ready for a brand account. Do not default to a cartoon illustration. Vary the creative format based on the article: realistic lifestyle/photo poster, emotional concept art, refined quote card, magazine-style educational cover, editorial collage, symbolic mental-health artwork, or clean premium illustration. Short readable text is allowed when it makes the asset more postable, such as a concise quote, 3-8 word hook, or article-inspired headline; keep it large, minimal, correctly spelled, and visually designed. Do not paste the full caption or hashtags. Never add platform labels, social network names, app UI, SocialFlow branding, logos, watermarks, tiny unreadable text, or dense paragraphs.';
+      'Production quality requirements: create a premium, postable social media background asset directly based on the article content. Use one strong visual idea from the article, not a generic wellness or marketing background. Make it editorial, polished, and visually engaging. Do not default to a cartoon illustration. Vary the creative format based on the article: realistic lifestyle/photo poster, emotional concept art, refined paper texture, magazine-style cover, editorial collage, symbolic mental-health artwork, or clean premium illustration. Do not render any written letters, words, numbers, headlines, captions, logos, labels, signs, gibberish typography, or square font boxes directly on the image canvas. SocialFlow will add the approved text post-generation. Never add platform labels, social network names, app UI, SocialFlow branding, logos, watermarks, or dense paragraphs.';
 
     const channel = {
       [SocialPlatform.PINTEREST]:
-        'Pinterest specifics: vertical 2:3 save-worthy composition, clear hero concept, quote-card or educational poster feel, premium collage or realistic/editorial visual, helpful reference-board mood, airy spacing.',
+        'Pinterest specifics: vertical 2:3 save-worthy composition, clear hero concept, clean top and bottom background safe areas, airy spacing.',
       [SocialPlatform.INSTAGRAM]:
-        'Instagram specifics: square premium feed composition, warm subject-led scene or designed quote card, emotional clarity, elegant color harmony, instantly understandable in feed.',
+        'Instagram specifics: square 1:1 feed composition, warm subject-led scene, clean top and bottom safe background areas, emotional clarity, elegant color harmony.',
       [SocialPlatform.FACEBOOK]:
-        'Facebook specifics: Mind Family style square or landscape post image, broad-audience clarity, shareable quote/text poster when useful, realistic family/mental-health visual when safe, warm but not childish.',
+        'Facebook specifics: square or landscape post image, broad-audience clarity, clean top and bottom safe background areas, warm but not childish.',
       [SocialPlatform.LINKEDIN]:
-        'LinkedIn specifics: credible professional editorial visual, research/strategy feel, clean workspace, abstract concept scene, refined quote card, muted premium palette, business-health education polish.',
+        'LinkedIn specifics: credible professional editorial visual, research/strategy feel, clean workspace, abstract concept scene, clean top and bottom safe areas, muted premium palette.',
       [SocialPlatform.X]:
-        'X specifics: wide landscape preview image, high-contrast simple composition, one bold idea, optional very short hook text, very readable at small preview size, minimal detail.',
+        'X specifics: wide landscape preview image, high-contrast simple composition, one bold idea, clean background safe areas.',
     }[platform];
 
     return `${base}\n${channel}`;
@@ -327,6 +327,12 @@ export class PromptTemplatesService {
           category,
           platform as SocialPlatform,
         );
+        const targetTemplate = categoryDefaults.template ?? template.template;
+        const targetNegative = categoryDefaults.negativePrompt ?? template.negativePrompt;
+        const targetStyle = categoryDefaults.styleNotes ?? template.styleNotes;
+        const targetName = categoryDefaults.name ?? template.name;
+        const targetDescription = categoryDefaults.description ?? template.description;
+
         const existing = await this.prisma.promptTemplate.findFirst({
           where: {
             organizationId,
@@ -345,12 +351,29 @@ export class PromptTemplatesService {
               platform: platform as SocialPlatform,
               purpose: PROMPT_PURPOSE_IMAGE,
               contentCategory: category,
-              name: categoryDefaults.name ?? template.name,
-              description: categoryDefaults.description ?? template.description,
-              template: categoryDefaults.template ?? template.template,
-              negativePrompt: categoryDefaults.negativePrompt ?? template.negativePrompt,
-              styleNotes: categoryDefaults.styleNotes ?? template.styleNotes,
+              name: targetName,
+              description: targetDescription,
+              template: targetTemplate,
+              negativePrompt: targetNegative,
+              styleNotes: targetStyle,
               createdById: userId,
+              updatedById: userId,
+            },
+          });
+        } else if (
+          existing.template.includes('One strong, highly clickable main title') ||
+          existing.template.includes('The title and footer are mandatory') ||
+          existing.template.includes('Do not generate a text-free image')
+        ) {
+          // Update legacy database seeded default prompt templates to the clean text-free version
+          await this.prisma.promptTemplate.update({
+            where: { id: existing.id },
+            data: {
+              name: targetName,
+              description: targetDescription,
+              template: targetTemplate,
+              negativePrompt: targetNegative,
+              styleNotes: targetStyle,
               updatedById: userId,
             },
           });
