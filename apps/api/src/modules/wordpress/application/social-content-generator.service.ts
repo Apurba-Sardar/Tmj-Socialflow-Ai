@@ -370,67 +370,139 @@ export class SocialContentGeneratorService {
       fit: 'contain',
       background: { r: 248, g: 244, b: 235, alpha: 1 },
     });
-    const image = await (
+    const composed =
       draft.platform === SocialPlatform.INSTAGRAM
-        ? imageSource.composite([
-            {
-              input: Buffer.from(this.instagramTextOverlay(draft, size), 'utf8'),
-              top: 0,
-              left: 0,
-              blend: 'over',
-            },
-          ])
-        : imageSource
-    )
-      .jpeg({ quality: 92, mozjpeg: true })
-      .toBuffer();
+        ? await this.composeInstagramOverlay(imageSource, draft, size)
+        : imageSource;
+
+    const image = await composed.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 
     return `data:image/jpeg;base64,${image.toString('base64')}`;
   }
 
-  private instagramTextOverlay(
+  private async composeInstagramOverlay(
+    imageSource: sharp.Sharp,
     draft: SocialDraftInput,
     size: { width: number; height: number },
-  ): string {
+  ): Promise<sharp.Sharp> {
     const rawTitle = draft.imageHeadline ?? draft.title;
-    const titleLines = this.wrapText(rawTitle, 32, 2);
-    const titleText = titleLines
-      .map(
-        (line, index) =>
-          `<text x="60" y="${95 + index * 60}" fill="#123b50" font-family="sans-serif" font-size="50" font-weight="700">${sanitizeSvgText(line)}</text>`,
-      )
-      .join('');
-
     const rawFooter =
       draft.imageFooter ?? 'The most meaningful support may begin in small moments.';
-    const footerLines = this.wrapText(rawFooter, 52, 2);
-    const footerText = footerLines
-      .map(
-        (line, index) =>
-          `<text x="60" y="${220 + index * 32}" fill="#4b6575" font-family="sans-serif" font-size="24" font-weight="500">${sanitizeSvgText(line)}</text>`,
-      )
-      .join('');
-
     const defaultCta =
       draft.platform === SocialPlatform.FACEBOOK
         ? 'Read the full article - link in comments.'
         : 'Read the full article - link in bio.';
     const cta = this.truncate(draft.callToAction ?? defaultCta, 72);
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
-  <defs>
-    <style type="text/css">
-      text {
-        font-family: sans-serif, 'DejaVu Sans', 'Liberation Sans', Arial;
-      }
-    </style>
-  </defs>
-  <rect x="0" y="0" width="${size.width}" height="290" fill="#f8f1df" fill-opacity="0.96"/>
-  ${titleText}
-  ${footerText}
-  <rect x="0" y="${size.height - 120}" width="${size.width}" height="120" fill="#123b50" fill-opacity="0.95"/>
-  <text x="60" y="${size.height - 48}" fill="#fffaf1" font-family="sans-serif" font-size="28" font-weight="600">${sanitizeSvgText(cta)}</text>
-</svg>`;
+    // Clean text for rendering
+    const cleanTitle = sanitizePlainText(rawTitle);
+    const cleanFooter = sanitizePlainText(rawFooter);
+    const cleanCta = sanitizePlainText(cta);
+
+    // Create header background rectangle (cream)
+    const headerHeight = 290;
+    const headerBg = await sharp({
+      create: {
+        width: size.width,
+        height: headerHeight,
+        channels: 4,
+        background: { r: 248, g: 241, b: 223, alpha: 245 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    // Create footer background rectangle (dark blue)
+    const footerHeight = 120;
+    const footerBg = await sharp({
+      create: {
+        width: size.width,
+        height: footerHeight,
+        channels: 4,
+        background: { r: 18, g: 59, b: 80, alpha: 242 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    // Render title text as image using sharp's text input
+    const titlePango = `<span foreground="#123b50" font="36" weight="bold">${escapeXml(cleanTitle)}</span>`;
+    let titleImg: Buffer;
+    try {
+      titleImg = await sharp({
+        text: {
+          text: titlePango,
+          width: size.width - 120,
+          height: 150,
+          rgba: true,
+        },
+      })
+        .png()
+        .toBuffer();
+    } catch {
+      titleImg = Buffer.alloc(0);
+    }
+
+    // Render footer text as image
+    const footerPango = `<span foreground="#4b6575" font="18">${escapeXml(cleanFooter)}</span>`;
+    let footerImg: Buffer;
+    try {
+      footerImg = await sharp({
+        text: {
+          text: footerPango,
+          width: size.width - 120,
+          height: 80,
+          rgba: true,
+        },
+      })
+        .png()
+        .toBuffer();
+    } catch {
+      footerImg = Buffer.alloc(0);
+    }
+
+    // Render CTA text as image
+    const ctaPango = `<span foreground="#fffaf1" font="20" weight="bold">${escapeXml(cleanCta)}</span>`;
+    let ctaImg: Buffer;
+    try {
+      ctaImg = await sharp({
+        text: {
+          text: ctaPango,
+          width: size.width - 120,
+          height: 60,
+          rgba: true,
+        },
+      })
+        .png()
+        .toBuffer();
+    } catch {
+      ctaImg = Buffer.alloc(0);
+    }
+
+    // Build composite layers
+    const composites: sharp.OverlayOptions[] = [
+      { input: headerBg, top: 0, left: 0, blend: 'over' },
+      { input: footerBg, top: size.height - footerHeight, left: 0, blend: 'over' },
+    ];
+
+    if (titleImg.length > 0) {
+      composites.push({ input: titleImg, top: 50, left: 60, blend: 'over' });
+    }
+
+    if (footerImg.length > 0) {
+      composites.push({ input: footerImg, top: 200, left: 60, blend: 'over' });
+    }
+
+    if (ctaImg.length > 0) {
+      composites.push({
+        input: ctaImg,
+        top: size.height - footerHeight + 30,
+        left: 60,
+        blend: 'over',
+      });
+    }
+
+    return imageSource.composite(composites);
   }
 
   private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1536x1024' | '1024x1536' {
@@ -649,9 +721,9 @@ function escapeXml(value: string): string {
   );
 }
 
-function sanitizeSvgText(value: string): string {
+function sanitizePlainText(value: string): string {
   if (!value) return '';
-  const cleaned = value
+  return value
     .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
     .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
     .replace(/[\u2013\u2014]/g, '-')
@@ -660,6 +732,4 @@ function sanitizeSvgText(value: string): string {
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-
-  return escapeXml(cleaned);
 }
