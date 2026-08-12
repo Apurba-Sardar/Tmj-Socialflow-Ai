@@ -40,13 +40,25 @@ const defaultPromptTemplates: Record<
   }
 > = {
   [SocialPlatform.PINTEREST]: {
-    ...pinterestArticleImagePrompt,
+    name: pinterestArticleImagePrompt.name,
+    description: pinterestArticleImagePrompt.description,
+    template: pinterestArticleImagePrompt.template,
+    negativePrompt: pinterestArticleImagePrompt.negativePrompt,
+    styleNotes: pinterestArticleImagePrompt.styleNotes,
   },
   [SocialPlatform.INSTAGRAM]: {
-    ...instagramArticleImagePrompt,
+    name: instagramArticleImagePrompt.name,
+    description: instagramArticleImagePrompt.description,
+    template: instagramArticleImagePrompt.template,
+    negativePrompt: instagramArticleImagePrompt.negativePrompt,
+    styleNotes: instagramArticleImagePrompt.styleNotes,
   },
   [SocialPlatform.FACEBOOK]: {
-    ...facebookArticleImagePrompt,
+    name: facebookArticleImagePrompt.name,
+    description: facebookArticleImagePrompt.description,
+    template: facebookArticleImagePrompt.template,
+    negativePrompt: facebookArticleImagePrompt.negativePrompt,
+    styleNotes: facebookArticleImagePrompt.styleNotes,
   },
   [SocialPlatform.LINKEDIN]: {
     name: 'LinkedIn professional research image',

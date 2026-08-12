@@ -397,7 +397,7 @@ export class SocialContentGeneratorService {
     const titleText = titleLines
       .map(
         (line, index) =>
-          `<text x="60" y="${95 + index * 60}" fill="#123b50" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="50" font-weight="700">${sanitizeSvgText(line)}</text>`,
+          `<text x="60" y="${95 + index * 60}" fill="#123b50" font-family="Arial" font-size="50" font-weight="700">${sanitizeSvgText(line)}</text>`,
       )
       .join('');
 
@@ -407,7 +407,7 @@ export class SocialContentGeneratorService {
     const footerText = footerLines
       .map(
         (line, index) =>
-          `<text x="60" y="${220 + index * 32}" fill="#4b6575" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="24" font-weight="500">${sanitizeSvgText(line)}</text>`,
+          `<text x="60" y="${220 + index * 32}" fill="#4b6575" font-family="Arial" font-size="24" font-weight="500">${sanitizeSvgText(line)}</text>`,
       )
       .join('');
 
@@ -421,7 +421,7 @@ export class SocialContentGeneratorService {
   <defs>
     <style type="text/css">
       text {
-        font-family: Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif;
+        font-family: Arial, sans-serif;
       }
     </style>
   </defs>
@@ -429,7 +429,7 @@ export class SocialContentGeneratorService {
   ${titleText}
   ${footerText}
   <rect x="0" y="${size.height - 120}" width="${size.width}" height="120" fill="#123b50" fill-opacity="0.95"/>
-  <text x="60" y="${size.height - 48}" fill="#fffaf1" font-family="Arial, Helvetica, 'DejaVu Sans', 'Liberation Sans', sans-serif" font-size="28" font-weight="600">${sanitizeSvgText(cta)}</text>
+  <text x="60" y="${size.height - 48}" fill="#fffaf1" font-family="Arial" font-size="28" font-weight="600">${sanitizeSvgText(cta)}</text>
 </svg>`;
   }
 
