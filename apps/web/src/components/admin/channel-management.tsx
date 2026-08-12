@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   Clipboard,
   ExternalLink,
@@ -21,7 +19,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { LogoutButton } from '@/components/auth/logout-button';
+import { AppHeader } from '@/components/navigation/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -302,7 +300,6 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   const [previewingPrompt, setPreviewingPrompt] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState<boolean | null>(null);
 
   void user;
   const selectedPlatform = useMemo(
@@ -329,7 +326,6 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
   }, [apiBaseUrl, form.platform]);
 
   useEffect(() => {
-    setDarkMode(document.documentElement.classList.contains('dark'));
     const params = new URLSearchParams(window.location.search);
     const connected = params.get('connected');
     const channelError = params.get('channel_error');
@@ -574,14 +570,6 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
     }
   }
 
-  function toggleTheme() {
-    const current = darkMode ?? document.documentElement.classList.contains('dark');
-    const next = !current;
-    document.documentElement.classList.toggle('dark', next);
-    window.localStorage.setItem('socialflow-theme', next ? 'dark' : 'light');
-    setDarkMode(next);
-  }
-
   function updatePlatform(platform: Platform) {
     const config = supported.find((item) => item.platform === platform);
     setForm((value) => ({
@@ -818,26 +806,7 @@ export function ChannelManagement({ user }: { user: AuthenticatedUser }) {
 
   return (
     <div className="sf-app-bg min-h-screen text-foreground">
-      <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
-        <div className="mx-auto flex max-w-[92rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <Button asChild size="sm" variant="ghost">
-            <Link href="/dashboard">
-              <ArrowLeft className="h-4 w-4" />
-              Dashboard
-            </Link>
-          </Button>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">Admin panel</div>
-            <div className="truncate text-xs text-muted-foreground">
-              Manage connected social publishing channels
-            </div>
-          </div>
-          <Button aria-label="Toggle theme" onClick={toggleTheme} size="sm" variant="outline">
-            {darkMode ? <Sparkles className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-          </Button>
-          <LogoutButton />
-        </div>
-      </header>
+      <AppHeader user={user} />
 
       <main className="sf-page-enter sf-premium-shell">
         {message ? (

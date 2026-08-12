@@ -19,8 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-import { LogoutButton } from '@/components/auth/logout-button';
-import { BrandIcon } from '@/components/brand/brand-icon';
+import { AppHeader } from '@/components/navigation/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -390,21 +389,7 @@ export function CampaignManagement({ user }: { user: AuthenticatedUser }) {
 
   return (
     <div className="sf-app-bg min-h-screen text-foreground">
-      <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
-        <div className="mx-auto flex max-w-[96rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <BrandIcon className="h-10 w-10 rounded-xl" priority />
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">Campaign Management</div>
-            <div className="text-xs text-muted-foreground">
-              Reusable AI campaigns, approvals, publishing state, and generated content.
-            </div>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/wordpress-hub">WordPress Hub</Link>
-          </Button>
-          <LogoutButton />
-        </div>
-      </header>
+      <AppHeader user={user} />
 
       <main className="sf-page-enter mx-auto grid w-full max-w-[96rem] gap-4 px-4 py-5 sm:px-6 lg:px-8">
         {message ? (

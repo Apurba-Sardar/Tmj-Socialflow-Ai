@@ -13,15 +13,11 @@ import {
   Globe2,
   Layers3,
   Loader2,
-  Menu,
-  Moon,
   Plus,
   RadioTower,
   RefreshCw,
-  Search,
   ShieldCheck,
   Sparkles,
-  Sun,
   Tags,
   Trash2,
   WandSparkles,
@@ -29,8 +25,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { LogoutButton } from '@/components/auth/logout-button';
 import { BrandIcon } from '@/components/brand/brand-icon';
+import { AppHeader } from '@/components/navigation/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -151,7 +147,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
   const [total, setTotal] = useState(0);
@@ -169,10 +164,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
     username: '',
     applicationPassword: '',
   });
-
-  useEffect(() => {
-    setDarkMode(document.documentElement.classList.contains('dark'));
-  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -470,14 +461,6 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
     }
   }
 
-  function toggleTheme() {
-    const current = darkMode ?? document.documentElement.classList.contains('dark');
-    const next = !current;
-    document.documentElement.classList.toggle('dark', next);
-    window.localStorage.setItem('socialflow-theme', next ? 'dark' : 'light');
-    setDarkMode(next);
-  }
-
   function toggleAllVisible() {
     if (allVisibleSelected) {
       setSelectedArticles((ids) =>
@@ -518,52 +501,7 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
           {sidebar}
         </aside>
         <div className="min-w-0">
-          <header className="sf-premium-header sticky top-0 z-30 dark:border-white/10">
-            <div className="mx-auto flex max-w-[98rem] items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-              <Button
-                aria-label="Open navigation"
-                className="lg:hidden"
-                onClick={() => {
-                  setNavigationOpen(true);
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
-              <div className="relative min-w-0 flex-1 sm:max-w-xl">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="h-10 bg-card/80 pl-9 dark:border-white/10"
-                  onChange={(event) => {
-                    setPage(1);
-                    setSearch(event.target.value);
-                  }}
-                  placeholder="Search WordPress posts, categories, tags"
-                  value={search}
-                />
-              </div>
-              <Button aria-label="Toggle theme" onClick={toggleTheme} size="sm" variant="outline">
-                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-              <Button
-                disabled={syncing || !isAdmin}
-                onClick={() => {
-                  void syncWordPress();
-                }}
-                size="sm"
-                variant="outline"
-              >
-                {syncing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Sync
-              </Button>
-              <LogoutButton />
-            </div>
-          </header>
+          <AppHeader user={user} />
 
           <main className="sf-page-enter mx-auto flex w-full max-w-[98rem] flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
             {toast ? (
@@ -782,6 +720,16 @@ export function WordPressHub({ user }: { user: AuthenticatedUser }) {
                   </div>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+                  <FilterInput
+                    icon={FileText}
+                    label="Search post title"
+                    onChange={(value) => {
+                      setPage(1);
+                      setSearch(value);
+                    }}
+                    placeholder="Search by title..."
+                    value={search}
+                  />
                   <FilterSelect
                     label="Site"
                     onChange={(value) => {

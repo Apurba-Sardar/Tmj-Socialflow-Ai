@@ -6,7 +6,6 @@ import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import {
   Archive,
-  Bell,
   CalendarDays,
   Check,
   Download,
@@ -14,7 +13,6 @@ import {
   Folder,
   ImageIcon,
   LayoutDashboard,
-  Menu,
   Plus,
   Search,
   Sparkles,
@@ -24,8 +22,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { LogoutButton } from '@/components/auth/logout-button';
 import { BrandIcon } from '@/components/brand/brand-icon';
+import { AppHeader } from '@/components/navigation/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -176,40 +174,7 @@ export function MediaLibrary({ user }: { user: AuthenticatedUser }) {
           <MediaSidebar user={user} />
         </aside>
         <div className="min-w-0">
-          <header className="sf-premium-header sticky top-0 z-30">
-            <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-              <Button
-                aria-label="Open navigation"
-                className="lg:hidden"
-                onClick={() => {
-                  setNavigationOpen(true);
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-lg font-semibold tracking-normal">Media Library</h1>
-                <p className="hidden text-sm text-muted-foreground sm:block">
-                  Governed assets, collections, compression, and AI-assisted discovery.
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  fileInputRef.current?.click();
-                }}
-              >
-                <UploadCloud className="h-4 w-4" />
-                Bulk upload
-              </Button>
-              <Button aria-label="Notifications" className="relative" size="sm" variant="outline">
-                <Bell className="h-4 w-4" />
-                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-destructive" />
-              </Button>
-              <LogoutButton />
-            </div>
-          </header>
+          <AppHeader user={user} />
 
           <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[15rem_1fr_21rem] lg:px-8">
             <FilterPanel
