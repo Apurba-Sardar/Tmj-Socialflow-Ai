@@ -7,6 +7,7 @@ import { createLogger } from '@socialflow/logger';
 
 import { PromptTemplatesService } from '../../prompt-templates/prompt-templates.service.js';
 import type { SocialDraftInput } from '../infrastructure/wordpress.repository.js';
+import { ensureFontAvailability } from './font-bootstrap.js';
 
 interface ArticleForGeneration {
   id: string;
@@ -385,6 +386,9 @@ export class SocialContentGeneratorService {
     draft: SocialDraftInput,
     size: { width: number; height: number },
   ): Promise<sharp.Sharp> {
+    // Ensure fonts are available for Pango text rendering (Vercel Lambda fix)
+    await ensureFontAvailability();
+
     const rawTitle = draft.imageHeadline ?? draft.title;
     const rawFooter =
       draft.imageFooter ?? 'The most meaningful support may begin in small moments.';
