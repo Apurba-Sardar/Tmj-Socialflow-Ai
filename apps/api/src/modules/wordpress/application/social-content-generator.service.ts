@@ -40,7 +40,7 @@ export class SocialContentGeneratorService {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1-mini';
+    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1';
   }
 
   async generate(
@@ -250,12 +250,29 @@ export class SocialContentGeneratorService {
         };
 
     try {
+      // Build a focused prompt: topic first, then brief layout constraints.
+      // Long prompts overwhelm gpt-image-1-mini and cause irrelevant imagery.
+      const topicBlock = [
+        `ARTICLE TOPIC (illustrate this): "${article.title}"`,
+        article.excerpt ? `Context: ${this.truncate(article.excerpt, 300)}` : '',
+        article.categoryNames.length ? `Categories: ${article.categoryNames.join(', ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const layoutBlock = this.compactLayoutInstructions(draft.platform);
+
+      const imagePrompt = [
+        topicBlock,
+        '',
+        layoutBlock,
+        '',
+        'Style: premium editorial illustration for The Minds Journal. Use illustrations, painted artwork, or editorial collage. No real photography. No text, letters, numbers, logos, labels, or watermarks anywhere on the image.',
+      ].join('\n');
+
       const image = await this.client?.images.generate({
         model: this.imageModel,
-        prompt: [
-          renderedPrompt.prompt,
-          'FINAL IMAGE OVERRIDE: generate artwork only. Do not render any readable text, letters, numbers, headlines, captions, logos, labels, signs, or typographic marks. SocialFlow will add the approved text after generation. Keep the top and bottom safe areas visually simple and never crop the artwork.',
-        ].join('\n\n'),
+        prompt: imagePrompt,
         n: 1,
         size: this.openAiImageSize(draft.platform),
         quality: 'medium',
@@ -332,6 +349,20 @@ export class SocialContentGeneratorService {
         'X creative: wide landscape editorial visual, simple high-contrast composition, one clear idea, readable at small preview size, minimal background detail, no infographic clutter.',
       [SocialPlatform.FACEBOOK]:
         'Facebook creative: friendly square/landscape educational visual, approachable lifestyle illustration, warm and clear, suitable for a broad audience, no clutter.',
+    }[platform];
+  }
+
+  private compactLayoutInstructions(platform: SocialPlatform): string {
+    return {
+      [SocialPlatform.PINTEREST]:
+        'Layout: vertical 2:3 canvas. Leave clean space at top 25% and bottom 15% for text overlay. Main artwork in center.',
+      [SocialPlatform.INSTAGRAM]:
+        'Layout: square 1:1 canvas. Leave clean space at top 25% and bottom 15% for text overlay. Main artwork fills center.',
+      [SocialPlatform.FACEBOOK]: 'Layout: square 1:1 canvas. Full artwork, clean composition.',
+      [SocialPlatform.LINKEDIN]:
+        'Layout: wide 16:9 canvas. Professional editorial visual, clean composition.',
+      [SocialPlatform.X]:
+        'Layout: wide 16:9 canvas. High-contrast, simple composition, one bold idea.',
     }[platform];
   }
 
