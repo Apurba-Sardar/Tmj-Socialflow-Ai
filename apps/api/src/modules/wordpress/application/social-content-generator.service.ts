@@ -39,8 +39,8 @@ export class SocialContentGeneratorService {
   constructor(@Optional() private readonly promptTemplatesService?: PromptTemplatesService) {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
-    this.model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3';
+    this.model = 'gpt-4o-mini';
+    this.imageModel = 'dall-e-3';
   }
 
   async generate(
