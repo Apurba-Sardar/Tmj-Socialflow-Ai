@@ -40,7 +40,7 @@ export class SocialContentGeneratorService {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1';
+    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3';
   }
 
   async generate(
@@ -275,14 +275,19 @@ export class SocialContentGeneratorService {
         prompt: imagePrompt,
         n: 1,
         size: this.openAiImageSize(draft.platform),
-        quality: 'medium',
-        background: 'opaque',
-        output_format: 'jpeg',
+        quality: 'standard',
+        response_format: 'b64_json',
       });
-      const b64Json = image?.data?.[0]?.b64_json;
+
+      let b64Json = image?.data?.[0]?.b64_json;
+      if (!b64Json && image?.data?.[0]?.url) {
+        const fetchRes = await fetch(image.data[0].url);
+        const arrayBuf = await fetchRes.arrayBuffer();
+        b64Json = Buffer.from(arrayBuf).toString('base64');
+      }
 
       if (!b64Json) {
-        throw new Error('OpenAI image response did not include image data.');
+        throw new Error('OpenAI image response did not include image data or URL.');
       }
 
       return {
@@ -540,13 +545,13 @@ export class SocialContentGeneratorService {
     return imageSource.composite(composites);
   }
 
-  private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1536x1024' | '1024x1536' {
+  private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1792x1024' | '1024x1792' {
     if (platform === SocialPlatform.PINTEREST) {
-      return '1024x1536';
+      return '1024x1792';
     }
 
     if (platform === SocialPlatform.X || platform === SocialPlatform.LINKEDIN) {
-      return '1536x1024';
+      return '1792x1024';
     }
 
     return '1024x1024';
