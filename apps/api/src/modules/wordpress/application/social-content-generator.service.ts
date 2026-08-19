@@ -133,13 +133,13 @@ export class SocialContentGeneratorService {
     article: ArticleForGeneration,
     platforms: SocialPlatform[],
   ): Promise<GeneratedDraft[]> {
-    const response = await this.client?.responses.create({
+    const response = await this.client?.chat.completions.create({
       model: this.model,
-      input: [
+      messages: [
         {
-          role: 'developer',
+          role: 'system',
           content:
-            'You create premium social media drafts from WordPress articles for a social automation SaaS. Return concise, accurate, non-clickbait copy. Do not invent facts. Keep medical and mental-health content careful, non-diagnostic, and supportive.',
+            'You create premium social media drafts from WordPress articles for a social automation SaaS. Return concise, accurate, non-clickbait copy. Do not invent facts. Keep medical and mental-health content careful, non-diagnostic, and supportive. Return JSON with a top-level "drafts" array.',
         },
         {
           role: 'user',
@@ -162,66 +162,11 @@ export class SocialContentGeneratorService {
           }),
         },
       ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'social_drafts',
-          strict: true,
-          schema: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['drafts'],
-            properties: {
-              drafts: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  additionalProperties: false,
-                  required: [
-                    'platform',
-                    'title',
-                    'body',
-                    'hashtags',
-                    'callToAction',
-                    'imageHeadline',
-                    'imageFooter',
-                  ],
-                  properties: {
-                    platform: {
-                      type: 'string',
-                      enum: Object.values(SocialPlatform),
-                    },
-                    title: {
-                      type: 'string',
-                    },
-                    body: {
-                      type: 'string',
-                    },
-                    hashtags: {
-                      type: 'array',
-                      items: {
-                        type: 'string',
-                      },
-                    },
-                    callToAction: {
-                      type: 'string',
-                    },
-                    imageHeadline: {
-                      type: 'string',
-                    },
-                    imageFooter: {
-                      type: 'string',
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      response_format: { type: 'json_object' },
     });
 
-    const parsed = JSON.parse(response?.output_text ?? '{"drafts":[]}') as {
+    const textContent = response.choices[0]?.message.content ?? '{"drafts":[]}';
+    const parsed = JSON.parse(textContent) as {
       drafts?: GeneratedDraft[];
     };
 
