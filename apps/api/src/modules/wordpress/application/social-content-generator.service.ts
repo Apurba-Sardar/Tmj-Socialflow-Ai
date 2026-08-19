@@ -133,7 +133,11 @@ export class SocialContentGeneratorService {
     article: ArticleForGeneration,
     platforms: SocialPlatform[],
   ): Promise<GeneratedDraft[]> {
-    const response = await this.client?.chat.completions.create({
+    if (!this.client) {
+      return [];
+    }
+
+    const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [
         {
