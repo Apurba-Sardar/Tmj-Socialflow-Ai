@@ -588,39 +588,172 @@ export class SocialContentGeneratorService {
     hashtags: string[],
   ): string {
     const size = this.visualSize(platform);
-    const topicSeed =
-      `${article.title} ${article.excerpt} ${article.categoryNames.join(' ')} ${hashtags.join(' ')}`
-        .length;
     const isPortrait = size.height > size.width;
-    const palette = this.visualTheme(platform);
-    const centerX = Math.round(size.width * (0.46 + (topicSeed % 7) * 0.01));
-    const centerY = Math.round(size.height * (isPortrait ? 0.43 : 0.48));
-    const mainRadius = isPortrait ? 210 : 170;
-    const accentRadius = isPortrait ? 112 : 90;
+    const isLandscape = size.width > size.height;
+
+    // Platform-tailored color themes
+    const theme = {
+      [SocialPlatform.PINTEREST]: {
+        bgFrom: '#1E1E2E',
+        bgTo: '#11111B',
+        cardBg: 'rgba(30, 30, 46, 0.85)',
+        cardBorder: 'rgba(245, 194, 231, 0.3)',
+        badgeBg: '#F5C2E7',
+        badgeText: '#1E1E2E',
+        titleColor: '#F5E0DC',
+        excerptColor: '#BAC2DE',
+        accentGlow: '#F5C2E7',
+        brandText: '#CBA6F7',
+      },
+      [SocialPlatform.INSTAGRAM]: {
+        bgFrom: '#0F172A',
+        bgTo: '#020617',
+        cardBg: 'rgba(15, 23, 42, 0.85)',
+        cardBorder: 'rgba(56, 189, 248, 0.3)',
+        badgeBg: '#38BDF8',
+        badgeText: '#0F172A',
+        titleColor: '#F8FAFC',
+        excerptColor: '#94A3B8',
+        accentGlow: '#818CF8',
+        brandText: '#38BDF8',
+      },
+      [SocialPlatform.LINKEDIN]: {
+        bgFrom: '#0B192C',
+        bgTo: '#1E3E62',
+        cardBg: 'rgba(11, 25, 44, 0.85)',
+        cardBorder: 'rgba(0, 166, 244, 0.35)',
+        badgeBg: '#00A6F4',
+        badgeText: '#FFFFFF',
+        titleColor: '#F8FAFC',
+        excerptColor: '#CBD5E1',
+        accentGlow: '#00A6F4',
+        brandText: '#60A5FA',
+      },
+      [SocialPlatform.X]: {
+        bgFrom: '#09090B',
+        bgTo: '#18181B',
+        cardBg: 'rgba(24, 24, 27, 0.85)',
+        cardBorder: 'rgba(255, 255, 255, 0.2)',
+        badgeBg: '#38BDF8',
+        badgeText: '#09090B',
+        titleColor: '#FAFAFA',
+        excerptColor: '#A1A1AA',
+        accentGlow: '#38BDF8',
+        brandText: '#38BDF8',
+      },
+      [SocialPlatform.FACEBOOK]: {
+        bgFrom: '#0F172A',
+        bgTo: '#1E293B',
+        cardBg: 'rgba(30, 41, 59, 0.85)',
+        cardBorder: 'rgba(96, 165, 250, 0.3)',
+        badgeBg: '#60A5FA',
+        badgeText: '#0F172A',
+        titleColor: '#F8FAFC',
+        excerptColor: '#94A3B8',
+        accentGlow: '#60A5FA',
+        brandText: '#93C5FD',
+      },
+    }[platform];
+
+    const categoryTag =
+      article.categoryNames[0]?.toUpperCase() ??
+      hashtags[0]?.replace('#', '').toUpperCase() ??
+      'FEATURED ARTICLE';
+
+    const maxCharsPerLine = isLandscape ? 38 : isPortrait ? 26 : 28;
+    const maxLines = isLandscape ? 3 : 4;
+    const titleLines = this.wrapText(article.title, maxCharsPerLine, maxLines);
+
+    const excerptText = article.excerpt
+      ? this.truncate(article.excerpt, isLandscape ? 120 : 90)
+      : '';
+    const excerptLines = excerptText ? this.wrapText(excerptText, maxCharsPerLine + 6, 2) : [];
+
+    // Layout coordinates & scaling
+    const paddingX = Math.round(size.width * 0.08);
+    const paddingY = Math.round(size.height * 0.08);
+    const cardWidth = size.width - paddingX * 2;
+    const cardHeight = size.height - paddingY * 2;
+
+    const titleFontSize = isLandscape ? 44 : isPortrait ? 52 : 48;
+    const titleLineHeight = Math.round(titleFontSize * 1.25);
+    const excerptFontSize = isLandscape ? 22 : 24;
+    const excerptLineHeight = Math.round(excerptFontSize * 1.35);
+
+    // Y positions
+    const startY = paddingY + (isLandscape ? 60 : 80);
+    const titleStartY = startY + 60;
+    const excerptStartY = titleStartY + titleLines.length * titleLineHeight + 30;
+
+    const titleTspans = titleLines
+      .map(
+        (line, index) =>
+          `<tspan x="${paddingX + 40}" y="${titleStartY + index * titleLineHeight}">${escapeXml(line)}</tspan>`,
+      )
+      .join('');
+
+    const excerptTspans = excerptLines
+      .map(
+        (line, index) =>
+          `<tspan x="${paddingX + 40}" y="${excerptStartY + index * excerptLineHeight}">${escapeXml(line)}</tspan>`,
+      )
+      .join('');
+
+    const footerY = paddingY + cardHeight - 50;
+    const badgeWidth = Math.max(140, categoryTag.length * 13 + 32);
+
     const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">
   <defs>
-    <linearGradient id="backdrop" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="${palette.from}"/>
-      <stop offset="0.55" stop-color="${palette.mid}"/>
-      <stop offset="1" stop-color="${palette.to}"/>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${theme.bgFrom}"/>
+      <stop offset="100%" stop-color="${theme.bgTo}"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.88"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    <radialGradient id="glowG" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="${theme.accentGlow}" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="${theme.bgTo}" stop-opacity="0"/>
     </radialGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#76685c" flood-opacity="0.18"/>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.5"/>
     </filter>
   </defs>
-  <rect width="100%" height="100%" fill="url(#backdrop)"/>
-  <circle cx="${centerX}" cy="${centerY}" r="${mainRadius + 130}" fill="url(#glow)" opacity="0.55"/>
-  <ellipse cx="${centerX}" cy="${centerY + Math.round(mainRadius * 0.18)}" rx="${mainRadius * 1.24}" ry="${mainRadius * 0.78}" fill="#fffaf1" opacity="0.82" filter="url(#softShadow)"/>
-  <circle cx="${centerX - Math.round(mainRadius * 0.36)}" cy="${centerY - Math.round(mainRadius * 0.18)}" r="${accentRadius}" fill="#91c7b1" opacity="0.72"/>
-  <circle cx="${centerX + Math.round(mainRadius * 0.32)}" cy="${centerY - Math.round(mainRadius * 0.04)}" r="${Math.round(accentRadius * 0.88)}" fill="#f3b97c" opacity="0.74"/>
-  <circle cx="${centerX + Math.round(mainRadius * 0.05)}" cy="${centerY + Math.round(mainRadius * 0.26)}" r="${Math.round(accentRadius * 0.76)}" fill="#8fb5e8" opacity="0.62"/>
-  <path d="M${centerX - mainRadius} ${centerY + mainRadius * 0.42} C${centerX - mainRadius * 0.38} ${centerY + mainRadius * 0.72}, ${centerX + mainRadius * 0.42} ${centerY + mainRadius * 0.72}, ${centerX + mainRadius} ${centerY + mainRadius * 0.36}" fill="none" stroke="#7a9f8a" stroke-width="${isPortrait ? 18 : 14}" stroke-linecap="round" opacity="0.34"/>
-  <path d="M${centerX - mainRadius * 0.72} ${centerY - mainRadius * 0.62} C${centerX - mainRadius * 0.1} ${centerY - mainRadius * 0.92}, ${centerX + mainRadius * 0.42} ${centerY - mainRadius * 0.86}, ${centerX + mainRadius * 0.82} ${centerY - mainRadius * 0.52}" fill="none" stroke="#c9a46f" stroke-width="${isPortrait ? 12 : 10}" stroke-linecap="round" opacity="0.32"/>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#bgGrad)"/>
+  <rect width="100%" height="100%" fill="url(#glowG)"/>
+
+  <!-- Subtle ambient line accents -->
+  <circle cx="${size.width * 0.85}" cy="${size.height * 0.15}" r="${Math.round(size.width * 0.35)}" fill="none" stroke="${theme.accentGlow}" stroke-width="1.5" stroke-dasharray="8 12" opacity="0.25"/>
+  <circle cx="${size.width * 0.15}" cy="${size.height * 0.85}" r="${Math.round(size.width * 0.25)}" fill="none" stroke="${theme.accentGlow}" stroke-width="1.5" opacity="0.15"/>
+
+  <!-- Main Editorial Card -->
+  <rect x="${paddingX}" y="${paddingY}" width="${cardWidth}" height="${cardHeight}" rx="24" fill="${theme.cardBg}" stroke="${theme.cardBorder}" stroke-width="2" filter="url(#cardShadow)"/>
+
+  <!-- Category Badge -->
+  <rect x="${paddingX + 40}" y="${startY - 25}" width="${badgeWidth}" height="36" rx="18" fill="${theme.badgeBg}"/>
+  <text x="${paddingX + 40 + badgeWidth / 2}" y="${startY - 2}" fill="${theme.badgeText}" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" text-anchor="middle" letter-spacing="1">${escapeXml(categoryTag)}</text>
+
+  <!-- Article Title -->
+  <text font-family="system-ui, -apple-system, sans-serif" font-size="${titleFontSize}" font-weight="800" fill="${theme.titleColor}">
+    ${titleTspans}
+  </text>
+
+  <!-- Excerpt / Summary Quote -->
+  ${
+    excerptLines.length
+      ? `<text font-family="system-ui, -apple-system, sans-serif" font-size="${excerptFontSize}" font-style="italic" fill="${theme.excerptColor}">
+    ${excerptTspans}
+  </text>`
+      : ''
+  }
+
+  <!-- Separator Line -->
+  <line x1="${paddingX + 40}" y1="${footerY - 35}" x2="${paddingX + cardWidth - 40}" y2="${footerY - 35}" stroke="${theme.cardBorder}" stroke-width="1"/>
+
+  <!-- Brand / Publication Footer -->
+  <text x="${paddingX + 40}" y="${footerY}" fill="${theme.brandText}" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" letter-spacing="1.5">
+    THE MINDS JOURNAL <tspan fill="${theme.excerptColor}" font-weight="400">• READ FULL ARTICLE</tspan>
+  </text>
 </svg>`.trim();
 
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -636,16 +769,6 @@ export class SocialContentGeneratorService {
     }
 
     return { width: 1200, height: 1200 };
-  }
-
-  private visualTheme(platform: SocialPlatform): { from: string; mid: string; to: string } {
-    return {
-      [SocialPlatform.PINTEREST]: { from: '#fff1f2', mid: '#fef3c7', to: '#dcfce7' },
-      [SocialPlatform.INSTAGRAM]: { from: '#fce7f3', mid: '#ffedd5', to: '#e0f2fe' },
-      [SocialPlatform.LINKEDIN]: { from: '#e0f2fe', mid: '#f8fafc', to: '#dcfce7' },
-      [SocialPlatform.X]: { from: '#f8fafc', mid: '#f1f5f9', to: '#e2e8f0' },
-      [SocialPlatform.FACEBOOK]: { from: '#dbeafe', mid: '#f8fafc', to: '#fef3c7' },
-    }[platform];
   }
 
   private wrapText(value: string, maxChars: number, maxLines: number): string[] {

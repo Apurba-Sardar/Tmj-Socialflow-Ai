@@ -8,8 +8,10 @@ const imageGenerate = vi.fn();
 
 vi.mock('openai', () => ({
   default: vi.fn().mockImplementation(() => ({
-    responses: {
-      create: responseCreate,
+    chat: {
+      completions: {
+        create: responseCreate,
+      },
     },
     images: {
       generate: imageGenerate,
@@ -62,17 +64,23 @@ describe('SocialContentGeneratorService', () => {
   it('uses OpenAI structured output when an API key is configured', async () => {
     process.env.OPENAI_API_KEY = 'test-openai-key';
     responseCreate.mockResolvedValue({
-      output_text: JSON.stringify({
-        drafts: [
-          {
-            platform: SocialPlatform.PINTEREST,
-            title: 'Save this creator workflow',
-            body: 'A fresh Pinterest description from OpenAI.',
-            hashtags: ['#Workflow', 'Content Marketing'],
-            callToAction: 'Save this for your next planning session.',
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              drafts: [
+                {
+                  platform: SocialPlatform.PINTEREST,
+                  title: 'Save this creator workflow',
+                  body: 'A fresh Pinterest description from OpenAI.',
+                  hashtags: ['#Workflow', 'Content Marketing'],
+                  callToAction: 'Save this for your next planning session.',
+                },
+              ],
+            }),
           },
-        ],
-      }),
+        },
+      ],
     });
     imageGenerate.mockResolvedValue({
       data: [
