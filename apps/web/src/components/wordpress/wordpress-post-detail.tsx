@@ -305,10 +305,9 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
     }
   }
 
-  async function scheduleDraft(draft: WordPressSocialDraft) {
+  async function scheduleDraftAt(draft: WordPressSocialDraft, scheduledFor: string) {
     setBusyDraftId(draft.id);
     try {
-      const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const response = await fetch(`${apiBaseUrl}/api/wordpress/drafts/${draft.id}/schedule`, {
         method: 'PATCH',
         credentials: 'include',
@@ -320,13 +319,17 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         throw new Error('Unable to schedule draft.');
       }
 
-      setMessage('Draft scheduled for tomorrow.');
+      setMessage('Draft scheduled successfully.');
       await loadArticle();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to schedule draft.');
     } finally {
       setBusyDraftId(null);
     }
+  }
+
+  async function scheduleDraft(draft: WordPressSocialDraft) {
+    await scheduleDraftAt(draft, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
   }
 
   async function publishDraftNow(draft: WordPressSocialDraft) {
@@ -416,6 +419,47 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
       await loadArticle();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to delete draft.');
+    } finally {
+      setBusyDraftId(null);
+    }
+  }
+
+  async function deleteAllDrafts(drafts: WordPressSocialDraft[]) {
+    const deletableDrafts = drafts.filter((draft) => draft.status === 'DRAFT');
+
+    if (!deletableDrafts.length) {
+      setMessage('There are no drafts waiting for approval.');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Delete all ${String(deletableDrafts.length)} drafts? Approved, scheduled, and published posts will not be affected.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusyDraftId('delete-all');
+    try {
+      const responses = await Promise.all(
+        deletableDrafts.map((draft) =>
+          fetch(`${apiBaseUrl}/api/wordpress/drafts/${draft.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          }),
+        ),
+      );
+
+      if (responses.some((response) => !response.ok)) {
+        throw new Error('One or more drafts could not be deleted.');
+      }
+
+      setSelectedDraftIds([]);
+      setMessage(`${String(deletableDrafts.length)} drafts deleted.`);
+      await loadArticle();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to delete drafts.');
     } finally {
       setBusyDraftId(null);
     }
@@ -556,11 +600,17 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
                 onDeleteDraft={(draft) => {
                   void deleteDraft(draft);
                 }}
+                onDeleteAllDrafts={() => {
+                  void deleteAllDrafts(socialDrafts);
+                }}
                 onPublishNow={(draft) => {
                   void publishDraftNow(draft);
                 }}
                 onScheduleDraft={(draft) => {
                   void scheduleDraft(draft);
+                }}
+                onScheduleDraftAt={(draft, scheduledFor) => {
+                  void scheduleDraftAt(draft, scheduledFor);
                 }}
                 onToggleDraft={(draftId) => {
                   setSelectedDraftIds((ids) =>
@@ -655,8 +705,10 @@ function GeneratedContentTab({
   onApproveDraft,
   onApproveSelected,
   onDeleteDraft,
+  onDeleteAllDrafts,
   onPublishNow,
   onScheduleDraft,
+  onScheduleDraftAt,
   onToggleAll,
   onToggleDraft,
 }: {
@@ -667,11 +719,16 @@ function GeneratedContentTab({
   onApproveDraft: (draft: WordPressSocialDraft) => void;
   onApproveSelected: () => void;
   onDeleteDraft: (draft: WordPressSocialDraft) => void;
+  onDeleteAllDrafts: () => void;
   onPublishNow: (draft: WordPressSocialDraft) => void;
   onScheduleDraft: (draft: WordPressSocialDraft) => void;
+  onScheduleDraftAt: (draft: WordPressSocialDraft, scheduledFor: string) => void;
   onToggleAll: () => void;
   onToggleDraft: (draftId: string) => void;
 }) {
+  const [customScheduleDraftId, setCustomScheduleDraftId] = useState<string | null>(null);
+  const [customScheduleValue, setCustomScheduleValue] = useState('');
+
   if (!drafts.length) {
     return <EmptyState title="No generated content yet" />;
   }
@@ -713,6 +770,16 @@ function GeneratedContentTab({
             >
               <FileCheck2 className="h-4 w-4" />
               Approve all
+            </Button>
+            <Button
+              className="h-8 px-2"
+              disabled={!approvableCount || busyDraftId !== null}
+              onClick={onDeleteAllDrafts}
+              size="sm"
+              variant="destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete all drafts
             </Button>
           </div>
         </CardContent>
@@ -846,6 +913,56 @@ function GeneratedContentTab({
                     )}
                     Schedule tomorrow
                   </Button>
+                  <Button
+                    className="h-8 justify-center px-2"
+                    disabled={
+                      busyDraftId !== null ||
+                      draft.status === 'SCHEDULED' ||
+                      draft.status === 'PUBLISHED'
+                    }
+                    onClick={() => {
+                      setCustomScheduleDraftId((current) =>
+                        current === draft.id ? null : draft.id,
+                      );
+                      setCustomScheduleValue('');
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    Custom time
+                  </Button>
+                  {customScheduleDraftId === draft.id ? (
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/70 p-2 sm:col-span-4 dark:border-white/10 dark:bg-white/[0.03]">
+                      <label className="sr-only" htmlFor={`schedule-${draft.id}`}>
+                        Custom schedule time
+                      </label>
+                      <input
+                        className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground dark:border-white/10 dark:bg-white/[0.04]"
+                        id={`schedule-${draft.id}`}
+                        onChange={(event) => {
+                          setCustomScheduleValue(event.target.value);
+                        }}
+                        type="datetime-local"
+                        value={customScheduleValue}
+                      />
+                      <Button
+                        className="h-8 px-2"
+                        disabled={!customScheduleValue || busyDraftId !== null}
+                        onClick={() => {
+                          const date = new Date(customScheduleValue);
+                          if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) {
+                            return;
+                          }
+                          onScheduleDraftAt(draft, date.toISOString());
+                          setCustomScheduleDraftId(null);
+                        }}
+                        size="sm"
+                      >
+                        Schedule
+                      </Button>
+                    </div>
+                  ) : null}
                   <Button
                     className="h-8 justify-center px-2 text-rose-600 hover:text-rose-700 dark:text-rose-300"
                     disabled={busyDraftId !== null}
