@@ -57,7 +57,7 @@ describe('SocialContentGeneratorService', () => {
       platform: SocialPlatform.PINTEREST,
       hashtags: ['#ContentMarketing', '#Pinterest'],
     });
-    expect(drafts[0]?.mediaUrl).toContain('data:image/svg+xml');
+    expect(drafts[0]?.mediaUrl).toBe('https://example.com/image.jpg');
     expect(drafts[1]?.body).toContain('The useful takeaway');
   });
 

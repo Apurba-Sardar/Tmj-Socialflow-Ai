@@ -40,7 +40,7 @@ export class SocialContentGeneratorService {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = 'gpt-4o-mini';
-    this.imageModel = 'dall-e-3';
+    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3';
   }
 
   async generate(
@@ -53,7 +53,10 @@ export class SocialContentGeneratorService {
     const fallbackDrafts = this.generateFallback(article, platforms, repurposeJobId);
 
     if (!this.client) {
-      return fallbackDrafts;
+      return fallbackDrafts.map((draft) => ({
+        ...draft,
+        mediaUrl: article.featuredImageUrl ?? draft.mediaUrl,
+      }));
     }
 
     let draftsForVisuals = fallbackDrafts;
@@ -257,7 +260,8 @@ export class SocialContentGeneratorService {
 
       return {
         ...draft,
-        mediaUrl: this.visualFor(article, draft.platform, draft.hashtags),
+        mediaUrl:
+          article.featuredImageUrl ?? this.visualFor(article, draft.platform, draft.hashtags),
         prompt: renderedPrompt.prompt,
         promptVersion: renderedPrompt.promptVersion,
       };
@@ -494,7 +498,19 @@ export class SocialContentGeneratorService {
     return imageSource.composite(composites);
   }
 
-  private openAiImageSize(platform: SocialPlatform): '1024x1024' | '1792x1024' | '1024x1792' {
+  private openAiImageSize(
+    platform: SocialPlatform,
+  ): '1024x1024' | '1792x1024' | '1024x1792' | '1536x1024' | '1024x1536' {
+    if (this.imageModel.startsWith('gpt-image')) {
+      if (platform === SocialPlatform.PINTEREST) {
+        return '1024x1536';
+      }
+
+      if (platform === SocialPlatform.X || platform === SocialPlatform.LINKEDIN) {
+        return '1536x1024';
+      }
+    }
+
     if (platform === SocialPlatform.PINTEREST) {
       return '1024x1792';
     }
