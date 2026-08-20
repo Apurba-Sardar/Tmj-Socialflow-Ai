@@ -30,7 +30,7 @@ interface AutomationState {
 const emptyState: AutomationState = {
   enabled: false,
   connectionId: '',
-  categorySlug: 'quotes',
+  categorySlug: '',
   platforms: ['INSTAGRAM', 'FACEBOOK'],
   dailyLimit: 1,
   publishHour: 9,
@@ -181,10 +181,12 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
               onChange={(event) => {
                 setState((current) => ({ ...current, categorySlug: event.target.value }));
               }}
-              placeholder="quotes"
+              placeholder="All categories"
               value={state.categorySlug}
             />
-            <p className="mt-1 text-xs text-muted-foreground">Use the WordPress category slug.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Leave blank to publish every new category, including Quotes.
+            </p>
           </div>
           <div>
             <Label htmlFor="automation-limit">New posts per day</Label>

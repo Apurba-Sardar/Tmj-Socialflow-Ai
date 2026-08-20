@@ -253,9 +253,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
       enabled: source.enabled === true,
       connectionId: typeof source.connectionId === 'string' ? source.connectionId : '',
       categorySlug:
-        typeof source.categorySlug === 'string'
-          ? source.categorySlug.trim().toLowerCase()
-          : 'quotes',
+        typeof source.categorySlug === 'string' ? source.categorySlug.trim().toLowerCase() : '',
       platforms: Array.isArray(source.platforms)
         ? source.platforms.filter((item): item is SocialPlatform =>
             Object.values(SocialPlatform).includes(item as SocialPlatform),
