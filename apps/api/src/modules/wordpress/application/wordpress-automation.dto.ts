@@ -9,6 +9,10 @@ export class UpdateWordPressAutomationDto {
   @IsString()
   connectionId!: string;
 
+  @IsOptional()
+  @IsString()
+  categorySlug?: string;
+
   @IsArray()
   @IsEnum(SocialPlatform, { each: true })
   platforms!: SocialPlatform[];

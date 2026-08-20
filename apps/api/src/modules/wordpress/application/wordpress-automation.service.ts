@@ -22,6 +22,7 @@ const POLL_INTERVAL_MS = 60 * 1000;
 interface DailyAutomationConfig {
   enabled: boolean;
   connectionId: string;
+  categorySlug: string;
   platforms: SocialPlatform[];
   dailyLimit: number;
   publishHour: number;
@@ -83,6 +84,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
       ...current,
       enabled: dto.enabled,
       connectionId: dto.connectionId,
+      categorySlug: dto.categorySlug?.trim().toLowerCase() ?? current.categorySlug,
       platforms: dto.platforms.length ? [...new Set(dto.platforms)] : DEFAULT_PLATFORMS,
       dailyLimit: dto.dailyLimit ?? current.dailyLimit,
       publishHour: dto.publishHour ?? current.publishHour,
@@ -180,6 +182,7 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
           // Daily automation publishes the original WordPress featured image
           // only. Posts without one are left for manual review.
           featuredImageUrl: { not: null },
+          ...(config.categorySlug ? { categorySlugs: { has: config.categorySlug } } : {}),
           id: { notIn: config.processedArticleIds },
         },
         orderBy: { publishedAt: 'asc' },
@@ -249,6 +252,10 @@ export class WordPressAutomationService implements OnModuleInit, OnModuleDestroy
     return {
       enabled: source.enabled === true,
       connectionId: typeof source.connectionId === 'string' ? source.connectionId : '',
+      categorySlug:
+        typeof source.categorySlug === 'string'
+          ? source.categorySlug.trim().toLowerCase()
+          : 'quotes',
       platforms: Array.isArray(source.platforms)
         ? source.platforms.filter((item): item is SocialPlatform =>
             Object.values(SocialPlatform).includes(item as SocialPlatform),

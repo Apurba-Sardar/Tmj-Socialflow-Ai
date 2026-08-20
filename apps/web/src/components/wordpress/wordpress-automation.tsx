@@ -17,6 +17,7 @@ type Platform = (typeof platforms)[number];
 interface AutomationState {
   enabled: boolean;
   connectionId: string;
+  categorySlug: string;
   platforms: Platform[];
   dailyLimit: number;
   publishHour: number;
@@ -29,6 +30,7 @@ interface AutomationState {
 const emptyState: AutomationState = {
   enabled: false,
   connectionId: '',
+  categorySlug: 'quotes',
   platforms: ['INSTAGRAM', 'FACEBOOK'],
   dailyLimit: 1,
   publishHour: 9,
@@ -90,6 +92,7 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
         body: JSON.stringify({
           enabled: state.enabled,
           connectionId: state.connectionId,
+          categorySlug: state.categorySlug,
           platforms: state.platforms,
           dailyLimit: state.dailyLimit,
           publishHour: state.publishHour,
@@ -170,6 +173,18 @@ export function WordPressAutomation({ user }: { user: AuthenticatedUser }) {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <Label htmlFor="automation-category">WordPress category</Label>
+            <Input
+              id="automation-category"
+              onChange={(event) => {
+                setState((current) => ({ ...current, categorySlug: event.target.value }));
+              }}
+              placeholder="quotes"
+              value={state.categorySlug}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Use the WordPress category slug.</p>
           </div>
           <div>
             <Label htmlFor="automation-limit">New posts per day</Label>
