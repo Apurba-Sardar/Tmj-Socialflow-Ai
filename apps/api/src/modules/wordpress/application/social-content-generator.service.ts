@@ -378,17 +378,17 @@ export class SocialContentGeneratorService {
       fit: 'contain',
       background: { r: 248, g: 244, b: 235, alpha: 1 },
     });
-    const composed =
-      draft.platform === SocialPlatform.INSTAGRAM
-        ? await this.composeInstagramOverlay(imageSource, draft, size)
-        : imageSource;
+    // The image model creates the artwork without text; render the final
+    // headline in our compositor so it stays crisp and readable on every
+    // social platform instead of relying on model-generated typography.
+    const composed = await this.composeTextOverlay(imageSource, draft, size);
 
     const image = await composed.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 
     return `data:image/jpeg;base64,${image.toString('base64')}`;
   }
 
-  private async composeInstagramOverlay(
+  private async composeTextOverlay(
     imageSource: sharp.Sharp,
     draft: SocialDraftInput,
     size: { width: number; height: number },
@@ -400,9 +400,11 @@ export class SocialContentGeneratorService {
     const rawFooter =
       draft.imageFooter ?? 'The most meaningful support may begin in small moments.';
     const defaultCta =
-      draft.platform === SocialPlatform.FACEBOOK
-        ? 'Read the full article - link in comments.'
-        : 'Read the full article - link in bio.';
+      draft.platform === SocialPlatform.INSTAGRAM
+        ? 'Read the full article - link in bio.'
+        : draft.platform === SocialPlatform.FACEBOOK
+          ? 'Read the full article - link in comments.'
+          : 'Read the full article.';
     const cta = this.truncate(draft.callToAction ?? defaultCta, 72);
 
     // Clean text for rendering
