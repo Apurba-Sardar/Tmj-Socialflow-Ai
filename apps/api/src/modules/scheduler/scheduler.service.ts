@@ -1,18 +1,23 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   PublishJobStatus,
   PublishLogLevel,
   SocialChannelStatus,
+  SocialDraftStatus,
   SocialPlatform,
 } from '@prisma/client';
 
 import type { AuthenticatedUser } from '../auth/types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SocialChannelsService } from '../social-channels/social-channels.service.js';
 import { WordPressService } from '../wordpress/application/wordpress.service.js';
 import type {
   AutoScheduleDailyDto,
@@ -21,13 +26,127 @@ import type {
 } from './scheduler.dto.js';
 
 const DAILY_SLOT_HOURS = [8, 10, 12, 14, 16, 18, 20, 21];
+const SCHEDULE_POLL_INTERVAL_MS = 30 * 1000;
 
 @Injectable()
-export class SchedulerService {
+export class SchedulerService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(SchedulerService.name);
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly processingDrafts = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly wordpressService: WordPressService,
+    private readonly socialChannelsService: SocialChannelsService,
   ) {}
+
+  onModuleInit() {
+    this.timer = setInterval(() => void this.publishDueDrafts(), SCHEDULE_POLL_INTERVAL_MS);
+    void this.publishDueDrafts();
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  /** Publish generated drafts whose scheduled time has arrived. */
+  private async publishDueDrafts() {
+    const dueDrafts = await this.prisma.socialDraft.findMany({
+      where: {
+        status: SocialDraftStatus.SCHEDULED,
+        scheduledFor: { lte: new Date() },
+      },
+      include: {
+        article: {
+          select: {
+            title: true,
+            url: true,
+            connection: { select: { organizationId: true } },
+          },
+        },
+      },
+      orderBy: { scheduledFor: 'asc' },
+      take: 25,
+    });
+
+    for (const draft of dueDrafts) {
+      if (this.processingDrafts.has(draft.id)) continue;
+      this.processingDrafts.add(draft.id);
+      void this.publishDueDraft(draft).finally(() => this.processingDrafts.delete(draft.id));
+    }
+  }
+
+  private async publishDueDraft(draft: {
+    id: string;
+    platform: SocialPlatform;
+    title: string;
+    body: string;
+    hashtags: string[];
+    mediaUrl: string | null;
+    sourceUrl: string;
+    article: { title: string; url: string; connection: { organizationId: string | null } };
+  }) {
+    try {
+      const organizationId = draft.article.connection.organizationId;
+      if (!organizationId) throw new Error('The WordPress connection has no organization.');
+      const channel = await this.prisma.socialChannelAccount.findFirst({
+        where: {
+          organizationId,
+          platform: draft.platform,
+          status: SocialChannelStatus.CONNECTED,
+          accessTokenCiphertext: { not: null },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (!channel) throw new Error(`No connected ${draft.platform} channel is available.`);
+
+      const actorRecord = await this.prisma.user.findFirst({
+        where: {
+          disabledAt: null,
+          OR: [
+            { defaultOrganizationId: organizationId },
+            { organizationMemberships: { some: { organizationId } } },
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, email: true, role: true, emailVerifiedAt: true },
+      });
+      if (!actorRecord) throw new Error('No active organization user is available to publish.');
+
+      const actor: AuthenticatedUser = {
+        id: actorRecord.id,
+        email: actorRecord.email,
+        role: actorRecord.role,
+        emailVerified: Boolean(actorRecord.emailVerifiedAt),
+      };
+
+      const result = await this.socialChannelsService.publish(
+        channel.id,
+        {
+          draftId: draft.id,
+          title: draft.title,
+          caption: draft.body,
+          hashtags: draft.hashtags,
+          mediaUrl: draft.mediaUrl ?? undefined,
+          sourceUrl: draft.sourceUrl || draft.article.url,
+        },
+        actor,
+      );
+      if (!result.published)
+        throw new Error(result.error ?? 'The scheduled post was not published.');
+
+      await this.prisma.socialDraft.update({
+        where: { id: draft.id },
+        data: { status: SocialDraftStatus.PUBLISHED },
+      });
+      this.logger.log(`Published scheduled ${draft.platform} draft ${draft.id}.`);
+    } catch (error) {
+      // Keep the draft scheduled so a transient provider/network failure can be
+      // retried on the next poll; the publish service records the failure log.
+      const message = error instanceof Error ? error.message : 'Unknown scheduled publish error.';
+      this.logger.error(`Scheduled draft ${draft.id} failed: ${message}`);
+    }
+  }
 
   async posts(user: AuthenticatedUser) {
     const organizationId = await this.requireOrganizationId(user.id);

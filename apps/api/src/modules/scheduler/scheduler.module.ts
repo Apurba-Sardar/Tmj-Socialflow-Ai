@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { SocialChannelsModule } from '../social-channels/social-channels.module.js';
 import { WordPressModule } from '../wordpress/wordpress.module.js';
 import { SchedulerController } from './scheduler.controller.js';
 import { SchedulerService } from './scheduler.service.js';
 
 @Module({
-  imports: [PrismaModule, WordPressModule],
+  imports: [PrismaModule, SocialChannelsModule, WordPressModule],
   controllers: [SchedulerController],
   providers: [SchedulerService],
 })
