@@ -397,23 +397,19 @@ export class SocialContentGeneratorService {
     await ensureFontAvailability();
 
     const rawTitle = draft.imageHeadline ?? draft.title;
-    const rawFooter =
-      draft.imageFooter ?? 'The most meaningful support may begin in small moments.';
-    const defaultCta =
-      draft.platform === SocialPlatform.INSTAGRAM
-        ? 'Read the full article - link in bio.'
-        : draft.platform === SocialPlatform.FACEBOOK
-          ? 'Read the full article - link in comments.'
-          : 'Read the full article.';
-    const cta = this.truncate(draft.callToAction ?? defaultCta, 72);
-
-    // Clean text for rendering
+    // Only the headline belongs on the image. Captions and calls to action
+    // stay in the post body so the artwork remains clean.
     const cleanTitle = sanitizePlainText(rawTitle);
-    const cleanFooter = sanitizePlainText(rawFooter);
-    const cleanCta = sanitizePlainText(cta);
 
-    // Create header background rectangle (cream)
-    const headerHeight = 290;
+    // Reserve a dedicated headline area, then place the artwork below it so
+    // the main subject is never hidden underneath an opaque text panel.
+    const headerHeight =
+      draft.platform === SocialPlatform.PINTEREST
+        ? 300
+        : draft.platform === SocialPlatform.X || draft.platform === SocialPlatform.LINKEDIN
+          ? 230
+          : 270;
+    const imageHeight = size.height - headerHeight;
     const headerBg = await sharp({
       create: {
         width: size.width,
@@ -425,16 +421,12 @@ export class SocialContentGeneratorService {
       .png()
       .toBuffer();
 
-    // Create footer background rectangle (dark blue)
-    const footerHeight = 120;
-    const footerBg = await sharp({
-      create: {
-        width: size.width,
-        height: footerHeight,
-        channels: 4,
-        background: { r: 18, g: 59, b: 80, alpha: 242 },
-      },
-    })
+    const artwork = await imageSource
+      .clone()
+      .resize(size.width, imageHeight, {
+        fit: 'cover',
+        position: 'centre',
+      })
       .png()
       .toBuffer();
 
@@ -456,66 +448,22 @@ export class SocialContentGeneratorService {
       titleImg = Buffer.alloc(0);
     }
 
-    // Render footer text as image
-    const footerPango = `<span foreground="#4b6575" font="18">${escapeXml(cleanFooter)}</span>`;
-    let footerImg: Buffer;
-    try {
-      footerImg = await sharp({
-        text: {
-          text: footerPango,
-          width: size.width - 120,
-          height: 80,
-          rgba: true,
-        },
-      })
-        .png()
-        .toBuffer();
-    } catch {
-      footerImg = Buffer.alloc(0);
-    }
+    const composites: sharp.OverlayOptions[] = [{ input: artwork, top: headerHeight, left: 0 }];
 
-    // Render CTA text as image
-    const ctaPango = `<span foreground="#fffaf1" font="20" weight="bold">${escapeXml(cleanCta)}</span>`;
-    let ctaImg: Buffer;
-    try {
-      ctaImg = await sharp({
-        text: {
-          text: ctaPango,
-          width: size.width - 120,
-          height: 60,
-          rgba: true,
-        },
-      })
-        .png()
-        .toBuffer();
-    } catch {
-      ctaImg = Buffer.alloc(0);
-    }
-
-    // Build composite layers
-    const composites: sharp.OverlayOptions[] = [
-      { input: headerBg, top: 0, left: 0, blend: 'over' },
-      { input: footerBg, top: size.height - footerHeight, left: 0, blend: 'over' },
-    ];
+    composites.push({ input: headerBg, top: 0, left: 0, blend: 'over' });
 
     if (titleImg.length > 0) {
       composites.push({ input: titleImg, top: 50, left: 60, blend: 'over' });
     }
 
-    if (footerImg.length > 0) {
-      composites.push({ input: footerImg, top: 200, left: 60, blend: 'over' });
-    }
-
-    if (ctaImg.length > 0) {
-      composites.push({
-        input: ctaImg,
-        top: size.height - footerHeight + 30,
-        left: 60,
-        blend: 'over',
-      });
-    }
-
-    return imageSource.composite(composites);
+    return sharp({
+      create: {
+        width: size.width,
+        height: size.height,
+        channels: 4,
+        background: { r: 248, g: 244, b: 235, alpha: 1 },
+      },
+    }).composite(composites);
   }
 
   private openAiImageSize(
