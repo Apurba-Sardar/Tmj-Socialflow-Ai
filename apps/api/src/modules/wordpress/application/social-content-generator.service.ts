@@ -40,7 +40,11 @@ export class SocialContentGeneratorService {
     const apiKey = process.env.OPENAI_API_KEY;
     this.client = apiKey ? new OpenAI({ apiKey }) : null;
     this.model = 'gpt-4o-mini';
-    this.imageModel = process.env.OPENAI_IMAGE_MODEL ?? 'dall-e-3';
+    const configuredImageModel = process.env.OPENAI_IMAGE_MODEL?.trim().toLowerCase();
+    this.imageModel =
+      configuredImageModel && !configuredImageModel.startsWith('dall-e-')
+        ? configuredImageModel
+        : 'gpt-image-1';
   }
 
   async generate(
@@ -222,14 +226,25 @@ export class SocialContentGeneratorService {
         'Style: premium editorial illustration for The Minds Journal. Use illustrations, painted artwork, or editorial collage. No real photography. No text, letters, numbers, logos, labels, or watermarks anywhere on the image.',
       ].join('\n');
 
-      const image = await this.client?.images.generate({
-        model: this.imageModel,
-        prompt: imagePrompt,
-        n: 1,
-        size: this.openAiImageSize(draft.platform),
-        quality: 'standard',
-        response_format: 'b64_json',
-      });
+      const image = await this.client?.images.generate(
+        this.imageModel.startsWith('gpt-image')
+          ? {
+              model: this.imageModel,
+              prompt: imagePrompt,
+              n: 1,
+              size: this.openAiImageSize(draft.platform),
+              quality: 'medium',
+              output_format: 'jpeg',
+            }
+          : {
+              model: this.imageModel,
+              prompt: imagePrompt,
+              n: 1,
+              size: this.openAiImageSize(draft.platform),
+              quality: 'standard',
+              response_format: 'b64_json',
+            },
+      );
 
       let b64Json = image?.data?.[0]?.b64_json;
       if (!b64Json && image?.data?.[0]?.url) {
