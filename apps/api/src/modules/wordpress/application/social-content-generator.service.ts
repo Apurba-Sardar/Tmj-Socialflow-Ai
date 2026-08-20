@@ -410,12 +410,30 @@ export class SocialContentGeneratorService {
           ? 230
           : 270;
     const imageHeight = size.height - headerHeight;
+    const sampleStats = await imageSource.clone().resize(1, 1).stats();
+    const [red = 180, green = 180, blue = 180] = sampleStats.channels
+      .slice(0, 3)
+      .map((channel) => channel.mean);
+    const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+    const panelColor =
+      luminance > 150
+        ? {
+            r: Math.round(red * 0.3 + 248 * 0.7),
+            g: Math.round(green * 0.3 + 244 * 0.7),
+            b: Math.round(blue * 0.3 + 235 * 0.7),
+          }
+        : {
+            r: Math.round(red * 0.55 + 18 * 0.45),
+            g: Math.round(green * 0.55 + 38 * 0.45),
+            b: Math.round(blue * 0.55 + 52 * 0.45),
+          };
+    const textColor = luminance > 150 ? '#123b50' : '#fffaf1';
     const headerBg = await sharp({
       create: {
         width: size.width,
         height: headerHeight,
         channels: 4,
-        background: { r: 248, g: 241, b: 223, alpha: 245 },
+        background: { ...panelColor, alpha: 1 },
       },
     })
       .png()
@@ -431,14 +449,14 @@ export class SocialContentGeneratorService {
       .toBuffer();
 
     // Render title text as image using sharp's text input
-    const titlePango = `<span foreground="#123b50" font="36" weight="bold">${escapeXml(cleanTitle)}</span>`;
+    const titlePango = `<span foreground="${textColor}" font="44" weight="bold">${escapeXml(cleanTitle)}</span>`;
     let titleImg: Buffer;
     try {
       titleImg = await sharp({
         text: {
           text: titlePango,
           width: size.width - 120,
-          height: 150,
+          height: 190,
           rgba: true,
         },
       })

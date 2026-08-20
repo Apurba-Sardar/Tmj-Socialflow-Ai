@@ -315,8 +315,16 @@ export function WordPressPostDetail({ articleId }: { articleId: string; user: Au
         body: JSON.stringify({ scheduledFor }),
       });
 
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string | string[];
+        error?: string;
+      } | null;
+
       if (!response.ok) {
-        throw new Error('Unable to schedule draft.');
+        const detail = Array.isArray(payload?.message)
+          ? payload.message.join(' ')
+          : payload?.message;
+        throw new Error(payload?.error ?? detail ?? 'Unable to schedule draft.');
       }
 
       setMessage('Draft scheduled successfully.');
@@ -952,6 +960,7 @@ function GeneratedContentTab({
                         onClick={() => {
                           const date = new Date(customScheduleValue);
                           if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) {
+                            setCustomScheduleValue('');
                             return;
                           }
                           onScheduleDraftAt(draft, date.toISOString());
