@@ -58,7 +58,8 @@ describe('SocialContentGeneratorService', () => {
       platform: SocialPlatform.PINTEREST,
       hashtags: ['#ContentMarketing', '#Pinterest'],
     });
-    expect(drafts[0]?.mediaUrl).toBe('https://example.com/image.jpg');
+    expect(drafts[0]?.mediaUrl).not.toBe('https://example.com/image.jpg');
+    expect(drafts[0]?.mediaUrl).toContain('data:image/svg+xml');
     expect(drafts[1]?.body).toContain('The useful takeaway');
   });
 
@@ -121,6 +122,30 @@ describe('SocialContentGeneratorService', () => {
       callToAction: 'Save this for your next planning session.',
     });
     expect(drafts[0]?.mediaUrl).toContain('data:image/jpeg;base64,');
+  });
+
+  it('never uses the WordPress image when AI image generation fails', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    responseCreate.mockResolvedValue({ choices: [{ message: { content: '{"drafts":[]}' } }] });
+    imageGenerate.mockRejectedValue(new Error('image generation unavailable'));
+
+    const service = new SocialContentGeneratorService();
+    const drafts = await service.generate(
+      {
+        id: 'article_1',
+        title: 'A useful article topic',
+        excerpt: 'A short article summary.',
+        contentText: null,
+        url: 'https://example.com/article',
+        featuredImageUrl: 'https://example.com/wordpress-image.jpg',
+        categoryNames: ['News'],
+      },
+      [SocialPlatform.FACEBOOK],
+      'job_1',
+    );
+
+    expect(drafts[0]?.mediaUrl).not.toBe('https://example.com/wordpress-image.jpg');
+    expect(drafts[0]?.mediaUrl).toContain('data:image/svg+xml');
   });
 
   it('reuses the WordPress featured image for daily automation', async () => {

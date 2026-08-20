@@ -59,7 +59,9 @@ export class SocialContentGeneratorService {
     if (!this.client) {
       return fallbackDrafts.map((draft) => ({
         ...draft,
-        mediaUrl: article.featuredImageUrl ?? draft.mediaUrl,
+        // Manual campaigns must not pretend the WordPress image was AI-generated.
+        // The featured image is reserved for the daily automation path below.
+        mediaUrl: draft.mediaUrl,
       }));
     }
 
@@ -275,8 +277,9 @@ export class SocialContentGeneratorService {
 
       return {
         ...draft,
-        mediaUrl:
-          article.featuredImageUrl ?? this.visualFor(article, draft.platform, draft.hashtags),
+        // Keep the generated fallback graphic visible so an OpenAI failure is
+        // diagnosable instead of silently presenting the WordPress source image.
+        mediaUrl: this.visualFor(article, draft.platform, draft.hashtags),
         prompt: renderedPrompt.prompt,
         promptVersion: renderedPrompt.promptVersion,
       };
