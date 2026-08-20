@@ -1,5 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { SocialPlatform } from '@prisma/client';
 import OpenAI from 'openai';
 import sharp from 'sharp';
@@ -35,6 +37,7 @@ export class SocialContentGeneratorService {
   private readonly client: OpenAI | null;
   private readonly model: string;
   private readonly imageModel: string;
+  private brandLogoPromise: Promise<Buffer | null> | null = null;
 
   constructor(@Optional() private readonly promptTemplatesService?: PromptTemplatesService) {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -474,6 +477,16 @@ export class SocialContentGeneratorService {
       composites.push({ input: titleImg, top: 50, left: 60, blend: 'over' });
     }
 
+    const brandLogo = await this.loadBrandLogo();
+    if (brandLogo) {
+      composites.push({
+        input: brandLogo,
+        top: size.height - 112,
+        left: size.width - 112,
+        blend: 'screen',
+      });
+    }
+
     return sharp({
       create: {
         width: size.width,
@@ -482,6 +495,28 @@ export class SocialContentGeneratorService {
         background: { r: 248, g: 244, b: 235, alpha: 1 },
       },
     }).composite(composites);
+  }
+
+  private async loadBrandLogo(): Promise<Buffer | null> {
+    this.brandLogoPromise ??= readFile(
+      resolve(process.cwd(), 'apps/api/assets/mind-family-logo.png'),
+    )
+      .then((source) =>
+        sharp(source)
+          .trim({ background: { r: 0, g: 0, b: 0, alpha: 1 } })
+          .resize(88, 88, { fit: 'contain' })
+          .png()
+          .toBuffer(),
+      )
+      .catch((error: unknown) => {
+        this.logger.warn(
+          { error: error instanceof Error ? error.message : 'Unknown logo loading error.' },
+          'Brand logo could not be loaded for social image composition',
+        );
+        return null;
+      });
+
+    return this.brandLogoPromise;
   }
 
   private openAiImageSize(
