@@ -1355,13 +1355,31 @@ function platformAccountType(platform: SocialPlatform): string {
 }
 
 function withHashtags(caption: string, hashtags?: string[]): string {
-  const cleanTags = hashtags?.map((tag) => tag.trim()).filter(Boolean) ?? [];
+  const cleanTags = Array.from(
+    new Map(
+      (hashtags ?? [])
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .map((tag) => [tag.replace(/^#/, '').toLowerCase(), tag] as const),
+    ).values(),
+  );
 
   if (!cleanTags.length) {
     return caption;
   }
 
-  return `${caption.trim()}\n\n${cleanTags.map((tag) => (tag.startsWith('#') ? tag : `#${tag}`)).join(' ')}`;
+  const normalizedTags = cleanTags.map((tag) => (tag.startsWith('#') ? tag : `#${tag}`));
+  const withoutExistingTags = caption
+    .trim()
+    .replace(/(^|\s)#?[a-z0-9_]+(?=\s|$)/gi, (match) => {
+      const normalized = match.trim().replace(/^#/, '').toLowerCase();
+      return normalizedTags.some((tag) => tag.slice(1).toLowerCase() === normalized) ? '' : match;
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return `${withoutExistingTags}\n\n${normalizedTags.join(' ')}`;
 }
 
 function withSourceLink(caption: string, sourceUrl?: string): string {
